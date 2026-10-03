@@ -1,5 +1,6 @@
 name: Native Infrastructure
 on:
+  workflow_call:
   push:
     branches: [feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
