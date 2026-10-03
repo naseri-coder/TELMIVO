@@ -9,12 +9,14 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/mainbot"
+	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	telegramclient "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
 	"github.com/naseri-coder/TELMIVO/internal/platform/cache"
 	"github.com/naseri-coder/TELMIVO/internal/platform/config"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/httpapi"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
+	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	telegramtransport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 	"github.com/naseri-coder/TELMIVO/internal/platform/testfixtures"
 	"log/slog"
@@ -66,6 +68,31 @@ func Run(role string) error {
 		groups.Authority = testfixtures.GroupAuthority{}
 	}
 	api := &httpapi.API{DB: db, Cache: redis, Queue: q, Config: c, Identity: ident, Groups: groups}
+	if c.DownloaderTestFixture && role == "api" {
+		local, err := storage.NewLocal("/tmp/telmivo-r3c-fixture-storage", c.MaxMediaBytes)
+		if err != nil {
+			return err
+		}
+		defer local.Close()
+		fixtureWorker := &downloads.Worker{Product: &downloads.Product{DB: db, Synthetic: true, MaxBytes: c.MaxMediaBytes}, Adapter: testfixtures.DownloaderProvider{}, Delivery: testfixtures.DownloaderDelivery{}, Storage: storage.Scoped{Provider: local}, Root: "/tmp/telmivo-r3c-fixture-work", Owner: "test-api-worker", Timeout: 5 * time.Minute, MaxBytes: c.MaxMediaBytes}
+		go func() {
+			if err := fixtureWorker.Poll(ctx, 2); err != nil && ctx.Err() == nil {
+				slog.Error("fixture worker stopped", "error_code", "FIXTURE_WORKER_FAILED")
+			}
+		}()
+	}
+	if role == "media-worker" && !c.Synthetic {
+		local, err := storage.NewLocal("/tmp/telmivo-downloader-storage", c.MaxMediaBytes)
+		if err != nil {
+			return err
+		}
+		defer local.Close()
+		if err = local.Cleanup(ctx); err != nil {
+			return err
+		}
+		worker := &downloads.Worker{Product: &downloads.Product{DB: db, MaxBytes: c.MaxMediaBytes}, Adapter: media.Extractor{Python: "/opt/extractor/bin/python", Script: "/app/extract.py", Timeout: time.Minute, MaxFormats: 8}, Delivery: telegramclient.MediaClient{Token: c.DownloaderBotToken, MaxBytes: c.MaxMediaBytes, Timeout: time.Minute}, Storage: storage.Scoped{Provider: local}, Root: "/tmp/telmivo-downloader-work", Owner: "media-worker", Timeout: 5 * time.Minute, MaxBytes: c.MaxMediaBytes}
+		return worker.Poll(ctx, int(c.MediaConcurrency))
+	}
 	if role == "worker" || role == "media-worker" {
 		return worker(ctx, role, db, q, c)
 	}
@@ -79,7 +106,7 @@ func Run(role string) error {
 				w.WriteHeader(200)
 				return
 			}
-			if (role != "main-bot" && role != "group-bot") || c.WebhookSecret == "" || (role == "main-bot" && c.BotToken == "") || (role == "group-bot" && c.GroupBotToken == "") {
+			if (role != "main-bot" && role != "group-bot" && role != "downloader-bot") || c.WebhookSecret == "" || (role == "main-bot" && c.BotToken == "") || (role == "group-bot" && c.GroupBotToken == "") || (role == "downloader-bot" && c.DownloaderBotToken == "") {
 				w.WriteHeader(503)
 				return
 			}
@@ -88,6 +115,8 @@ func Run(role string) error {
 		if role == "main-bot" && !c.Synthetic {
 			client := telegramclient.New(c.BotToken, true)
 			mux.Handle("POST /webhook", telegramclient.MainBotWebhook(c.WebhookSecret, &mainbot.Service{Identity: ident, MiniAppURL: c.MiniAppURL, Membership: client}))
+		} else if role == "downloader-bot" && !c.Synthetic {
+			mux.Handle("POST /webhook", telegramclient.DownloaderWebhook(c.WebhookSecret, &downloads.Bot{Identity: ident, Product: &downloads.Product{DB: db, MaxBytes: c.MaxMediaBytes}, MiniAppURL: c.MiniAppURL}))
 		} else if role == "group-bot" && !c.Synthetic {
 			mux.Handle("POST /webhook", telegramclient.GroupBotWebhook(c.WebhookSecret, groups))
 		} else {
@@ -180,6 +209,9 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 					return err
 				}
 				_, err = telegramclient.New(func() string {
+					if strings.HasPrefix(payload.Key, "downloader-bot:") {
+						return c.DownloaderBotToken
+					}
 					if strings.HasPrefix(payload.Key, "group-bot:") {
 						return c.GroupBotToken
 					}
