@@ -24,11 +24,12 @@ import (
 )
 
 type r3bAuthority struct {
-	mu       sync.Mutex
-	admins   map[int64]bool
-	fail     bool
-	delete   bool
-	restrict bool
+	mu        sync.Mutex
+	admins    map[int64]bool
+	fail      bool
+	delete    bool
+	restrict  bool
+	botDelete bool
 }
 
 func (a *r3bAuthority) Inspect(_ context.Context, _ int64, user int64) (groupbot.Member, error) {
@@ -49,6 +50,7 @@ func (a *r3bAuthority) Inspect(_ context.Context, _ int64, user int64) (groupbot
 func (a *r3bAuthority) Bot(ctx context.Context, chat int64) (int64, groupbot.Member, error) {
 	m, e := a.Inspect(ctx, chat, 99997999)
 	m.Status = "administrator"
+	m.Delete = a.botDelete
 	return 99997999, m, e
 }
 
@@ -62,7 +64,7 @@ func (a *groupTransport) Execute(_ context.Context, _, _, _ int64, _ groupbot.Ac
 	return a.err
 }
 func groupService(u identity.Result, tg int64) (*groupbot.Service, *r3bAuthority) {
-	a := &r3bAuthority{admins: map[int64]bool{tg: true}, delete: true, restrict: true}
+	a := &r3bAuthority{admins: map[int64]bool{tg: true}, delete: true, restrict: true, botDelete: true}
 	return &groupbot.Service{DB: db, Identity: r3aService(), Authority: a, MiniAppURL: "https://example.test"}, a
 }
 func TestR3BGroupJourney(t *testing.T) {
@@ -180,14 +182,14 @@ func TestR3BGroupJourney(t *testing.T) {
 		a.fail = false
 	})
 	t.Run("rights_and_protected_targets", func(t *testing.T) {
-		a.delete = false
+		a.botDelete = false
 		e := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
 			return s.Moderate(ctx, tx, u.UserID, u.WorkspaceID, id, "no-right", "c", 97019901, 1, groupbot.Delete, "reason")
 		})
 		if !errors.Is(e, groupbot.ErrRights) {
 			t.Fatal(e)
 		}
-		a.delete = true
+		a.botDelete = true
 		for _, target := range []int64{99997000, 99997999} {
 			e = db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
 				return s.Moderate(ctx, tx, u.UserID, u.WorkspaceID, id, fmt.Sprint(target), "c", target, 0, groupbot.Ban, "reason")
@@ -541,7 +543,7 @@ func TestR3BAPIIsolationAuthority(t *testing.T) {
 	v, vtoken := r3aLogin(t, 97050002, true)
 	s, a := groupService(u, 97050001)
 	a.admins[97050002] = true
-	api := &httpapi.API{DB: db, Identity: r3aService(), Groups: s, Config: config.Config{Environment: "test", Synthetic: true, MiniAppURL: "https://example.test"}}
+	api := &httpapi.API{DB: db, Identity: r3aService(), Groups: s, Config: config.Config{Environment: "test", Synthetic: true, MiniAppURL: "https://mini.test"}}
 	h := api.Handler()
 	rec := r3aRequest(h, token, u.WorkspaceID, "POST", "/api/v1/groups/claims", map[string]any{"chat_id": -97050001, "title": "owned"})
 	if rec.Code != 200 {
