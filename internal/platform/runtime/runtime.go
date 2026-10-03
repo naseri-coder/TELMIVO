@@ -2,17 +2,19 @@ package runtime
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
+	"github.com/naseri-coder/TELMIVO/internal/domains/mainbot"
+	telegramclient "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
 	"github.com/naseri-coder/TELMIVO/internal/platform/cache"
 	"github.com/naseri-coder/TELMIVO/internal/platform/config"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/httpapi"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
+	telegramtransport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 	"log/slog"
 	"net/http"
 	"os"
@@ -69,41 +71,18 @@ func Run(role string) error {
 				w.WriteHeader(200)
 				return
 			}
-			if role != "main-bot" || c.WebhookSecret == "" {
+			if role != "main-bot" || c.WebhookSecret == "" || c.BotToken == "" {
 				w.WriteHeader(503)
 				return
 			}
 			w.WriteHeader(200)
 		})
-		mux.HandleFunc("POST /webhook", func(w http.ResponseWriter, r *http.Request) {
-			if c.Synthetic {
-				w.WriteHeader(501)
-				return
-			}
-			if c.WebhookSecret == "" || subtle.ConstantTimeCompare([]byte(c.WebhookSecret), []byte(r.Header.Get("X-Telegram-Bot-Api-Secret-Token"))) != 1 {
-				w.WriteHeader(401)
-				return
-			}
-			if role != "main-bot" {
-				w.WriteHeader(501)
-				return
-			}
-			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-			var u identity.Update
-			if json.NewDecoder(r.Body).Decode(&u) != nil {
-				w.WriteHeader(400)
-				return
-			}
-			if u.Message == nil || u.Message.Text != "/start" {
-				w.WriteHeader(501)
-				return
-			}
-			if _, e := ident.Start(r.Context(), role, c.MiniAppURL, "telegram:"+identity.UpdateKey(u.ID), u, nil); e != nil {
-				w.WriteHeader(503)
-				return
-			}
-			w.WriteHeader(200)
-		})
+		if role == "main-bot" && !c.Synthetic {
+			client := telegramclient.New(c.BotToken, true)
+			mux.Handle("POST /webhook", telegramclient.MainBotWebhook(c.WebhookSecret, &mainbot.Service{Identity: ident, MiniAppURL: c.MiniAppURL, Membership: client}))
+		} else {
+			mux.HandleFunc("POST /webhook", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(501) })
+		}
 		handler = mux
 	}
 	server := &http.Server{Addr: c.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
@@ -167,7 +146,15 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 				return downloads.CompleteFixture(ctx, tx, e.WorkspaceID, payload.DownloadJobID)
 			}
 			if !c.Synthetic {
-				return errors.New("live notifications disabled")
+				if e.Type != "bot.menu" {
+					return errors.New("live notification type disabled")
+				}
+				chat, err := identity.TelegramID(ctx, tx, payload.UserID)
+				if err != nil {
+					return err
+				}
+				_, err = telegramclient.New(c.BotToken, true).Send(ctx, telegramtransport.Message{ChatID: chat, Text: payload.Body, Markup: payload.Markup})
+				return err
 			}
 			_, err := tx.Exec(ctx, "INSERT INTO notifications(workspace_id,user_id,message_key,parameters,status,idempotency_key) VALUES($1,$2,$3,$4,'SIMULATED',$5) ON CONFLICT(workspace_id,idempotency_key) DO NOTHING", e.WorkspaceID, payload.UserID, e.Type, map[string]any{"body": payload.Body, "markup": payload.Markup}, payload.Key)
 			return err

@@ -5,7 +5,7 @@ function signed(id:number){const p=new URLSearchParams({auth_date:String(Math.fl
 test('native login, policy mutation, Preview equivalence and permission denial',async({page,browser})=>{
  page.on('request',request=>expect(new URL(request.url()).hostname).toBe('127.0.0.1'));
  await page.addInitScript(raw=>{window.Telegram={WebApp:{initData:raw,ready(){},expand(){}}};},signed(94000001));
- await page.goto('/plans');await expect(page.getByRole('heading',{name:labels.policyTitle})).toBeVisible();
+ await page.goto('/admin/policies');await expect(page.getByRole('heading',{name:labels.policyTitle})).toBeVisible();
  const wsResponse=await page.request.get('/api/v1/workspaces');expect(wsResponse.ok()).toBeTruthy();const ws=(await wsResponse.json())[0].id;
  const headers={'X-Workspace-ID':ws,Origin:'http://127.0.0.1:5173'};
  const perms=await page.request.get('/api/v1/auth/permissions');expect(await perms.json()).toContain('platform.access_policies.manage');

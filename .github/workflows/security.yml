@@ -1,10 +1,10 @@
 name: Security Baseline
 on:
   push:
-    branches: [feature/platform-bootstrap-v0.1, develop, main]
+    branches: [feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
   pull_request:
-    branches: [develop, main]
+    branches: [feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}

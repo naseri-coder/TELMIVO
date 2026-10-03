@@ -1,0 +1,411 @@
+{
+  "stage": "TELMIVO_R3A_R2",
+  "repository": "naseri-coder/TELMIVO",
+  "visibility": "PRIVATE",
+  "branch": "feature/r3a-main-miniapp-v0.1",
+  "foundation_parent_sha": "ab640fbdbafc76354d0f56fc71e4033fff9db711",
+  "foundation_tree": "11149347c4ea99021809d51741188ed4781d2142",
+  "validated_r2b_source": "90a0d83f5853d527fde654c98783ae0879ac063c",
+  "recovered_checkpoint": {
+    "recovered_path": "/workspace/scratch/f0ab416e623c/TELMIVO-R3A",
+    "recovered_head": "ab640fbdbafc76354d0f56fc71e4033fff9db711",
+    "recovered_branch": "feature/r3a-main-miniapp-v0.1",
+    "modified_paths": [
+      ".github/workflows/build-images.yml",
+      ".github/workflows/ci-go.yml",
+      ".github/workflows/ci-web.yml",
+      ".github/workflows/migration-check.yml",
+      ".github/workflows/security.yml",
+      "internal/domains/identity/bot.go",
+      "internal/platform/httpapi/api.go",
+      "internal/platform/runtime/runtime.go",
+      "web/miniapp/e2e/native.spec.ts",
+      "web/miniapp/e2e/smoke.spec.ts",
+      "web/miniapp/playwright.config.ts",
+      "web/miniapp/playwright.native.config.ts",
+      "web/miniapp/src/app/App.tsx",
+      "web/miniapp/src/app/context.tsx",
+      "web/miniapp/src/locales/index.ts",
+      "web/miniapp/src/pages/Dashboard.tsx",
+      "web/miniapp/src/pages/Wallet.tsx",
+      "web/miniapp/src/services/api.ts",
+      "web/miniapp/src/styles/app.css"
+    ],
+    "untracked_paths": [
+      "internal/domains/mainbot/service.go",
+      "internal/domains/mainbot/service_test.go",
+      "internal/integrations/telegram/mainbot.go",
+      "internal/integrations/telegram/mainbot_test.go",
+      "internal/platform/httpapi/customer.go",
+      "tests/integration/r3a_test.go",
+      "web/miniapp/e2e/customer.native.spec.ts",
+      "web/miniapp/src/locales/fa/customer.json",
+      "web/miniapp/src/pages/AdminWallet.tsx",
+      "web/miniapp/src/pages/Plans.tsx",
+      "web/miniapp/src/pages/Settings.tsx",
+      "web/miniapp/src/services/customer.ts",
+      "web/miniapp/src/tests/customer.test.ts"
+    ],
+    "staged_paths": [],
+    "method": "Preserved separate existing product worktree; Foundation checkout remained clean. No reset, overwrite or reconstruction."
+  },
+  "validated_source_head": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c",
+  "validated_source_tree": "01f9f6ab83629273049e4ccfca5e57128fa38a79",
+  "final_delivery_head": {
+    "git_revision": "HEAD at this evidence commit",
+    "expected_parent": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c",
+    "kind": "evidence_documentation_only",
+    "exact_sha_record_location": "R3A stacked Draft PR description and final delivery response",
+    "explanation": "The exact SHA cannot be embedded in the content of its own Git commit. Resolve the delivery revision and verify its parent; the exact SHA is recorded externally after publication."
+  },
+  "r3a_commits": [
+    {
+      "sha": "7171c6bb61dd6d5abb53064e6dc9471264c21372",
+      "title": "feat(r3a): connect Main Bot and scoped customer read models",
+      "kind": "source_product_or_acceptance"
+    },
+    {
+      "sha": "f63a849ce8a63e1d1818a92b46f482304e3e6ff9",
+      "title": "feat(r3a): deliver Persian customer control center journey",
+      "kind": "source_product_or_acceptance"
+    },
+    {
+      "sha": "daf7a08ae135b9b0802d5611233520280c930805",
+      "title": "test(r3a): verify shared identity and native customer acceptance",
+      "kind": "source_product_or_acceptance"
+    },
+    {
+      "sha": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c",
+      "title": "fix(r3a): scope native journey navigation to customer menu",
+      "kind": "source_product_or_acceptance"
+    },
+    {
+      "git_revision": "HEAD at this evidence commit",
+      "title": "docs(r3a): record validated Main Bot and Mini App vertical",
+      "kind": "evidence_documentation_only",
+      "expected_parent": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c"
+    }
+  ],
+  "r3a_commit_count": 5,
+  "new_migrations": [],
+  "migration_inventory": [
+    {
+      "path": "db/migrations/0001_core.sql",
+      "sha256": "9151f109a0c4bde03f9f0f1da1fe0a8324c5023110f88c6fb601372af502acc2",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0002_resources.sql",
+      "sha256": "754355b13dfc1086e0429b9f6f74d62f22f20957a9f6c2d8084c13c3012c0d7f",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0003_seed.sql",
+      "sha256": "a64de0b19e53199d48f1d47d9c3f569b371c2b0a924436d4c0c48c3b07827bb5",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0004_r1.sql",
+      "sha256": "eb9205d12738abfec6f445635ec725de485ce2c525a6fd70c652a914b4ab93bd",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0005_financial_sealing.sql",
+      "sha256": "18d0f3ac093a3549a4768334a038b4fde5cf61d56aff4a446e984d64be80a3d3",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0006_native_ledger_trigger.sql",
+      "sha256": "194a8d2ee11a4650a2138aa44ace3e8a37861e774343eec43a62979f04e8e2df",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0007_dynamic_policy.sql",
+      "sha256": "c6e58e2dd9061807cdd34198b5ae08fc9f839a8dbb773135fc7095c7d400c1ef",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0008_catalog_policy_revisions.sql",
+      "sha256": "1350ec244aa892b6f617b789c65aae2c7b47343021ba3746298b3fef049c53b0",
+      "unchanged_from_foundation": true
+    },
+    {
+      "path": "db/migrations/0009_long_job_foundation.sql",
+      "sha256": "0a334e396207d6652c33cadec78fa3d91212f6088144a6df16ed74f1940e26f8",
+      "unchanged_from_foundation": true
+    }
+  ],
+  "foundation_contract_changes": [],
+  "gate_results": {
+    "SOURCE_CONTINUITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Exact PRIVATE repository, frozen parent SHA/tree, remote refs and PR #1 checked before work and after final source CI."
+    },
+    "FOUNDATION_FREEZE_GATE": {
+      "verdict": "PASS",
+      "evidence": "Migrations 0001–0009 byte-identical to parent; Foundation branch remains ab640fb; resolver, ledger, trial and durable infrastructure contracts reused."
+    },
+    "BRANCH_ISOLATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "Separate preserved product worktree; four source commits descend only from frozen Foundation; no delta on Foundation/main/develop."
+    },
+    "LOCAL_RECOVERY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Recovered 19 modified + 13 untracked paths on TELMIVO-R3A, zero staged paths, HEAD ab640fb; no reset, deletion, overwrite or reconstruction."
+    },
+    "MAIN_BOT_ENTRY_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3ASharedEntry/MAIN_BOT_first and menu_and_thin_transport PASS with actual restricted PostgreSQL."
+    },
+    "MAIN_BOT_IDEMPOTENCY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Repeated starts, duplicate webhook delivery and one durable outbox response per update asserted in TestR3ASharedEntry."
+    },
+    "MINIAPP_DIRECT_ENTRY_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3ASharedEntry/MINIAPP_first and TestR3AAuth/direct_signed_login_and_replay PASS without Main Bot prerequisite."
+    },
+    "SHARED_IDENTITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Both entry orders preserve Platform User, default Workspace, two distinct entry-source records and immutable trial end/version; no duplicate enrollment."
+    },
+    "WORKSPACE_SWITCH_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native authorized_workspace_list and real_dashboard_switch_and_isolation; browser switches two real workspaces and retains validated selection after reload."
+    },
+    "DASHBOARD_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native real counts and workspace ID; browser observes real group count 1 versus 0, real balances and catalog label; no invented analytics."
+    },
+    "ACCESS_SUMMARY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native resolver_equivalence_and_quota and browser compare customer read model to /access/decision; committed/reserved quota = 1/1, remaining/reset authoritative."
+    },
+    "PLAN_CATALOG_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native plan_catalog and real browser Plans screen read active PostgreSQL catalog; purchase controls truthfully unavailable."
+    },
+    "WALLET_READ_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native ledger balance 300 atomic USD, keyset pagination and mutation denial; browser reads 2100 atomic USD and loads 20 + 1 real entries."
+    },
+    "SETTINGS_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native owner-only mutation, optimistic stale-name conflict, audit actor/correlation and nonowner denial; browser saves and reloads persisted name."
+    },
+    "ADMIN_AUTHORIZATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native ordinary owner denied policy API; existing configured administrator recognized; real browser hides menu and denies route/API. Existing R2A policy browser also PASS."
+    },
+    "MINIAPP_AUTH_SECURITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native valid signed login, signature tamper/malformed denial, valid but expired signature denial, replay rejection and restricted runtime role assertions PASS."
+    },
+    "WORKSPACE_ISOLATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native foreign dashboard/wallet/settings denial and nonowner update denial; browser switching shows distinct real state; restored restricted-runtime isolation regression PASS."
+    },
+    "NATIVE_BROWSER_E2E_GATE": {
+      "verdict": "PASS",
+      "evidence": "customer.native.spec.ts PASS through actual frontend -> API -> PostgreSQL, no interception; includes wallet pagination, settings, admin denial and reload."
+    },
+    "PERSIAN_RTL_GATE": {
+      "verdict": "PASS",
+      "evidence": "Real browser asserts fa-IR, RTL, 390x844 mobile and no page overflow; native screenshots reviewed; retained desktop/mobile focus tests PASS."
+    },
+    "REGRESSION_GATE": {
+      "verdict": "PASS",
+      "evidence": "21 Go unit/contract tests; 19 native top-level + 44 subtests and restored TestR2BRecovered PASS; existing R2A native browser and eight lightweight browser regressions PASS."
+    },
+    "SECURITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "gofmt/vet/build/race, govulncheck, npm audit and 192-file secret scan PASS. GO-2026-5932 remains module-only, unimported/uncalled; not an advisory-free graph."
+    },
+    "CI_GATE": {
+      "verdict": "PASS",
+      "evidence": "All four final-source workflows SUCCESS; actual job logs inspected with no failed test/panic; both piped native commands retain explicit pipefail."
+    },
+    "DOCUMENTATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "Architecture, validation, machine evidence and Git-generated exact changed-file inventory finalized and checked in evidence-only delivery commit."
+    }
+  },
+  "test_counts": {
+    "go_unit_contract_top_level": 21,
+    "r3a_native_top_level": 4,
+    "r3a_native_subtests": 18,
+    "native_total_top_level_before_restore": 19,
+    "native_total_subtests": 44,
+    "restored_recovery_top_level": 1,
+    "web_unit": 6,
+    "lightweight_browser": 8,
+    "native_browser": 2,
+    "native_browser_r3a_customer": 1,
+    "native_browser_existing_admin": 1
+  },
+  "final_source_ci_runs": [
+    {
+      "id": 37128112206,
+      "name": "Security Baseline",
+      "status": "completed",
+      "conclusion": "success",
+      "head": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c"
+    },
+    {
+      "id": 37128112170,
+      "name": "CI Web",
+      "status": "completed",
+      "conclusion": "success",
+      "head": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c"
+    },
+    {
+      "id": 37128112158,
+      "name": "Build Images",
+      "status": "completed",
+      "conclusion": "success",
+      "head": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c"
+    },
+    {
+      "id": 37128112512,
+      "name": "CI Go",
+      "status": "completed",
+      "conclusion": "success",
+      "head": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c"
+    }
+  ],
+  "ci_job_ids": {
+    "go": 111217510093,
+    "native": 111217510337,
+    "web": 111217508962,
+    "security": 111217508849,
+    "images": 111217508778
+  },
+  "native_artifacts": [
+    {
+      "id": 11275776683,
+      "name": "native-results",
+      "size_in_bytes": 299949,
+      "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11275776683",
+      "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11275776683/zip",
+      "expired": false,
+      "created_at": "2026-10-03T14:04:16Z",
+      "expires_at": "2027-01-01T14:00:17Z",
+      "updated_at": "2026-10-03T14:04:16Z",
+      "digest": "sha256:8355647efdd30ce52643942c66ed6bcaf9951ef289d5d16311d0071642c37df9",
+      "workflow_run": {
+        "id": 37128112512,
+        "repository_id": 1402424650,
+        "head_repository_id": 1402424650,
+        "head_branch": "feature/r3a-main-miniapp-v0.1",
+        "head_sha": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c"
+      }
+    }
+  ],
+  "native_versions": {
+    "postgresql": "17.11 (Debian 17.11-1.pgdg12+2)",
+    "pg_dump": "17.11",
+    "redis_image": "redis:7.4-alpine",
+    "nats_image": "nats:2.11-alpine with JetStream",
+    "go_ci": "1.27.0",
+    "go_local": "1.27.1",
+    "node_local": "24.19.0",
+    "node_ci_major": "24",
+    "chromium": "153.0.8010.12 / Playwright build 1243"
+  },
+  "actual_log_review": {
+    "test_failures": [],
+    "panics": [],
+    "native_browser": "2 passed (7.9s)",
+    "recovery": "TestR2BRecovered PASS (3.17s)",
+    "piped_validation_commands": "Both explicit set -o pipefail retained; no masked test failure. Expected synthetic FAILED job states are not test failures."
+  },
+  "restore_regression": {
+    "authoritative_business_tables": 84,
+    "before_after_fingerprints_identical": true,
+    "runtime_behavior": "restricted runtime, snapshots, ledger, inbox dedup, replay, isolation, reclaim, fencing and quota history PASS"
+  },
+  "corrected_prior_run": {
+    "source_head": "daf7a08ae135b9b0802d5611233520280c930805",
+    "go_run_id": 37127752756,
+    "result": "FAILURE",
+    "class": "TEST_DEFECT",
+    "cause": "Unscoped Playwright link selector matched both navigation and Dashboard Plans links. Native business assertions passed; browser closure was not PASS.",
+    "correction_commit": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c",
+    "correction": "Scope navigation link selector to the customer navigation landmark; retain all journey assertions.",
+    "authoritative_replacement_run": 37128112512
+  },
+  "local_validation_limits": [
+    "No local Docker/PostgreSQL executable; native execution performed on GitHub-hosted isolated services, not fabricated locally.",
+    "Local Playwright Chromium download returned a truncated archive; GitHub-hosted Chromium installation and both browser suites succeeded."
+  ],
+  "quality_checks": {
+    "gofmt": "PASS",
+    "go_vet": "PASS",
+    "go_race": "PASS",
+    "go_build": "PASS",
+    "govulncheck": "PASS with inherited module-only GO-2026-5932",
+    "frontend_lint": "PASS",
+    "typescript": "PASS",
+    "frontend_unit": "PASS",
+    "browser": "PASS",
+    "npm_audit": "PASS / zero vulnerabilities",
+    "secret_pattern_scan": "PASS / 192 source files, zero matches",
+    "images_compose": "PASS"
+  },
+  "external_blockers": [
+    {
+      "name": "CodeQL",
+      "status": "BLOCKED_EXTERNAL",
+      "reason": "Inherited private-repository/account capability blocker; not retried. No R3A CodeQL run triggered by branch filters."
+    },
+    {
+      "name": "Branch Protection",
+      "status": "EXTERNAL_BLOCKER",
+      "reason": "Inherited unsupported administration capability; no administrative change attempted."
+    }
+  ],
+  "deferred": [
+    "Full Channel Management / Publishing / Scheduler / Content Studio / Advertising / Growth / full Analytics",
+    "R3B Group Bot / moderation / Anti-Spam / Anti-Flood / Captcha / Raid / warnings-mute-ban / live group authority",
+    "R3C Downloader / real YouTube-Instagram-Facebook media / DRM-private-paywall bypass / FFmpeg product pipeline",
+    "R3D Uploader / Bot Factory / full customer bot runtime",
+    "Full Ticketing / Broadcast Center",
+    "Real purchasing / payment rails / Telegram Stars / crypto / refunds / wallet mutation",
+    "AI Copilot",
+    "Network S3 / external KMS",
+    "Production deployment / secrets / DB operations / scheduled production backups / load testing"
+  ],
+  "untested": [
+    "Live Telegram webhook registration, actual bot delivery and live Telegram client rendering",
+    "Production credentials / deployment / production data / production load and restore scheduling",
+    "Payment and deferred product workflows",
+    "Network S3 and external KMS",
+    "Manual device matrix beyond automated 390x844 mobile / 1100x760 desktop; comprehensive accessibility certification"
+  ],
+  "known_limitations": [
+    "Customer workspace list and active plan catalog return at most 100 records; workspace enumeration pagination is not implemented. Wallet history is keyset-paginated, default 20 and maximum 50.",
+    "Customer quota presentation currently selects the existing downloads policy; no Downloader operation is implemented. Catalog names are data, not authorization branches.",
+    "Durable Settings only changes workspace name and only for its current owner/member, with expected-name concurrency and audit. Locale is fa-IR and timestamps use browser timezone; neither is claimed as persisted server preference.",
+    "Active workspace selection persists locally per Platform User, validated against the authorized list on every bootstrap; it is presentation state, never server authorization truth.",
+    "Telegram menu response delivery uses the existing PostgreSQL outbox / JetStream inbox. Ambiguous external send success before worker crash can cause duplicate messages; durable identity/trial/customer state remains idempotent. Exactly-once Telegram delivery is not claimed.",
+    "Existing Foundation ticket component and synthetic authorized-admin wallet-adjustment regression surface are preserved for compatibility; neither is advertised as an R3A customer product. Customer Wallet has no write controls or new write endpoint.",
+    "No new durable architectural decision or schema contract was introduced; no ceremonial ADR."
+  ],
+  "no_production_operation": true,
+  "no_r3b_started": true,
+  "frozen_main_develop": "024b3a3465285f9758ce109551a6574ced087dc7",
+  "foundation_pr_1": {
+    "state": "OPEN",
+    "draft": true,
+    "merged": false,
+    "head": "ab640fbdbafc76354d0f56fc71e4033fff9db711"
+  },
+  "r3a_pr_contract": {
+    "head": "feature/r3a-main-miniapp-v0.1",
+    "base": "feature/platform-bootstrap-v0.1",
+    "state": "OPEN",
+    "draft": true,
+    "merged": false
+  },
+  "verdict": "TELMIVO_R3A_MAIN_MINIAPP_VERTICAL_PASS"
+}
