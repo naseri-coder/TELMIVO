@@ -512,6 +512,19 @@ func TestR2AAdminRevisions(t *testing.T) {
 	if n := number(t, u, "SELECT (old_summary->>'version')::bigint FROM audit_logs WHERE action='plan.entitlement.edit' AND entity_id='R2A_TEST'"); n != 1 {
 		t.Fatal("old catalog revision", n)
 	}
+	unconfigured := fixture(t, false)
+	tenant(t, unconfigured, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, "UPDATE subscriptions SET plan_key='R2A_TEST' WHERE workspace_id=$1", unconfigured.WorkspaceID)
+		return e
+	})
+	e := db.Tenant(ctx, unconfigured.UserID, unconfigured.WorkspaceID, false, func(tx pgx.Tx) error {
+		_, e := policies.Reserve(ctx, tx, policyRequest(unconfigured), "unconfigured-heavy-job")
+		return e
+	})
+	var denied *policies.Denied
+	if !errors.As(e, &denied) || denied.Decision.Reason != "QUOTA_POLICY_UNCONFIGURED" {
+		t.Fatal("unconfigured plan bypassed durable usage", e)
+	}
 	price := policies.Version{Key: "price_api_fixture", Kind: "PRICE", Feature: "downloads", Enabled: true, EffectiveFrom: time.Now().Add(-time.Second), Reason: "synthetic API policy", Definition: policies.Definition{Asset: "USD", AmountAtomic: "123", Scale: 2}}
 	b, e := json.Marshal(policies.Change{Version: price})
 	must(t, e)

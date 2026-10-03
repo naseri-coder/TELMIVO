@@ -35,6 +35,7 @@ func Reserve(ctx context.Context, tx pgx.Tx, r Request, key string) (Decision, e
 	if e != pgx.ErrNoRows {
 		return Decision{}, e
 	}
+	r.RequireReservation = true
 	d, e := Resolve(ctx, tx, r)
 	if e != nil {
 		return d, e

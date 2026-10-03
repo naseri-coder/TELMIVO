@@ -66,3 +66,20 @@ func TestPolicyValidation(t *testing.T) {
 		t.Fatal("float money")
 	}
 }
+func TestReservationConfiguration(t *testing.T) {
+	if reservable(nil, 1, nil) {
+		t.Fatal("unconfigured job admitted")
+	}
+	if reservable(map[string]Resource{"file": {Mode: "ITEM"}}, 1, map[string]int64{"file": 100}) {
+		t.Fatal("size check alone is not an allocation")
+	}
+	if !reservable(map[string]Resource{"jobs": {Mode: "USAGE", Primary: true}}, 1, nil) {
+		t.Fatal("usage quota")
+	}
+	if !reservable(map[string]Resource{"jobs": {Mode: "CONCURRENT"}}, 1, nil) {
+		t.Fatal("concurrency quota")
+	}
+	if !reservable(map[string]Resource{"storage": {Mode: "CAPACITY"}}, 0, map[string]int64{"storage": 100}) {
+		t.Fatal("capacity allocation")
+	}
+}

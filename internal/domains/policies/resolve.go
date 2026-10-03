@@ -349,6 +349,10 @@ func Resolve(ctx context.Context, tx pgx.Tx, r Request) (Decision, error) {
 		d.Allowed = false
 		d.Reason = "CAPABILITY_DISABLED"
 	}
+	if d.Allowed && r.RequireReservation && !reservable(d.Resources, r.Requested, r.Amounts) {
+		d.Allowed = false
+		d.Reason = "QUOTA_POLICY_UNCONFIGURED"
+	}
 	for _, metric := range sortedKeys(d.Resources) {
 		x := d.Resources[metric]
 		amount := r.Amounts[metric]

@@ -72,20 +72,34 @@ type Change struct {
 	ExpectedVersion int64 `json:"expected_version"`
 }
 type Request struct {
-	Capability   string           `json:"capability,omitempty"`
-	User         string           `json:"user"`
-	Workspace    string           `json:"workspace"`
-	Role         string           `json:"role"`
-	Plan         string           `json:"plan,omitempty"`
-	Feature      string           `json:"feature"`
-	Plugin       string           `json:"plugin,omitempty"`
-	Permission   string           `json:"permission"`
-	Group        string           `json:"group,omitempty"`
-	Installation string           `json:"installation,omitempty"`
-	Requested    int64            `json:"requested"`
-	Amounts      map[string]int64 `json:"amounts,omitempty"`
-	Now          time.Time        `json:"-"`
+	RequireReservation bool             `json:"require_reservation,omitempty"`
+	Capability         string           `json:"capability,omitempty"`
+	User               string           `json:"user"`
+	Workspace          string           `json:"workspace"`
+	Role               string           `json:"role"`
+	Plan               string           `json:"plan,omitempty"`
+	Feature            string           `json:"feature"`
+	Plugin             string           `json:"plugin,omitempty"`
+	Permission         string           `json:"permission"`
+	Group              string           `json:"group,omitempty"`
+	Installation       string           `json:"installation,omitempty"`
+	Requested          int64            `json:"requested"`
+	Amounts            map[string]int64 `json:"amounts,omitempty"`
+	Now                time.Time        `json:"-"`
 }
+
+func reservable(resources map[string]Resource, requested int64, amounts map[string]int64) bool {
+	for metric, r := range resources {
+		if r.Mode == "ITEM" {
+			continue
+		}
+		if amounts[metric] > 0 || (requested > 0 && (r.Primary || r.Mode == "CONCURRENT")) {
+			return true
+		}
+	}
+	return false
+}
+
 type Resource struct {
 	Primary       bool       `json:"-"`
 	Limit         int64      `json:"limit"`
