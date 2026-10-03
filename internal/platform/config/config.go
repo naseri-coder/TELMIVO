@@ -16,12 +16,13 @@ type Config struct {
 	AdminIDs                                                               []int64
 	Synthetic                                                              bool
 	GroupTestAuthority                                                     bool
+	DownloaderTestFixture                                                  bool
 	SessionTTL, JobTimeout                                                 time.Duration
 	MediaConcurrency, MaxMediaBytes                                        int64
 }
 
 func Load(get func(string) string) (Config, error) {
-	c := Config{Environment: get("TELMIVO_ENV"), HTTPAddr: get("HTTP_ADDR"), DatabaseURL: get("DATABASE_URL"), RedisURL: get("REDIS_URL"), NATSURL: get("NATS_URL"), MiniAppURL: get("MINIAPP_URL"), BotToken: get("BOT_TOKEN"), GroupBotToken: get("GROUP_BOT_TOKEN"), DownloaderBotToken: get("DOWNLOADER_BOT_TOKEN"), WebhookSecret: get("WEBHOOK_SECRET"), CredentialKey: get("CREDENTIAL_KEY"), StorageEndpoint: get("S3_ENDPOINT"), StorageBucket: get("S3_BUCKET"), SessionTTL: time.Hour, JobTimeout: 5 * time.Minute, MediaConcurrency: 2, MaxMediaBytes: 100 << 20}
+	c := Config{Environment: get("TELMIVO_ENV"), HTTPAddr: get("HTTP_ADDR"), DatabaseURL: get("DATABASE_URL"), RedisURL: get("REDIS_URL"), NATSURL: get("NATS_URL"), MiniAppURL: get("MINIAPP_URL"), BotToken: get("BOT_TOKEN"), GroupBotToken: get("GROUP_BOT_TOKEN"), DownloaderBotToken: get("DOWNLOADER_BOT_TOKEN"), WebhookSecret: get("WEBHOOK_SECRET"), CredentialKey: get("CREDENTIAL_KEY"), StorageEndpoint: get("S3_ENDPOINT"), StorageBucket: get("S3_BUCKET"), SessionTTL: time.Hour, JobTimeout: 5 * time.Minute, MediaConcurrency: 2, MaxMediaBytes: 49 << 20}
 	if c.Environment == "" {
 		c.Environment = "development"
 	}
@@ -50,6 +51,20 @@ func Load(get func(string) string) (Config, error) {
 		if e != nil || c.GroupTestAuthority && (c.Environment != "test" || !c.Synthetic) {
 			return c, errors.New("group fixture requires explicit synthetic test mode")
 		}
+	}
+	if v := get("TEST_DOWNLOADER_FIXTURE"); v != "" {
+		var e error
+		c.DownloaderTestFixture, e = strconv.ParseBool(v)
+		if e != nil || c.DownloaderTestFixture && (c.Environment != "test" || !c.Synthetic) {
+			return c, errors.New("downloader fixture requires synthetic test mode")
+		}
+	}
+	if v := get("MAX_MEDIA_BYTES"); v != "" {
+		n, e := strconv.ParseInt(v, 10, 64)
+		if e != nil || n < 1024 || n > 49<<20 {
+			return c, errors.New("invalid media safety cap")
+		}
+		c.MaxMediaBytes = n
 	}
 	for _, id := range strings.Split(get("ADMIN_TELEGRAM_IDS"), ",") {
 		if id == "" {

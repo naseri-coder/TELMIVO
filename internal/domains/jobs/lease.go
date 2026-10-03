@@ -50,6 +50,16 @@ func Create(ctx context.Context, tx pgx.Tx, r policies.Request, key, operation, 
 	return id, e
 }
 func Acquire(ctx context.Context, tx pgx.Tx, workspace, job, owner string, duration time.Duration) (Lease, error) {
+	return acquire(ctx, tx, workspace, job, owner, duration, false)
+}
+
+// AcquireExpiredSettlement uses the same lease/fencing contract solely to close
+// an expired reservation; it cannot grant new work or successful settlement.
+func AcquireExpiredSettlement(ctx context.Context, tx pgx.Tx, workspace, job, owner string, duration time.Duration) (Lease, error) {
+	return acquire(ctx, tx, workspace, job, owner, duration, true)
+}
+
+func acquire(ctx context.Context, tx pgx.Tx, workspace, job, owner string, duration time.Duration, expiredSettlement bool) (Lease, error) {
 	l := Lease{Job: job, Workspace: workspace, Owner: owner}
 	if owner == "" || len(owner) > 128 || duration <= 0 || duration > MaxLease {
 		return l, database.ErrInvalid
@@ -87,7 +97,15 @@ func Acquire(ctx context.Context, tx pgx.Tx, workspace, job, owner string, durat
 	if e = fence(ctx, tx, l); e != nil {
 		return l, e
 	}
-	if e = policies.BindLease(ctx, tx, workspace, l.Reservation, job, l.ExpiresAt); e != nil {
+	if expiredSettlement {
+		var eligible bool
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM quota_reservations q WHERE q.workspace_id=$1 AND q.operation_key=$2) AND NOT EXISTS(SELECT 1 FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.operation_key=$2 AND q.state='RESERVED' AND COALESCE(a.expires_at,q.expires_at)>clock_timestamp())`, workspace, l.Reservation).Scan(&eligible); e != nil {
+			return l, e
+		}
+		if !eligible {
+			return l, database.ErrConflict
+		}
+	} else if e = policies.BindLease(ctx, tx, workspace, l.Reservation, job, l.ExpiresAt); e != nil {
 		return l, e
 	}
 	_, e = tx.Exec(ctx, "UPDATE media_jobs SET state='RUNNING' WHERE id=$1", job)

@@ -15,6 +15,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
 	"github.com/naseri-coder/TELMIVO/internal/domains/tickets"
 	"github.com/naseri-coder/TELMIVO/internal/domains/wallets"
+	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/cache"
 	"github.com/naseri-coder/TELMIVO/internal/platform/config"
@@ -103,6 +104,11 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("GET /api/v1/tickets/{ticket}", a.ticketDetail)
 	protected.HandleFunc("POST /api/v1/tickets/{ticket}/replies", a.ticketReply)
 	protected.HandleFunc("POST /api/v1/tickets/{ticket}/actions", a.ticketAction)
+	protected.HandleFunc("POST /api/v1/downloader", a.downloaderSubmit)
+	protected.HandleFunc("GET /api/v1/downloader", a.downloaderHistory)
+	protected.HandleFunc("GET /api/v1/downloader/{job}", a.downloaderDetail)
+	protected.HandleFunc("POST /api/v1/downloader/{job}/format", a.downloaderSelect)
+	protected.HandleFunc("POST /api/v1/downloader/{job}/cancel", a.downloaderCancel)
 	protected.HandleFunc("GET /api/v1/downloads", a.downloadList)
 	protected.HandleFunc("GET /api/v1/downloads/formats", a.formats)
 	protected.HandleFunc("POST /api/v1/downloads", a.downloadCreate)
@@ -212,6 +218,11 @@ func user(r *http.Request) string        { v, _ := r.Context().Value(userKey).(s
 func correlation(r *http.Request) string { v, _ := r.Context().Value(requestKey).(string); return v }
 func workspace(r *http.Request) string   { return r.Header.Get("X-Workspace-ID") }
 func handleError(w http.ResponseWriter, e error) {
+	var mediaFailure media.Failure
+	if errors.As(e, &mediaFailure) {
+		respond(w, 400, map[string]any{"error": map[string]string{"code": string(mediaFailure), "message": downloads.PersianError(string(mediaFailure))}})
+		return
+	}
 	if errors.Is(e, database.ErrForbidden) {
 		fail(w, 403, "forbidden")
 		return

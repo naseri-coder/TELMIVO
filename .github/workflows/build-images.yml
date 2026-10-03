@@ -1,10 +1,10 @@
 name: Build Images
 on:
   push:
-    branches: [feature/r3b-group-bot-v0.1, feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    branches: [feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1, feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
   pull_request:
-    branches: [feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    branches: [feature/r3b-group-bot-v0.1,feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -20,6 +20,9 @@ jobs:
       - run: docker build -f deployments/docker/backend.Dockerfile -t telmivo-backend:test .
       - run: docker build -f deployments/docker/miniapp.Dockerfile -t telmivo-miniapp:test .
       - run: docker run --rm --entrypoint ffmpeg telmivo-backend:test -version
+      - run: docker run --rm --entrypoint ffprobe telmivo-backend:test -version
+      - run: docker run --rm --entrypoint /opt/extractor/bin/python telmivo-backend:test -m yt_dlp --version
+      - run: test "$(docker run --rm --entrypoint id telmivo-backend:test -u)" = 10001
       - name: Packaged IANA policy calendar data
         run: docker run --rm --entrypoint sh telmivo-backend:test -c 'test -r "$ZONEINFO" && test -s "$ZONEINFO"'
       - run: cp .env.example .env && docker compose config --quiet

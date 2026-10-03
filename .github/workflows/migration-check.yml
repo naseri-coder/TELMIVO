@@ -60,11 +60,18 @@ jobs:
         env:
           PGPASSWORD: dev-migration-only
         run: psql -h 127.0.0.1 -U telmivo_migration -d telmivo_test -v ON_ERROR_STOP=1 -f infrastructure/postgres/grants.sql
+      - name: Install bounded media tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python3 -m venv /tmp/r3c-extractor
+          /tmp/r3c-extractor/bin/pip install --require-hashes --no-deps -r scripts/media/requirements.txt
+          /tmp/r3c-extractor/bin/python scripts/media/test_extract.py
       - name: Native customer journey and affected foundation regressions
         run: |
           set -o pipefail
           sh scripts/ci/check-test-target.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR3CDiagnostics|TestR3CFailurePolicy|TestR3CHistoryPagination|TestR3CBotCallbacks|TestR3CCancelCompletionRace|TestR3CLeaseRenewReclaimFence|TestR3CProcessingCleanup|TestR3CSchema|TestR3CIdentityBot|TestR3CJourney|TestR3CCancelAndDeliveryFailures|TestR3CConcurrency|TestR3CStaleFencing|TestR3CBrowserFixture|TestR3CRecoveryPreparation|TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -73,6 +80,7 @@ jobs:
           TELMIVO_ENV: test
           SYNTHETIC_MODE: 'true'
           TEST_GROUP_AUTHORITY_FIXTURE: 'true'
+          TEST_DOWNLOADER_FIXTURE: 'true'
           BOT_TOKEN: synthetic-signing-only
           ADMIN_TELEGRAM_IDS: '94000001'
           HTTP_ADDR: 127.0.0.1:8080
@@ -89,7 +97,13 @@ jobs:
           cd web/miniapp
           npm ci
           npx playwright install --with-deps chromium
-          npx playwright test --config playwright.native.config.ts
+          # Independent synthetic customers share the runner loopback IP.
+          # Give each complete journey its own rate window; never reset inside a journey.
+          # The production 120/min limiter and all prior assertions remain unchanged.
+          for spec in native.spec.ts customer.native.spec.ts groups.native.spec.ts downloader.native.spec.ts; do
+            docker exec "${{ job.services.redis.id }}" redis-cli -n 15 DEL telmivo:rate:ip:127.0.0.1
+            npx playwright test --config playwright.native.config.ts "/$spec$" --output "test-results/$spec"
+          done
       - name: Fresh backup/restore and recovery replay
         env:
           PGHOST: 127.0.0.1
@@ -100,7 +114,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/backup-restore.sh
-          go test -race -v -tags=integration ./tests/integration -run TestR2BRecovered -count=1 -timeout=2m | tee recovered-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR2BRecovered|TestR3CRecovered' -count=1 -timeout=2m | tee recovered-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
