@@ -23,12 +23,33 @@ func TestR2BRecovered(t *testing.T) {
 	restored, e := database.Open(ctx, os.Getenv("TEST_RESTORE_DATABASE_URL"), true)
 	must(t, e)
 	defer restored.Pool.Close()
+	var dangerous bool
+	must(t, restored.Pool.QueryRow(ctx, "SELECT rolsuper OR rolbypassrls OR rolinherit FROM pg_roles WHERE rolname=current_user").Scan(&dangerous))
+	if dangerous {
+		t.Fatal("restored runtime must be NOSUPERUSER NOBYPASSRLS NOINHERIT")
+	}
+	// Bootstrap synthetic fixture coordinates with the dedicated restore migration
+	// role. All behavior/isolation assertions below use the restricted runtime.
+	restoredOwner, e := database.Open(ctx, os.Getenv("TEST_RESTORE_MIGRATION_DATABASE_URL"), false)
+	must(t, e)
+	defer restoredOwner.Pool.Close()
 	original := db
 	db = restored
 	defer func() { db = original }()
 	var u identity.Result
 	var id string
-	must(t, restored.Pool.QueryRow(ctx, "SELECT w.owner_id::text,m.workspace_id::text,m.id::text FROM media_jobs m JOIN workspaces w ON w.id=m.workspace_id WHERE m.idempotency_key='r2b-recovery-job'").Scan(&u.UserID, &u.WorkspaceID, &id))
+	must(t, restoredOwner.Pool.QueryRow(ctx, "SELECT w.owner_id::text,m.workspace_id::text,m.id::text FROM media_jobs m JOIN workspaces w ON w.id=m.workspace_id WHERE m.idempotency_key='r2b-recovery-job'").Scan(&u.UserID, &u.WorkspaceID, &id))
+	var trial identity.Result
+	must(t, restoredOwner.Pool.QueryRow(ctx, "SELECT w.owner_id::text,t.workspace_id::text FROM trial_enrollments t JOIN workspaces w ON w.id=t.workspace_id WHERE t.policy_key='r2b_trial_PER_WORKSPACE'").Scan(&trial.UserID, &trial.WorkspaceID))
+	if n := number(t, trial, `SELECT count(*) FROM trial_enrollments t JOIN policy_versions p ON p.key=t.policy_key WHERE t.policy_key='r2b_trial_PER_WORKSPACE' AND t.policy_version=1 AND t.snapshot->>'duration_seconds'='2' AND t.ends_at<clock_timestamp() AND p.version=2 AND p.definition->>'duration_seconds'='86400'`); n != 1 {
+		t.Fatal("restored immutable trial/policy snapshot", n)
+	}
+	if n := number(t, u, "SELECT count(*) FROM ledger_transactions WHERE workspace_id=$1", u.WorkspaceID); n != 1 {
+		t.Fatal("restored representative ledger transaction", n)
+	}
+	if n := number(t, u, "SELECT count(*) FROM (SELECT transaction_id FROM ledger_entries GROUP BY transaction_id HAVING sum(amount_atomic)<>0) unbalanced"); n != 0 {
+		t.Fatal("restored ledger imbalance", n)
+	}
 	tenant(t, u, func(tx pgx.Tx) error {
 		n, e := jobs.Reconcile(ctx, tx, u.WorkspaceID, "restore-reconcile")
 		if e == nil && n != 1 {
@@ -101,10 +122,16 @@ func TestR2BRecovered(t *testing.T) {
 		must(t, q.Relay(ctx, db))
 		return number(t, u, "SELECT count(*) FROM media_jobs WHERE id=$1 AND state='COMPLETED'", id) == 1
 	})
+	wait(t, func() bool {
+		info, e := q.JS.ConsumerInfo("TELMIVO", "r2b-restored-work")
+		return e == nil && info.NumPending == 0 && info.NumAckPending == 0
+	})
 	stop(t, cancel, done)
 	_, e = q.JS.Publish("telmivo.jobs.media", raw)
 	must(t, e)
+	var replayCalls int
 	cancel, done = consumer(t, q, "telmivo.jobs.media", "r2b-restored-work", func(context.Context, pgx.Tx, queue.Envelope) error {
+		replayCalls++
 		return errors.New("terminal replay handler must be skipped")
 	})
 	wait(t, func() bool {
@@ -112,10 +139,17 @@ func TestR2BRecovered(t *testing.T) {
 		return e == nil && info.NumPending == 0 && info.NumAckPending == 0
 	})
 	stop(t, cancel, done)
+	if replayCalls != 0 {
+		t.Fatal("terminal replay executed handler", replayCalls)
+	}
 	if n := number(t, u, "SELECT count(*) FROM outbox_events WHERE workspace_id=$1 AND event_type='media.terminal' AND payload->>'job_id'=$2", u.WorkspaceID, id); n != 1 {
 		t.Fatal("restored terminal duplicated")
 	}
 	if n := number(t, u, "SELECT used FROM quota_usage WHERE workspace_id=$1 AND metric='r2b.recovery_count'", u.WorkspaceID); n != 2 {
 		t.Fatal("restored quota posting", n)
 	}
+	if n := number(t, u, "SELECT count(*) FROM quota_reservations WHERE workspace_id=$1 AND operation_key IN('r2b-recovery-job','r2b-charged-failure') AND state='COMMITTED' AND policy_version=1 AND amount=1 AND count_failure", u.WorkspaceID); n != 2 {
+		t.Fatal("restored reservation snapshot/terminal history", n)
+	}
+	t.Log("restricted restored runtime, snapshots, ledger, inbox dedup, replay, isolation, reclaim, fencing and quota history PASS")
 }

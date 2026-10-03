@@ -97,6 +97,7 @@ jobs:
           PGUSER: telmivo_migration
           PGPASSWORD: dev-migration-only
         run: |
+          set -o pipefail
           sh scripts/ci/backup-restore.sh
           go test -race -v -tags=integration ./tests/integration -run TestR2BRecovered -count=1 -timeout=2m | tee recovered-results.txt
       - uses: actions/upload-artifact@v4
