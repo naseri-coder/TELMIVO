@@ -1,0 +1,24 @@
+name: Security Baseline
+on:
+  push:
+    branches: [feature/platform-bootstrap-v0.1, develop, main]
+  pull_request:
+    branches: [develop, main]
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: python3 scripts/security/scan.py
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm --prefix web/miniapp audit --audit-level=high

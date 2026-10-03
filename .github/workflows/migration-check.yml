@@ -1,0 +1,63 @@
+name: Native Infrastructure
+on:
+  push:
+    branches: [feature/platform-bootstrap-v0.1, develop, main]
+  pull_request:
+    branches: [develop, main]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: telmivo_test
+          POSTGRES_PASSWORD: dev-admin-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d telmivo_test"
+          --health-interval 2s --health-retries 30
+      redis:
+        image: redis:7.4-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5432/telmivo_test?sslmode=disable
+      TEST_MIGRATION_DATABASE_URL: postgres://telmivo_migration:dev-migration-only@127.0.0.1:5432/telmivo_test?sslmode=disable
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      TEST_NATS_URL: nats://127.0.0.1:4222
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start isolated JetStream
+        run: docker run -d --name telmivo-test-nats -p 127.0.0.1:4222:4222 nats:2.11-alpine -js
+      - name: Create restricted runtime and dedicated migration roles
+        env:
+          PGPASSWORD: dev-admin-only
+        run: |
+          sed 's/telmivo_dev/telmivo_test/g' infrastructure/postgres/init.sql | psql -h 127.0.0.1 -U postgres -d telmivo_test -v ON_ERROR_STOP=1
+      - name: Apply fresh migrations
+        env:
+          MIGRATION_DATABASE_URL: ${{ env.TEST_MIGRATION_DATABASE_URL }}
+        run: go run ./cmd/migrate
+      - name: Grant runtime privileges
+        env:
+          PGPASSWORD: dev-migration-only
+        run: psql -h 127.0.0.1 -U telmivo_migration -d telmivo_test -v ON_ERROR_STOP=1 -f infrastructure/postgres/grants.sql
+      - name: Native vertical slices, isolation and financial concurrency
+        run: |
+          set -o pipefail
+          sh scripts/ci/check-test-target.sh
+          go test -race -v -tags=integration ./tests/integration -count=1 -timeout=3m | tee native-results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-results
+          path: native-results.txt

@@ -1,0 +1,22 @@
+name: CI Go
+on:
+  push:
+    branches: [feature/platform-bootstrap-v0.1, develop, main]
+  pull_request:
+    branches: [develop, main]
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: test -z "$(gofmt -l cmd internal db tests)"
+      - run: go vet ./...
+      - run: go test -race ./internal/... ./tests/contract -count=1
+      - run: go build ./cmd/...

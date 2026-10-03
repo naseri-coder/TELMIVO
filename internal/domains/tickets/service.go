@@ -2,7 +2,7 @@ package tickets
 
 import (
 	"context"
-	"errors"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
@@ -30,7 +30,7 @@ func Create(ctx context.Context, tx pgx.Tx, user, workspace, correlation string,
 		in.Priority = "NORMAL"
 	}
 	if !ValidPriority(in.Priority) {
-		return "", errors.New("invalid priority")
+		return "", database.ErrInvalid
 	}
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", workspace+":"+in.Key); e != nil {
 		return "", e
@@ -78,9 +78,7 @@ func Reply(ctx context.Context, tx pgx.Tx, user, workspace, ticket, correlation 
 	if e := tx.QueryRow(ctx, "SELECT creator_id::text,status FROM tickets WHERE id=$1 AND workspace_id=$2 FOR UPDATE", ticket, workspace).Scan(&creator, &status); e != nil {
 		return e
 	}
-	if status == "CLOSED" {
-		return errors.New("ticket closed")
-	}
+
 	var prior, actor, id string
 	e := tx.QueryRow(ctx, "SELECT body,actor_id::text,ticket_id::text FROM ticket_messages WHERE workspace_id=$1 AND idempotency_key=$2", workspace, in.Key).Scan(&prior, &actor, &id)
 	if e == nil {
@@ -91,6 +89,9 @@ func Reply(ctx context.Context, tx pgx.Tx, user, workspace, ticket, correlation 
 	}
 	if e != pgx.ErrNoRows {
 		return e
+	}
+	if status == "CLOSED" {
+		return database.ErrInvalid
 	}
 	if _, e = tx.Exec(ctx, "INSERT INTO ticket_messages(workspace_id,ticket_id,actor_id,body,idempotency_key) VALUES($1,$2,$3,$4,$5)", workspace, ticket, user, in.Body, in.Key); e != nil {
 		return e
@@ -128,17 +129,17 @@ func Act(ctx context.Context, tx pgx.Tx, user, workspace, ticket, correlation st
 	switch in.Action {
 	case "status":
 		if e = Transition(status, in.Value); e != nil {
-			return e
+			return database.ErrInvalid
 		}
 		_, e = tx.Exec(ctx, "UPDATE tickets SET status=$2,updated_at=now() WHERE id=$1", ticket, in.Value)
 	case "priority":
 		if !ValidPriority(in.Value) {
-			return errors.New("invalid priority")
+			return database.ErrInvalid
 		}
 		_, e = tx.Exec(ctx, "UPDATE tickets SET priority=$2,updated_at=now() WHERE id=$1", ticket, in.Value)
 	case "note":
 		if len(in.Value) < 1 || len(in.Value) > 4000 {
-			return errors.New("invalid note")
+			return database.ErrInvalid
 		}
 		_, e = tx.Exec(ctx, "INSERT INTO ticket_internal_notes(workspace_id,ticket_id,actor_id,body) VALUES($1,$2,$3,$4)", workspace, ticket, user, in.Value)
 	case "assign":
@@ -151,7 +152,7 @@ func Act(ctx context.Context, tx pgx.Tx, user, workspace, ticket, correlation st
 			_, e = tx.Exec(ctx, "INSERT INTO ticket_assignments(workspace_id,ticket_id,actor_id,assignee_id) VALUES($1,$2,$3,$4)", workspace, ticket, user, in.Value)
 		}
 	default:
-		return errors.New("unknown ticket action")
+		return database.ErrInvalid
 	}
 	if e != nil {
 		return e

@@ -20,5 +20,8 @@ func Open(raw string) (*Client, error) {
 }
 func (c *Client) Allow(ctx context.Context, key string, limit int64, window time.Duration) (bool, error) {
 	n, e := c.Redis.Eval(ctx, "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return n", []string{"telmivo:rate:" + key}, window.Milliseconds()).Int64()
-	return n <= limit, e
+	if e != nil {
+		return false, e
+	}
+	return n <= limit, nil
 }

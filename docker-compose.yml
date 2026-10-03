@@ -1,0 +1,137 @@
+name: telmivo-dev
+x-app: &app
+  build:
+    context: .
+    dockerfile: deployments/docker/backend.Dockerfile
+  env_file: .env
+  restart: "no"
+  init: true
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    nats:
+      condition: service_started
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: telmivo_dev
+      POSTGRES_PASSWORD: dev-admin-only
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d telmivo_dev"]
+      interval: 2s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command: [redis-server, --save, "", --appendonly, "no"]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      retries: 30
+  nats:
+    image: nats:2.11-alpine
+    command: [-js, -sd, /data]
+    volumes: [nats-data:/data]
+  migrate:
+    build:
+      context: .
+      dockerfile: deployments/docker/backend.Dockerfile
+    env_file: .env
+    command: [/app/migrate]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  grants:
+    image: postgres:17-bookworm
+    environment:
+      PGPASSWORD: dev-migration-only
+    command: [psql, -h, postgres, -U, telmivo_migration, -d, telmivo_dev, -v, ON_ERROR_STOP=1, -f, /grants.sql]
+    volumes: [./infrastructure/postgres/grants.sql:/grants.sql:ro]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  api:
+    <<: *app
+    command: [/app/api]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    ports: [127.0.0.1:8080:8080]
+  worker:
+    <<: *app
+    command: [/app/worker]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+  media-worker:
+    <<: *app
+    command: [/app/media-worker]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+  main-bot:
+    <<: *app
+    command: [/app/main-bot]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+  group-bot:
+    <<: *app
+    command: [/app/group-bot]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+  downloader-bot:
+    <<: *app
+    command: [/app/downloader-bot]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+  customer-bot-runtime:
+    <<: *app
+    command: [/app/customer-bot-runtime]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+  miniapp:
+    build:
+      context: .
+      dockerfile: deployments/docker/miniapp.Dockerfile
+    ports: [127.0.0.1:5173:8080]
+    depends_on: [api]
+volumes:
+  postgres-data:
+  nats-data:

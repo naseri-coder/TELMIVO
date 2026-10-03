@@ -78,6 +78,14 @@ func ChangePlan(ctx context.Context, tx pgx.Tx, actor, workspace, correlation st
 		var prev *string
 		if c.ExpiresAt != nil {
 			prev = &old
+			var base *string
+			var expiry *time.Time
+			if err := tx.QueryRow(ctx, "SELECT previous_plan_key,expires_at FROM subscriptions WHERE workspace_id=$1", workspace).Scan(&base, &expiry); err != nil {
+				return err
+			}
+			if base != nil && expiry != nil && expiry.After(now) {
+				prev = base
+			}
 		}
 		_, e = tx.Exec(ctx, "UPDATE subscriptions SET plan_key=$2,previous_plan_key=$3,expires_at=$4,scheduled_plan_key=NULL,scheduled_at=NULL,version=version+1,updated_at=now() WHERE workspace_id=$1", workspace, c.Plan, prev, c.ExpiresAt)
 	}
