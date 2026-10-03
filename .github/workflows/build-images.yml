@@ -2,8 +2,10 @@ name: Build Images
 on:
   push:
     branches: [feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
   pull_request:
     branches: [develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 permissions:
   contents: read
 jobs:
@@ -16,3 +18,19 @@ jobs:
       - run: docker build -f deployments/docker/miniapp.Dockerfile -t telmivo-miniapp:test .
       - run: docker run --rm --entrypoint ffmpeg telmivo-backend:test -version
       - run: cp .env.example .env && docker compose config --quiet
+      - name: Synthetic Compose startup
+        run: |
+          docker compose up --build -d
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/health/ready; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8080/health/ready
+          curl -fsS http://127.0.0.1:5173/ | grep 'dir="rtl"'
+          for app in main-bot group-bot downloader-bot customer-bot-runtime; do
+            docker run --rm --network telmivo-dev_default curlimages/curl:8.12.1 -fsS http://$app:8080/health/ready
+          done
+          test "$(docker compose ps --status running -q | wc -l)" -eq 11
+      - name: Stop isolated Compose
+        if: always()
+        run: docker compose down

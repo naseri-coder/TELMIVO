@@ -2,8 +2,10 @@ name: Native Infrastructure
 on:
   push:
     branches: [feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
   pull_request:
     branches: [develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 permissions:
   contents: read
 jobs:

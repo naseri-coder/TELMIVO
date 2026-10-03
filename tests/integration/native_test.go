@@ -532,8 +532,9 @@ func TestWallet(t *testing.T) {
 				}
 				return nil
 			})
-			if e == nil {
-				t.Fatal("invalid raw posting committed")
+			expected := []string{"unbalanced ledger transaction", "insufficient wallet balance"}[i]
+			if e == nil || !strings.Contains(e.Error(), expected) {
+				t.Fatalf("expected %s, got %v", expected, e)
 			}
 		}
 	})
@@ -700,6 +701,11 @@ func TestDownloadQueue(t *testing.T) {
 	must(t, q.Relay(ctx, db))
 	cancel, done = consumer(t, q, "telmivo.jobs.download", "r1-download", handler)
 	wait(t, func() bool {
+		select {
+		case err := <-done:
+			t.Fatalf("download consumer stopped: %v", err)
+		default:
+		}
 		must(t, q.Relay(ctx, db))
 		return number(t, u, "SELECT count(*) FROM download_jobs WHERE id=$1 AND state='COMPLETED'", job) == 1
 	})

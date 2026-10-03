@@ -117,9 +117,15 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durable string, handler Handler) error {
 	// Explicitly create the durable, then bind: unsubscribe must not delete it.
-	_, err := c.JS.AddConsumer("TELMIVO", &nats.ConsumerConfig{Durable: durable, FilterSubject: subject, AckPolicy: nats.AckExplicitPolicy, AckWait: 30 * time.Second, MaxDeliver: 6, MaxAckPending: 32, BackOff: []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second, 5 * time.Second, 6 * time.Second}})
+	info, err := c.JS.ConsumerInfo("TELMIVO", durable)
+	if errors.Is(err, nats.ErrConsumerNotFound) {
+		info, err = c.JS.AddConsumer("TELMIVO", &nats.ConsumerConfig{Durable: durable, FilterSubject: subject, AckPolicy: nats.AckExplicitPolicy, AckWait: 30 * time.Second, MaxDeliver: 6, MaxAckPending: 32, BackOff: []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second, 5 * time.Second, 6 * time.Second}})
+	}
 	if err != nil {
 		return err
+	}
+	if info.Config.FilterSubject != subject || info.Config.AckPolicy != nats.AckExplicitPolicy || info.Config.MaxDeliver != 6 {
+		return errors.New("durable consumer configuration mismatch")
 	}
 	sub, err := c.JS.PullSubscribe(subject, durable, nats.Bind("TELMIVO", durable))
 	if err != nil {

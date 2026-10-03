@@ -46,6 +46,9 @@ func Resolve(ctx context.Context, tx pgx.Tx, workspace, role, feature, plugin, a
 	if e = tx.QueryRow(ctx, "SELECT limit_kind,limit_unit,reset_window FROM features WHERE key=$1", feature).Scan(&kind, &unit, &window); e != nil {
 		return entitlement.Decision{}, e
 	}
+	if (kind == "USAGE" || kind == "CREDIT") && (window == nil || *window != "MONTH") {
+		return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
+	}
 	switch kind {
 	case "RESOURCE_COUNT":
 		tables := map[string]string{"channels": "channels", "groups": "groups", "bots": "customer_bots", "team": "workspace_members"}

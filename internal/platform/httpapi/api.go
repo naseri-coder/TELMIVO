@@ -117,6 +117,7 @@ func (a *API) secure(next http.Handler) http.Handler {
 			return
 		}
 		id = id[:24]
+		defer slog.Info("request completed", "request_id", id, "correlation_id", id, "method", r.Method)
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -168,7 +169,11 @@ func (a *API) authenticated(next http.Handler) http.Handler {
 		}
 		id, e := a.Identity.Session(r.Context(), c.Value)
 		if e != nil {
-			fail(w, 401, "unauthorized")
+			if errors.Is(e, auth.ErrInvalid) {
+				fail(w, 401, "unauthorized")
+			} else {
+				handleError(w, e)
+			}
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, id)))
@@ -273,7 +278,11 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 	}
 	out, token, e := a.Identity.Login(r.Context(), u, in.InitData)
 	if e != nil {
-		fail(w, 401, "unauthorized")
+		if errors.Is(e, auth.ErrInvalid) {
+			fail(w, 401, "unauthorized")
+		} else {
+			handleError(w, e)
+		}
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "telmivo_session", Value: token, Path: "/api/v1", HttpOnly: true, Secure: a.Config.Environment == "production", SameSite: http.SameSiteStrictMode, MaxAge: int(a.Config.SessionTTL.Seconds())})
@@ -300,7 +309,7 @@ func (a *API) me(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	respond(w, 200, map[string]any{"user_id": user(r), "name": name, "is_admin": a.DB.IsAdmin(r.Context(), user(r)), "synthetic_mode": a.Config.Synthetic})
+	respond(w, 200, map[string]any{"user_id": user(r), "name": name, "is_admin": a.DB.IsAdmin(r.Context(), user(r)), "synthetic_mode": a.Config.Synthetic, "can_adjust_wallet": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.wallets.adjust")})
 }
 func (a *API) workspaces(w http.ResponseWriter, r *http.Request) {
 	tx, e := a.DB.Pool.Begin(r.Context())

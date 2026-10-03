@@ -131,8 +131,11 @@ func (s *Service) Session(ctx context.Context, token string) (string, error) {
 	}
 	var id string
 	e := s.DB.Pool.QueryRow(ctx, "SELECT s.user_id::text FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=$1 AND expires_at>now() AND NOT u.blocked", auth.Digest(token)).Scan(&id)
-	if e != nil {
+	if e == pgx.ErrNoRows {
 		return "", auth.ErrInvalid
+	}
+	if e != nil {
+		return "", e
 	}
 	return id, nil
 }
