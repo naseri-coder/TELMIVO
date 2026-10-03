@@ -20,6 +20,8 @@ jobs:
       - run: docker build -f deployments/docker/backend.Dockerfile -t telmivo-backend:test .
       - run: docker build -f deployments/docker/miniapp.Dockerfile -t telmivo-miniapp:test .
       - run: docker run --rm --entrypoint ffmpeg telmivo-backend:test -version
+      - name: Packaged IANA policy calendar data
+        run: docker run --rm --entrypoint sh telmivo-backend:test -c 'test -r "$ZONEINFO" && test -s "$ZONEINFO"'
       - run: cp .env.example .env && docker compose config --quiet
       - name: Synthetic Compose startup
         run: |

@@ -9,6 +9,9 @@ RUN mkdir /out && for app in api worker media-worker main-bot group-bot download
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home app
 COPY --from=build /out /app
+COPY --from=build /usr/local/go/lib/time/zoneinfo.zip /app/zoneinfo.zip
+ENV ZONEINFO=/app/zoneinfo.zip
+RUN test -s /app/zoneinfo.zip
 USER 10001:10001
 WORKDIR /app
 EXPOSE 8080
