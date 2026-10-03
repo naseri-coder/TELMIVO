@@ -7,6 +7,7 @@ import (
 )
 
 type Metadata struct {
+	ExpiresAt         time.Time
 	Size              int64
 	ContentType, ETag string
 }

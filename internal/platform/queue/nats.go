@@ -10,6 +10,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/nats-io/nats.go"
+	"log/slog"
 	"regexp"
 	"time"
 )
@@ -179,6 +180,7 @@ func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durab
 				continue
 			}
 			if malformed || meta.NumDelivered >= 6 {
+				slog.Warn("event dead letter", "state", "DLQ", "malformed", malformed)
 				code := "HANDLER_FAILED"
 				id := event.ID
 				if malformed {

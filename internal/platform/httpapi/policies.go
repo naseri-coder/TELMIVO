@@ -115,3 +115,30 @@ func (a *API) adminPermissions(w http.ResponseWriter, r *http.Request) {
 func pluginGovernanceRows(r *http.Request, tx pgx.Tx) (any, error) {
 	return rows(r.Context(), tx, "SELECT plugin_key,key,permission_key FROM plugin_capabilities ORDER BY key")
 }
+
+// Operational counters are scoped to the authorized workspace and use bounded states.
+func (a *API) operations(w http.ResponseWriter, r *http.Request) {
+	a.policyScope(w, r, "platform.safety_limits.read", func(tx pgx.Tx) (any, error) {
+		jobs, e := rows(r.Context(), tx, "SELECT state,count(*) AS count FROM media_jobs WHERE workspace_id=$1 GROUP BY state ORDER BY state", workspace(r))
+		if e != nil {
+			return nil, e
+		}
+		quotas, e := rows(r.Context(), tx, "SELECT state,count(*) AS count FROM quota_reservations WHERE workspace_id=$1 GROUP BY state ORDER BY state", workspace(r))
+		if e != nil {
+			return nil, e
+		}
+		leases, e := rows(r.Context(), tx, "SELECT count(*) FILTER(WHERE terminal_state IS NULL AND expires_at<=now()) AS expired,count(*) FILTER(WHERE generation>1) AS reclaimed FROM job_leases WHERE workspace_id=$1", workspace(r))
+		if e != nil {
+			return nil, e
+		}
+		outbox, e := rows(r.Context(), tx, "SELECT count(*) FILTER(WHERE published_at IS NULL) AS pending,count(*) FILTER(WHERE attempts>1) AS retried FROM outbox_events WHERE workspace_id=$1", workspace(r))
+		if e != nil {
+			return nil, e
+		}
+		dlq, e := rows(r.Context(), tx, "SELECT count(*) AS count FROM dead_letter_events")
+		if e != nil {
+			return nil, e
+		}
+		return map[string]any{"dlq": dlq, "jobs": jobs, "quota_reservations": quotas, "leases": leases, "outbox": outbox}, nil
+	})
+}

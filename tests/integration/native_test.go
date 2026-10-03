@@ -113,7 +113,7 @@ func TestMigration(t *testing.T) {
 		must(t, owner.Migrate(ctx))
 		var n int
 		must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&n))
-		if n != 8 {
+		if n != 9 {
 			t.Fatalf("migration count %d", n)
 		}
 	})

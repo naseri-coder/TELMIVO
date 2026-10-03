@@ -2,6 +2,7 @@ package policies
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -25,7 +26,7 @@ func Reserve(ctx context.Context, tx pgx.Tx, r Request, key string) (Decision, e
 	}{r.User, r.Feature, r.Plugin, r.Capability, r.Requested, r.Amounts})
 	var previous string
 	var expired bool
-	e := tx.QueryRow(ctx, "SELECT fingerprint, state='RELEASED' OR (state='RESERVED' AND expires_at<=now()) FROM quota_reservations WHERE workspace_id=$1 AND operation_key=$2 LIMIT 1", r.Workspace, key).Scan(&previous, &expired)
+	e := tx.QueryRow(ctx, "SELECT q.fingerprint, q.state='RELEASED' OR (q.state='RESERVED' AND COALESCE(a.expires_at,q.expires_at)<=now()) FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.operation_key=$2 LIMIT 1", r.Workspace, key).Scan(&previous, &expired)
 	if e == nil {
 		if previous != fp || expired {
 			return Decision{}, database.ErrConflict
@@ -75,7 +76,14 @@ func Settle(ctx context.Context, tx pgx.Tx, workspace, key string, success bool)
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "quota:"+workspace); e != nil {
 		return e
 	}
-	rs, e := tx.Query(ctx, "SELECT metric,amount,bucket,concurrent,count_failure,expires_at FROM quota_reservations WHERE workspace_id=$1 AND operation_key=$2 AND state='RESERVED' FOR UPDATE", workspace, key)
+	var linked, owned bool
+	if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM quota_lease_allocations WHERE workspace_id=$1 AND operation_key=$2),EXISTS(SELECT 1 FROM quota_lease_allocations a JOIN job_leases j ON j.job_id=a.job_id WHERE a.workspace_id=$1 AND a.operation_key=$2 AND j.owner=current_setting('app.lease_owner',true) AND j.generation::text=current_setting('app.lease_generation',true) AND j.expires_at>clock_timestamp() AND j.terminal_state IS NULL)`, workspace, key).Scan(&linked, &owned); e != nil {
+		return e
+	}
+	if linked && !owned {
+		return database.ErrConflict
+	}
+	rs, e := tx.Query(ctx, "SELECT q.metric,q.amount,q.bucket,q.concurrent,q.count_failure,COALESCE(a.expires_at,q.expires_at) FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.operation_key=$2 AND q.state='RESERVED' FOR UPDATE OF q", workspace, key)
 	if e != nil {
 		return e
 	}
@@ -112,6 +120,7 @@ func Settle(ctx context.Context, tx pgx.Tx, workspace, key string, success bool)
 				return e
 			}
 		}
+		slog.Info("quota reservation terminal", "state", state)
 		if _, e = tx.Exec(ctx, "UPDATE quota_reservations SET state=$4,settled_at=now() WHERE workspace_id=$1 AND operation_key=$2 AND metric=$3", workspace, key, p.metric, state); e != nil {
 			return e
 		}

@@ -17,6 +17,15 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres -d telmivo_test"
           --health-interval 2s --health-retries 30
+      restore:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: telmivo_test
+          POSTGRES_PASSWORD: dev-admin-only
+        ports: [5433:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d telmivo_test"
+          --health-interval 2s --health-retries 30
       redis:
         image: redis:7.4-alpine
         ports: [6379:6379]
@@ -25,6 +34,8 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5432/telmivo_test?sslmode=disable
       TEST_MIGRATION_DATABASE_URL: postgres://telmivo_migration:dev-migration-only@127.0.0.1:5432/telmivo_test?sslmode=disable
+      TEST_RESTORE_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5433/telmivo_test?sslmode=disable
+      TEST_RESTORE_MIGRATION_DATABASE_URL: postgres://telmivo_migration:dev-migration-only@127.0.0.1:5433/telmivo_test?sslmode=disable
       TEST_REDIS_URL: redis://127.0.0.1:6379/15
       TEST_NATS_URL: nats://127.0.0.1:4222
     steps:
@@ -40,6 +51,7 @@ jobs:
           PGPASSWORD: dev-admin-only
         run: |
           sed 's/telmivo_dev/telmivo_test/g' infrastructure/postgres/init.sql | psql -h 127.0.0.1 -U postgres -d telmivo_test -v ON_ERROR_STOP=1
+          sed 's/telmivo_dev/telmivo_test/g' infrastructure/postgres/init.sql | psql -h 127.0.0.1 -p 5433 -U postgres -d telmivo_test -v ON_ERROR_STOP=1
       - name: Apply fresh migrations
         env:
           MIGRATION_DATABASE_URL: ${{ env.TEST_MIGRATION_DATABASE_URL }}
@@ -52,9 +64,48 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/check-test-target.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR2A|TestMigration|TestIdentityWorkspace|TestWorkspaceIsolation|TestTicketing|TestPlatformPermissionsAndGlobalPlans|TestPlanChange|TestDownloadQueue|TestDownloadCancel' -count=1 -timeout=3m | tee native-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Native browser acceptance
+        env:
+          TELMIVO_ENV: test
+          SYNTHETIC_MODE: 'true'
+          BOT_TOKEN: synthetic-signing-only
+          ADMIN_TELEGRAM_IDS: '94000001'
+          HTTP_ADDR: 127.0.0.1:8080
+          MINIAPP_URL: http://127.0.0.1:5173
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          REDIS_URL: ${{ env.TEST_REDIS_URL }}
+          NATS_URL: ${{ env.TEST_NATS_URL }}
+        run: |
+          go build -o /tmp/telmivo-r2b-api ./cmd/api
+          /tmp/telmivo-r2b-api > native-api.log 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          for n in $(seq 1 40); do curl -fsS http://127.0.0.1:8080/health/ready && break; sleep 1; done
+          cd web/miniapp
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test --config playwright.native.config.ts
+      - name: Fresh backup/restore and recovery replay
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: telmivo_test
+          PGUSER: telmivo_migration
+          PGPASSWORD: dev-migration-only
+        run: |
+          sh scripts/ci/backup-restore.sh
+          go test -race -v -tags=integration ./tests/integration -run TestR2BRecovered -count=1 -timeout=2m | tee recovered-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-results
-          path: native-results.txt
+          path: |
+            native-results.txt
+            recovered-results.txt
+            before-restore.txt
+            after-restore.txt
+            web/miniapp/test-results/**

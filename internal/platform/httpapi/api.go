@@ -21,6 +21,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/entitlement"
 	"github.com/naseri-coder/TELMIVO/internal/platform/localization"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
+	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	"io"
 	"log/slog"
 	"net"
@@ -39,6 +40,7 @@ type API struct {
 	Config   config.Config
 	Identity *identity.Service
 	Requests atomic.Uint64
+	Storage  *storage.Scoped
 }
 type ctxKey string
 
@@ -58,6 +60,8 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/access-policies/preview", a.policyPreview)
 	protected.HandleFunc("POST /api/v1/access/decision", a.policyRuntime)
 	protected.HandleFunc("GET /api/v1/safety-limits", a.safetyLimits)
+	protected.HandleFunc("GET /api/v1/operations", a.operations)
+	protected.HandleFunc("GET /api/v1/storage/{owner}/{object}", a.storageOpen)
 	protected.HandleFunc("POST /api/v1/auth/logout", a.logout)
 	protected.HandleFunc("GET /api/v1/workspaces", a.workspaces)
 	protected.HandleFunc("GET /api/v1/dashboard", a.dashboard)
@@ -124,7 +128,11 @@ func (a *API) secure(next http.Handler) http.Handler {
 			return
 		}
 		id = id[:24]
-		defer slog.Info("request completed", "request_id", id, "correlation_id", id, "method", r.Method)
+		outcome := &responseOutcome{ResponseWriter: w, status: 200}
+		w = outcome
+		defer func() {
+			slog.Info("request completed", "request_id", id, "correlation_id", id, "method", r.Method, "status", outcome.status)
+		}()
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -606,3 +614,10 @@ func platformAction(r *http.Request) string {
 		return "platform.plans.manage"
 	}
 }
+
+type responseOutcome struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *responseOutcome) WriteHeader(code int) { w.status = code; w.ResponseWriter.WriteHeader(code) }

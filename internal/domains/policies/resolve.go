@@ -2,6 +2,7 @@ package policies
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -258,20 +259,20 @@ func Resolve(ctx context.Context, tx pgx.Tx, r Request) (Decision, error) {
 				if err != nil {
 					return d, err
 				}
-				e = tx.QueryRow(ctx, "SELECT COALESCE(sum(amount) FILTER(WHERE state='COMMITTED'),0)::bigint,COALESCE(sum(amount) FILTER(WHERE state='RESERVED' AND expires_at>$4),0)::bigint FROM quota_reservations WHERE workspace_id=$1 AND metric=$2 AND created_at>=$3 AND created_at<$5", r.Workspace, metric, start, r.Now, *x.ResetAt).Scan(&x.Used, &x.Reserved)
+				e = tx.QueryRow(ctx, "SELECT COALESCE(sum(amount) FILTER(WHERE state='COMMITTED'),0)::bigint,COALESCE(sum(amount) FILTER(WHERE q.state='RESERVED' AND COALESCE(a.expires_at,q.expires_at)>$4),0)::bigint FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.metric=$2 AND created_at>=$3 AND created_at<$5", r.Workspace, metric, start, r.Now, *x.ResetAt).Scan(&x.Used, &x.Reserved)
 				if e != nil {
 					return d, e
 				}
 			} else {
 				if v.Definition.Window == "ROLLING_WINDOW" {
-					e = tx.QueryRow(ctx, "SELECT COALESCE(sum(amount),0)::bigint FROM quota_reservations WHERE workspace_id=$1 AND metric=$2 AND state='COMMITTED' AND settled_at>$3", r.Workspace, metric, r.Now.Add(-time.Duration(v.Definition.WindowSeconds)*time.Second)).Scan(&x.Used)
+					e = tx.QueryRow(ctx, "SELECT COALESCE(sum(amount),0)::bigint FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.metric=$2 AND state='COMMITTED' AND settled_at>$3", r.Workspace, metric, r.Now.Add(-time.Duration(v.Definition.WindowSeconds)*time.Second)).Scan(&x.Used)
 				} else if x.Mode != "CONCURRENT" {
 					e = tx.QueryRow(ctx, "SELECT COALESCE((SELECT used FROM quota_usage WHERE workspace_id=$1 AND metric=$2 AND bucket=$3),0)", r.Workspace, metric, x.Bucket).Scan(&x.Used)
 				}
 				if e != nil {
 					return d, e
 				}
-				e = tx.QueryRow(ctx, "SELECT COALESCE(sum(amount),0)::bigint FROM quota_reservations WHERE workspace_id=$1 AND metric=$2 AND (bucket=$3 OR $5) AND state='RESERVED' AND expires_at>$4", r.Workspace, metric, x.Bucket, r.Now, v.Definition.Window == "ROLLING_WINDOW").Scan(&x.Reserved)
+				e = tx.QueryRow(ctx, "SELECT COALESCE(sum(amount),0)::bigint FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.metric=$2 AND (bucket=$3 OR $5) AND q.state='RESERVED' AND COALESCE(a.expires_at,q.expires_at)>$4", r.Workspace, metric, x.Bucket, r.Now, v.Definition.Window == "ROLLING_WINDOW").Scan(&x.Reserved)
 				if e != nil {
 					return d, e
 				}
@@ -389,6 +390,9 @@ func Resolve(ctx context.Context, tx pgx.Tx, r Request) (Decision, error) {
 				break
 			}
 		}
+	}
+	if !d.Allowed {
+		slog.Info("policy denied", "reason", d.Reason)
 	}
 	sort.Strings(d.Sources)
 	return d, nil

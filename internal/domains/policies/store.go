@@ -163,6 +163,15 @@ func Enroll(ctx context.Context, tx pgx.Tx, s Subject, trigger string) error {
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "trial-user:"+s.User); e != nil {
 		return e
 	}
+	if s.Installation != "" {
+		var valid bool
+		if e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM customer_bots WHERE workspace_id=$1 AND id::text=$2)", s.Workspace, s.Installation).Scan(&valid); e != nil {
+			return e
+		}
+		if !valid {
+			return database.ErrForbidden
+		}
+	}
 	vs, e := versions(ctx, tx, s.Now)
 	if e != nil {
 		return e
@@ -185,6 +194,9 @@ func Enroll(ctx context.Context, tx pgx.Tx, s Subject, trigger string) error {
 		}
 		if subject == "" {
 			continue
+		}
+		if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "trial-subject:"+d.Scope+":"+subject); e != nil {
+			return e
 		}
 		var claimed bool
 		if d.Scope == "PER_GROUP" {
