@@ -23,6 +23,8 @@ jobs:
           cache: true
       - run: test -z "$(gofmt -l cmd internal db tests)"
       - run: go vet ./...
+      - name: Install media validation dependency
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: go test -race ./internal/... ./tests/contract -count=1
       - run: go build ./cmd/...
   native:

@@ -13,9 +13,10 @@ import (
 )
 
 type MediaClient struct {
-	Token    string
-	MaxBytes int64
-	Timeout  time.Duration
+	transport http.RoundTripper
+	Token     string
+	MaxBytes  int64
+	Timeout   time.Duration
 }
 
 func (c MediaClient) DeliverMedia(ctx context.Context, chat int64, a media.Asset) (media.DeliveryResult, error) {
@@ -64,7 +65,7 @@ func (c MediaClient) DeliverMedia(ctx context.Context, chat int64, a media.Asset
 		return bad, media.Failure("DELIVERY_FAILED")
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	client := &http.Client{Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{Transport: c.transport, Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, e := client.Do(req)
 	if e != nil {
 		return media.DeliveryResult{Outcome: "DELIVERY_OUTCOME_UNKNOWN"}, nil

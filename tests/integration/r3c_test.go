@@ -16,6 +16,8 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	"github.com/naseri-coder/TELMIVO/internal/platform/testfixtures"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -120,6 +122,9 @@ func TestR3CIdentityBot(t *testing.T) {
 		}
 		return nil
 	})
+	if number(t, login, "SELECT count(*) FROM trial_enrollments WHERE user_id=$1 AND policy_key='global_customer_trial'", login.UserID) != 1 {
+		t.Fatal("trial restarted")
+	}
 	for _, text := range []string{"/help", "/status", "/history", "https://evil.test/a"} {
 		u.ID++
 		u.Message.Text = text
@@ -143,7 +148,7 @@ func TestR3CJourney(t *testing.T) {
 	w := r3cWorker(t, r3cProvider{}, d)
 	must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, id))
 	v := r3cView(t, u, id)
-	if v.State != "AWAITING_FORMAT" || len(v.Formats) != 1 {
+	if v.State != "AWAITING_FORMAT" || len(v.Formats) != 2 {
 		t.Fatal(v)
 	}
 	foreign := fixture(t, false)
@@ -160,6 +165,13 @@ func TestR3CJourney(t *testing.T) {
 	v = r3cView(t, u, id)
 	if v.State != "COMPLETED" || v.Bytes != 2553 || v.Delivery != "DELIVERY_ACKNOWLEDGED" {
 		t.Fatal(v)
+	}
+	var expectedChat int64
+	tenant(t, u, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, "SELECT telegram_id FROM telegram_accounts WHERE user_id=$1", u.UserID).Scan(&expectedChat)
+	})
+	if d.chat != expectedChat {
+		t.Fatal("untrusted delivery target")
 	}
 	if d.calls != 1 {
 		t.Fatal(d.calls)
@@ -212,6 +224,10 @@ func TestR3CCancelAndDeliveryFailures(t *testing.T) {
 			if outcome == "CANCELLED" && v.State != "CANCELLED" || outcome != "CANCELLED" && v.State != "FAILED" {
 				t.Fatal(v)
 			}
+			must(t, w.Cleanup(ctx))
+			if _, e := os.Stat(filepath.Join(w.Root, id)); !os.IsNotExist(e) {
+				t.Fatal("terminal temporary artifacts retained", e)
+			}
 			if outcome == "MEDIA_TOO_LARGE" && d.calls != 0 {
 				t.Fatal("oversize delivered")
 			}
@@ -223,12 +239,15 @@ func TestR3CCancelAndDeliveryFailures(t *testing.T) {
 }
 func TestR3CConcurrency(t *testing.T) {
 	u := fixture(t, true)
-	v := policies.Version{Key: "r3c-concurrency-quota-" + u.WorkspaceID, Kind: "QUOTA", Feature: "downloads", Workspace: u.WorkspaceID, Enabled: true, EffectiveFrom: time.Now().Add(-time.Second), Reason: "r3c isolated quota", Definition: policies.Definition{Metric: "downloader.successes", Unit: "JOBS", Window: "ROLLING_WINDOW", WindowSeconds: 3600, Timezone: "UTC", Limit: 3, Mode: "USAGE", ReservationSeconds: 900}}
+	v := policies.Version{Key: "r3c-concurrency-quota-" + u.WorkspaceID, Kind: "QUOTA", Feature: "downloads", Workspace: u.WorkspaceID, Enabled: true, EffectiveFrom: time.Now().Add(-time.Second), Reason: "r3c isolated quota", Definition: policies.Definition{Metric: "downloader.successes", Unit: "JOBS", Window: "ROLLING_WINDOW", WindowSeconds: 3600, Timezone: "UTC", Limit: 5, Mode: "USAGE", ReservationSeconds: 900}}
+	v = savePolicy(t, u, v)
+	seed := r3cSubmit(t, u, "r3c-policy-before-change")
+	v.Definition.Limit = 3
 	savePolicy(t, u, v)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	accepted := 0
-	ids := []string{}
+	ids := []string{seed}
 	for n := 0; n < 6; n++ {
 		wg.Add(1)
 		go func(n int) {
@@ -248,7 +267,7 @@ func TestR3CConcurrency(t *testing.T) {
 		}(n)
 	}
 	wg.Wait()
-	if accepted != 3 {
+	if accepted != 2 {
 		t.Fatal("admitted", accepted)
 	}
 	id := ids[0]
@@ -324,4 +343,13 @@ func TestR3CRecoveryPreparation(t *testing.T) {
 	active := r3cSubmit(t, u, "r3c-recovery-active")
 	must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, active))
 	r3cSelect(t, u, active)
+	cancelled := r3cSubmit(t, u, "r3c-recovery-cancel")
+	tenant(t, u, func(tx pgx.Tx) error {
+		return r3cProduct().Cancel(ctx, tx, u.UserID, u.WorkspaceID, cancelled, "before-backup")
+	})
+	unknown := r3cSubmit(t, u, "r3c-recovery-unknown")
+	unknownWorker := r3cWorker(t, r3cProvider{}, &r3cDelivery{result: media.DeliveryResult{Outcome: "DELIVERY_OUTCOME_UNKNOWN"}})
+	must(t, unknownWorker.RunOne(ctx, u.UserID, u.WorkspaceID, unknown))
+	r3cSelect(t, u, unknown)
+	must(t, unknownWorker.RunOne(ctx, u.UserID, u.WorkspaceID, unknown))
 }

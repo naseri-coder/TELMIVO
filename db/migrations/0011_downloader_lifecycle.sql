@@ -17,6 +17,7 @@ ALTER TABLE download_jobs ADD COLUMN media_job_id uuid,
  AND (delivery_outcome<>'DELIVERY_ACKNOWLEDGED' OR (state='COMPLETED' AND COALESCE(delivery_message_id,0)>0))));
 CREATE FUNCTION guard_downloader_product() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
  IF TG_OP='INSERT' THEN
+  IF NEW.media_job_id IS NOT NULL AND (NEW.state<>'QUEUED' OR NEW.format_id<>'' OR NEW.formats<>'[]'::jsonb OR NEW.cancel_requested OR NEW.delivery_outcome<>'DELIVERY_PENDING' OR NEW.delivery_message_id IS NOT NULL) THEN RAISE EXCEPTION 'invalid initial downloader state'; END IF;
   IF NEW.media_job_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_jobs m WHERE m.id=NEW.media_job_id AND m.workspace_id=NEW.workspace_id AND m.idempotency_key=NEW.idempotency_key AND m.operation='downloader' AND m.state='QUEUED') THEN RAISE EXCEPTION 'invalid downloader execution binding'; END IF;
   RETURN NEW;
  END IF;

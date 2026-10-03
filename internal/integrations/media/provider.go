@@ -28,13 +28,14 @@ const Unavailable Failure = "FORMAT_UNAVAILABLE"
 
 type Source struct{ Provider, URL, Reference string }
 type Format struct {
-	ID         string `json:"id"`
-	Label      string `json:"label"`
-	Kind       string `json:"kind"`
-	Container  string `json:"container"`
-	Codec      string `json:"codec"`
-	Bytes      int64  `json:"bytes"`
-	Processing bool   `json:"requires_processing"`
+	SourceContainer string `json:"source_container,omitempty"`
+	ID              string `json:"id"`
+	Label           string `json:"label"`
+	Kind            string `json:"kind"`
+	Container       string `json:"container"`
+	Codec           string `json:"codec"`
+	Bytes           int64  `json:"bytes"`
+	Processing      bool   `json:"requires_processing"`
 }
 type Analysis struct {
 	Title    string   `json:"title"`
@@ -266,19 +267,29 @@ func (x Extractor) info(ctx context.Context, s Source) (rawInfo, error) {
 	return info, nil
 }
 func descriptor(f rawFormat) (Format, bool) {
-	if f.DRM || f.ID == "" || len(f.ID) > 100 || f.Protocol != "https" || (f.Ext != "mp4" && f.Ext != "m4a" && f.Ext != "mp3") || f.ACodec == "none" {
+	if f.DRM || f.ID == "" || len(f.ID) > 100 || f.Protocol != "https" || (f.Ext != "mp4" && f.Ext != "m4a" && f.Ext != "mp3" && f.Ext != "aac") || f.ACodec == "none" {
 		return Format{}, false
 	}
 	kind := "video"
 	if f.VCodec == "none" {
 		kind = "audio"
 	}
+	if f.Ext == "aac" && kind != "audio" {
+		return Format{}, false
+	}
 	sum := sha256.Sum256([]byte(f.ID + "\x00" + f.Ext + "\x00" + f.VCodec + "\x00" + f.ACodec))
 	label := kind + " " + f.Ext
 	if f.Height > 0 {
 		label += " " + strings.TrimSpace(jsonNumber(f.Height)) + "p"
 	}
-	return Format{ID: hex.EncodeToString(sum[:12]), Label: label, Kind: kind, Container: f.Ext, Codec: f.VCodec + "/" + f.ACodec, Bytes: f.Bytes}, true
+	v := Format{ID: hex.EncodeToString(sum[:12]), Label: label, Kind: kind, Container: f.Ext, Codec: f.VCodec + "/" + f.ACodec, Bytes: f.Bytes}
+	if f.Ext == "aac" {
+		v.SourceContainer = "aac"
+		v.Container = "m4a"
+		v.Processing = true
+		v.Label = "صوت M4A"
+	}
+	return v, true
 }
 func jsonNumber(n int) string { b, _ := json.Marshal(n); return string(b) }
 func SafeTitle(s string) string {

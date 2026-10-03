@@ -63,7 +63,12 @@ func Validate(ctx context.Context, path string, max int64, expected Format) (Ass
 	if !audio || expected.Kind == "video" && !video || expected.Kind == "audio" && video {
 		return a, Failure("INVALID_MEDIA")
 	}
-	if expected.Container == "mp3" {
+	if expected.Processing && expected.SourceContainer == "aac" {
+		if info.Format.Name != "aac" || video {
+			return a, Failure("INVALID_MEDIA")
+		}
+		a.ContentType = "audio/aac"
+	} else if expected.Container == "mp3" {
 		if !strings.Contains(info.Format.Name, "mp3") {
 			return a, Failure("INVALID_MEDIA")
 		}

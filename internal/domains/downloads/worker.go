@@ -91,6 +91,7 @@ func (w *Worker) step(ctx context.Context, x *work, next string) error {
 		}
 		_, e := tx.Exec(ctx, "UPDATE download_jobs SET state=$2,updated_at=now() WHERE id=$1", x.ID, next)
 		if e == nil {
+			e = database.Audit(ctx, tx, x.User, x.Workspace, "download.state", "download_job", x.ID, "downloader-worker", map[string]any{"state": x.State}, map[string]any{"state": next})
 			x.State = next
 		}
 		return e
@@ -253,7 +254,7 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 			selected = f
 		}
 	}
-	if selected.ID == "" || selected.Processing {
+	if selected.ID == "" {
 		return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_FAILED", 0)
 	}
 	if x.State == "AWAITING_FORMAT" {
@@ -283,6 +284,22 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 	asset, e := media.Validate(ctx, path, w.MaxBytes, selected)
 	if e != nil {
 		return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_FAILED", 0)
+	}
+	if selected.Processing {
+		if e = w.step(ctx, &x, "PROCESSING"); e != nil {
+			return finalize("FAILED", "PROCESSING_FAILED", "DELIVERY_FAILED", 0)
+		}
+		path, e = media.Remux(ctx, path, filepath.Join(dir, "processed"), w.MaxBytes, selected)
+		if e != nil {
+			return finalize("FAILED", category(e, "PROCESSING_FAILED"), "DELIVERY_FAILED", 0)
+		}
+		outputFormat := selected
+		outputFormat.Processing = false
+		outputFormat.SourceContainer = ""
+		asset, e = media.Validate(ctx, path, w.MaxBytes, outputFormat)
+		if e != nil {
+			return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_FAILED", 0)
+		}
 	}
 	key, e := storage.ObjectKey(workspace, x.ID+":"+strconv.FormatInt(x.Lease.Generation, 10))
 	if e != nil {
@@ -372,6 +389,10 @@ func (w *Worker) Poll(ctx context.Context, concurrency int) error {
 	if concurrency < 1 || concurrency > 32 {
 		return database.ErrInvalid
 	}
+	if e := w.Cleanup(ctx); e != nil {
+		return e
+	}
+	lastCleanup := time.Now()
 	var running sync.WaitGroup
 	defer running.Wait()
 	slots := make(chan struct{}, concurrency)
@@ -382,6 +403,12 @@ func (w *Worker) Poll(ctx context.Context, concurrency int) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			if cleanupDue(lastCleanup) {
+				if e := w.Cleanup(ctx); e != nil {
+					return e
+				}
+				lastCleanup = time.Now()
+			}
 			all, e := w.targets(ctx)
 			if e != nil {
 				return e

@@ -20,10 +20,12 @@ func TestR3CRecovered(t *testing.T) {
 	must(t, e)
 	defer fixtureOwner.Pool.Close()
 	var u identity.Result
-	var completed, active string
+	var completed, active, cancelled, unknown string
 	must(t, fixtureOwner.Pool.QueryRow(ctx, "SELECT user_id::text FROM telegram_accounts WHERE telegram_id=98002001").Scan(&u.UserID))
 	must(t, fixtureOwner.Pool.QueryRow(ctx, "SELECT workspace_id::text,id::text FROM download_jobs WHERE idempotency_key='r3c-recovery-completed'").Scan(&u.WorkspaceID, &completed))
 	must(t, fixtureOwner.Pool.QueryRow(ctx, "SELECT id::text FROM download_jobs WHERE idempotency_key='r3c-recovery-active'").Scan(&active))
+	must(t, fixtureOwner.Pool.QueryRow(ctx, "SELECT id::text FROM download_jobs WHERE idempotency_key='r3c-recovery-cancel'").Scan(&cancelled))
+	must(t, fixtureOwner.Pool.QueryRow(ctx, "SELECT id::text FROM download_jobs WHERE idempotency_key='r3c-recovery-unknown'").Scan(&unknown))
 	p := &downloads.Product{DB: restored, Synthetic: true, MaxBytes: 1 << 20}
 	must(t, restored.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
 		v, e := p.Detail(ctx, tx, u.UserID, u.WorkspaceID, completed, false)
@@ -49,6 +51,32 @@ func TestR3CRecovered(t *testing.T) {
 	must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, active))
 	if e = w.RunOne(ctx, u.UserID, u.WorkspaceID, completed); e == nil {
 		t.Fatal("terminal restored replay")
+	}
+	must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, cancelled))
+	must(t, restored.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		v, e := p.Detail(ctx, tx, u.UserID, u.WorkspaceID, cancelled, false)
+		if e != nil {
+			return e
+		}
+		if v.State != "CANCELLED" {
+			t.Fatal("lost cancel intent", v)
+		}
+		v, e = p.Detail(ctx, tx, u.UserID, u.WorkspaceID, unknown, false)
+		if e != nil {
+			return e
+		}
+		if v.State != "FAILED" || v.Delivery != "DELIVERY_OUTCOME_UNKNOWN" {
+			t.Fatal("unknown collapsed", v)
+		}
+		var n int
+		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM download_jobs d JOIN media_jobs m ON (m.id,m.workspace_id)=(d.media_job_id,d.workspace_id) WHERE d.id=$1", active).Scan(&n))
+		if n != 1 {
+			t.Fatal("lost execution relation")
+		}
+		return nil
+	}))
+	if e = w.RunOne(ctx, u.UserID, u.WorkspaceID, unknown); e == nil {
+		t.Fatal("unknown delivery replay")
 	}
 	if d.calls != 1 {
 		t.Fatal("double delivery")
