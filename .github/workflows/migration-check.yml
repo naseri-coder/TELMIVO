@@ -102,7 +102,7 @@ jobs:
           # The production 120/min limiter and all prior assertions remain unchanged.
           for spec in native.spec.ts customer.native.spec.ts groups.native.spec.ts downloader.native.spec.ts; do
             docker exec "${{ job.services.redis.id }}" redis-cli -n 15 DEL telmivo:rate:ip:127.0.0.1
-            npx playwright test --config playwright.native.config.ts "$spec" --output "test-results/$spec"
+            npx playwright test --config playwright.native.config.ts "/$spec$" --output "test-results/$spec"
           done
       - name: Fresh backup/restore and recovery replay
         env:
