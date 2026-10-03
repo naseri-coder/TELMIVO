@@ -77,7 +77,7 @@ func (s *Service) Start(ctx context.Context, bot, url, correlation string, u Upd
 	message := localization.Text("welcome")
 	var markup any
 	if allowed {
-		markup = MainMenu(out.Admin, url)
+		markup = MainMenu(database.PlatformPermission(ctx, tx, out.UserID, "platform.access_policies.read"), url)
 	} else {
 		message = localization.Text("gate.required")
 	}

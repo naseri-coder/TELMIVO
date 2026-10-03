@@ -65,6 +65,12 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/auth/logout", a.logout)
 	protected.HandleFunc("GET /api/v1/workspaces", a.workspaces)
 	protected.HandleFunc("GET /api/v1/dashboard", a.dashboard)
+	protected.HandleFunc("GET /api/v1/customer/overview", a.customerOverview)
+	protected.HandleFunc("GET /api/v1/customer/access", a.customerAccess)
+	protected.HandleFunc("GET /api/v1/customer/catalog", a.customerCatalog)
+	protected.HandleFunc("GET /api/v1/customer/settings", a.customerSettings)
+	protected.HandleFunc("PATCH /api/v1/customer/settings", a.customerSettingsUpdate)
+	protected.HandleFunc("GET /api/v1/customer/wallet/history", a.customerHistory)
 	protected.HandleFunc("GET /api/v1/entitlements", a.access)
 	protected.HandleFunc("POST /api/v1/entitlements/preview", a.preview)
 	protected.HandleFunc("GET /api/v1/plans", a.plans)
@@ -339,7 +345,7 @@ func (a *API) me(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	respond(w, 200, map[string]any{"user_id": user(r), "name": name, "is_admin": a.DB.IsAdmin(r.Context(), user(r)), "synthetic_mode": a.Config.Synthetic, "can_adjust_wallet": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.wallets.adjust")})
+	respond(w, 200, map[string]any{"user_id": user(r), "name": name, "is_admin": a.DB.IsAdmin(r.Context(), user(r)), "synthetic_mode": a.Config.Synthetic, "can_admin_policies": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.access_policies.read"), "can_adjust_wallet": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.wallets.adjust")})
 }
 func (a *API) workspaces(w http.ResponseWriter, r *http.Request) {
 	tx, e := a.DB.Pool.Begin(r.Context())
@@ -348,7 +354,7 @@ func (a *API) workspaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
-	out, e := rows(r.Context(), tx, "SELECT w.id::text,w.name,m.role_key FROM workspaces w JOIN workspace_members m ON m.workspace_id=w.id WHERE m.user_id=$1 ORDER BY w.created_at", user(r))
+	out, e := rows(r.Context(), tx, "SELECT w.id::text,w.name,m.role_key FROM workspaces w JOIN workspace_members m ON m.workspace_id=w.id WHERE m.user_id=$1 ORDER BY w.created_at,w.id LIMIT 100", user(r))
 	if e != nil {
 		handleError(w, e)
 		return
