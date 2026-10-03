@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
+	"github.com/naseri-coder/TELMIVO/internal/domains/jobs"
 	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
@@ -24,9 +25,10 @@ import (
 )
 
 type r3cProvider struct {
-	base     testfixtures.DownloaderProvider
-	err      error
-	oversize bool
+	base      testfixtures.DownloaderProvider
+	err       error
+	oversize  bool
+	malformed bool
 }
 
 func (p r3cProvider) Analyze(c context.Context, s media.Source) (media.Analysis, error) {
@@ -36,6 +38,10 @@ func (p r3cProvider) Analyze(c context.Context, s media.Source) (media.Analysis,
 	return p.base.Analyze(c, s)
 }
 func (p r3cProvider) Fetch(c context.Context, s media.Source, f media.Format, w io.Writer, max int64) error {
+	if p.malformed {
+		_, e := io.WriteString(w, "not valid media")
+		return e
+	}
 	if p.oversize {
 		_, e := media.CopyBounded(c, w, &r3cEndless{}, max)
 		return e
@@ -197,7 +203,7 @@ func TestR3CJourney(t *testing.T) {
 	})
 }
 func TestR3CCancelAndDeliveryFailures(t *testing.T) {
-	for _, outcome := range []string{"CANCELLED", "DELIVERY_FAILED", "DELIVERY_OUTCOME_UNKNOWN", "MEDIA_TOO_LARGE", "ACCESS_RESTRICTED"} {
+	for _, outcome := range []string{"CANCELLED", "DELIVERY_FAILED", "DELIVERY_OUTCOME_UNKNOWN", "MEDIA_TOO_LARGE", "ACCESS_RESTRICTED", "INVALID_MEDIA", "PROVIDER_TEMPORARY_FAILURE"} {
 		t.Run(outcome, func(t *testing.T) {
 			u := fixture(t, false)
 			id := r3cSubmit(t, u, "r3c-failure-"+outcome)
@@ -205,6 +211,12 @@ func TestR3CCancelAndDeliveryFailures(t *testing.T) {
 			p := r3cProvider{}
 			if outcome == "MEDIA_TOO_LARGE" {
 				p.oversize = true
+			}
+			if outcome == "INVALID_MEDIA" {
+				p.malformed = true
+			}
+			if outcome == "PROVIDER_TEMPORARY_FAILURE" {
+				p.err = media.Failure(outcome)
 			}
 			if outcome == "ACCESS_RESTRICTED" {
 				p.err = media.Restricted
@@ -215,7 +227,7 @@ func TestR3CCancelAndDeliveryFailures(t *testing.T) {
 				must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, id))
 			} else {
 				must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, id))
-				if outcome != "ACCESS_RESTRICTED" {
+				if outcome != "ACCESS_RESTRICTED" && outcome != "PROVIDER_TEMPORARY_FAILURE" {
 					r3cSelect(t, u, id)
 					must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, id))
 				}
@@ -228,7 +240,7 @@ func TestR3CCancelAndDeliveryFailures(t *testing.T) {
 			if _, e := os.Stat(filepath.Join(w.Root, id)); !os.IsNotExist(e) {
 				t.Fatal("terminal temporary artifacts retained", e)
 			}
-			if outcome == "MEDIA_TOO_LARGE" && d.calls != 0 {
+			if (outcome == "MEDIA_TOO_LARGE" || outcome == "INVALID_MEDIA") && d.calls != 0 {
 				t.Fatal("oversize delivered")
 			}
 			if number(t, u, "SELECT count(*) FROM quota_reservations WHERE workspace_id=$1 AND operation_key=$2 AND state='RESERVED'", u.WorkspaceID, "r3c-failure-"+outcome) != 0 {
@@ -343,6 +355,16 @@ func TestR3CRecoveryPreparation(t *testing.T) {
 	active := r3cSubmit(t, u, "r3c-recovery-active")
 	must(t, w.RunOne(ctx, u.UserID, u.WorkspaceID, active))
 	r3cSelect(t, u, active)
+	tenant(t, u, func(tx pgx.Tx) error {
+		var mj string
+		must(t, tx.QueryRow(ctx, "SELECT media_job_id::text FROM download_jobs WHERE id=$1", active).Scan(&mj))
+		l, e := jobs.Acquire(ctx, tx, u.WorkspaceID, mj, "abandoned-before-restore", time.Minute)
+		if e != nil {
+			return e
+		}
+		_, e = tx.Exec(ctx, "UPDATE job_leases SET expires_at=clock_timestamp() WHERE job_id=$1", l.Job)
+		return e
+	})
 	cancelled := r3cSubmit(t, u, "r3c-recovery-cancel")
 	tenant(t, u, func(tx pgx.Tx) error {
 		return r3cProduct().Cancel(ctx, tx, u.UserID, u.WorkspaceID, cancelled, "before-backup")

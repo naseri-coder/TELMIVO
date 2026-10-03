@@ -75,6 +75,13 @@ func Run(role string) error {
 		}
 		defer local.Close()
 		fixtureWorker := &downloads.Worker{Product: &downloads.Product{DB: db, Synthetic: true, MaxBytes: c.MaxMediaBytes}, Adapter: testfixtures.DownloaderProvider{}, Delivery: testfixtures.DownloaderDelivery{}, Storage: storage.Scoped{Provider: local}, Root: "/tmp/telmivo-r3c-fixture-work", Owner: "test-api-worker", Timeout: 5 * time.Minute, MaxBytes: c.MaxMediaBytes}
+		// Only the synthetic browser customer belongs to this injected worker.
+		// Native recovery fixtures must remain abandoned until the restore drill.
+		fixtureWorker.DispatchFilter = func(ctx context.Context, u, ws string) bool {
+			var telegram int64
+			return db.Pool.QueryRow(ctx, "SELECT telegram_id FROM telegram_accounts WHERE user_id=$1", u).Scan(&telegram) == nil && telegram == 98001001
+		}
+
 		go func() {
 			if err := fixtureWorker.Poll(ctx, 2); err != nil && ctx.Err() == nil {
 				slog.Error("fixture worker stopped", "error_code", "FIXTURE_WORKER_FAILED")

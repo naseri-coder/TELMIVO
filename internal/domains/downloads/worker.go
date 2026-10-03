@@ -19,6 +19,7 @@ import (
 )
 
 type Worker struct {
+	DispatchFilter func(context.Context, string, string) bool
 	Product        *Product
 	Adapter        media.Adapter
 	Delivery       media.Delivery
@@ -66,7 +67,7 @@ func (w *Worker) finish(ctx context.Context, x work, state, code, outcome string
 		if _, e := tx.Exec(ctx, "UPDATE download_jobs SET state=$2,error_code=NULLIF($3,''),delivery_outcome=$4,delivery_message_id=NULLIF($5,0),updated_at=now() WHERE id=$1", x.ID, state, code, outcome, messageID); e != nil {
 			return e
 		}
-		body := "وضعیت دانلود: " + state
+		body := "وضعیت دانلود: " + PersianState(state)
 		if code != "" {
 			body += "\n" + PersianError(code)
 		}
@@ -476,6 +477,9 @@ func (w *Worker) targets(ctx context.Context) ([]target, error) {
 	w.workspaceAfter = last.ws + last.u
 	var all []target
 	for _, t := range customers {
+		if w.DispatchFilter != nil && !w.DispatchFilter(ctx, t.u, t.ws) {
+			continue
+		}
 		ids, e := w.Product.Dispatch(ctx, t.u, t.ws)
 		if errors.Is(e, database.ErrForbidden) {
 			continue

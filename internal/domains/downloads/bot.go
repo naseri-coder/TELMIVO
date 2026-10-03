@@ -126,7 +126,7 @@ func (b *Bot) Handle(ctx context.Context, corr string, u BotUpdate) error {
 					if i >= 5 {
 						break
 					}
-					body += "\n" + v.ID + " — " + v.State
+					body += "\n" + v.ID + " — " + PersianState(v.State)
 					if v.Error != "" {
 						body += "\n" + PersianError(v.Error)
 					}
@@ -158,4 +158,28 @@ func (b *Bot) Handle(ctx context.Context, corr string, u BotUpdate) error {
 		return e
 	}
 	return tx.Commit(ctx)
+}
+
+func PersianState(state string) string {
+	switch state {
+	case "QUEUED":
+		return "در صف"
+	case "ANALYZING":
+		return "در حال بررسی لینک"
+	case "AWAITING_FORMAT":
+		return "منتظر انتخاب فرمت"
+	case "DOWNLOADING":
+		return "در حال دانلود"
+	case "PROCESSING":
+		return "در حال پردازش"
+	case "UPLOADING":
+		return "در حال ارسال"
+	case "COMPLETED":
+		return "تکمیل شد"
+	case "FAILED":
+		return "ناموفق"
+	case "CANCELLED":
+		return "لغو شد"
+	}
+	return "وضعیت نامشخص"
 }
