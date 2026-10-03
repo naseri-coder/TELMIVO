@@ -1,3 +1,5 @@
+> Historical preservation checkpoint. Continuing R1 evidence is in [r1-validation.md](r1-validation.md).
+
 # V0.1 preservation checkpoint
 
 Verdict: **CHECKPOINT_SAVED_NOT_BOOTSTRAP_COMPLETE**.

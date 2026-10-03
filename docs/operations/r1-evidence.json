@@ -1,0 +1,134 @@
+{
+  "stage": "FOUNDATION_VALIDATION_R1",
+  "repository": "naseri-coder/TELMIVO",
+  "visibility": "PRIVATE",
+  "branch": "feature/platform-bootstrap-v0.1",
+  "validated_source_commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+  "initial_feature_commit": "493a016f71ad5ddf1d32f1110b759a5450713e9a",
+  "base_branches_commit": "024b3a3465285f9758ce109551a6574ced087dc7",
+  "source_commits": [
+    "6633c398dca8dfbc9d97507e814d81b4bcb6dc73",
+    "a6ff91b96eaea6229f3b4c471378fa953c156d20",
+    "9237d3d4d525342615e7f6ac59458f3ff743fdf6",
+    "cff48038a4cfdd34a22e627a9d2c6c59519bc228",
+    "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98"
+  ],
+  "versions": {
+    "postgresql": "17.11",
+    "redis": "7.4.11",
+    "nats": "2.11.17",
+    "ci_go": "1.27.0",
+    "local_and_container_go": "1.27.1",
+    "ci_node": "24.21.0",
+    "browser": "Chromium 153.0.8010.12"
+  },
+  "tests": {
+    "go_contract_top_level": 11,
+    "http_security_top_level": 2,
+    "native_top_level": 14,
+    "native_subtests": 18,
+    "frontend_unit": 4,
+    "browser_smoke": 6,
+    "concurrent_duplicate_adjustment_requests": 16,
+    "concurrent_competing_debits": 2
+  },
+  "runs": [
+    {
+      "id": 37095668691,
+      "name": "CodeQL",
+      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668691"
+    },
+    {
+      "id": 37095668642,
+      "name": "CI Go",
+      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668642"
+    },
+    {
+      "id": 37095668589,
+      "name": "Native Infrastructure",
+      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668589"
+    },
+    {
+      "id": 37095668555,
+      "name": "Build Images",
+      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668555"
+    },
+    {
+      "id": 37095668551,
+      "name": "CI Web",
+      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668551"
+    },
+    {
+      "id": 37095668547,
+      "name": "Security Baseline",
+      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668547"
+    }
+  ],
+  "gates": {
+    "SOURCE_IDENTITY_GATE": "PASS",
+    "KNOWN_CORRECTNESS_ISSUES_GATE": "PASS",
+    "DEV_INFRA_GATE": "PASS",
+    "GO_BUILD_GATE": "PASS",
+    "WEB_BUILD_GATE": "PASS",
+    "POSTGRES_NATIVE_GATE": "PASS",
+    "MIGRATION_GATE": "PASS",
+    "REDIS_NATIVE_GATE": "PASS",
+    "NATS_JETSTREAM_GATE": "PASS",
+    "WORKSPACE_ISOLATION_GATE": "PASS",
+    "PLATFORM_ADMIN_PERMISSION_GATE": "PASS",
+    "IDENTITY_WORKSPACE_VERTICAL_GATE": "PASS",
+    "TICKETING_VERTICAL_GATE": "PASS",
+    "PLAN_CHANGE_VERTICAL_GATE": "PASS",
+    "WALLET_LEDGER_VERTICAL_GATE": "PASS",
+    "FINANCIAL_CONCURRENCY_GATE": "PASS",
+    "DOWNLOAD_QUEUE_VERTICAL_GATE": "PASS",
+    "OUTBOX_INBOX_GATE": "PASS",
+    "FRONTEND_IDEMPOTENCY_GATE": "PASS",
+    "RTL_SMOKE_GATE": "PASS",
+    "CI_DEFINITION_GATE": "PASS",
+    "CI_RUN_GATE": "PASS",
+    "SECURITY_BASELINE_GATE": "PASS",
+    "ADR_GATE": "PASS",
+    "DOCUMENTATION_GATE": "PASS",
+    "BRANCH_PROTECTION_GATE": "EXTERNAL_BLOCKER"
+  },
+  "external_blockers": {
+    "branch_protection": {
+      "evidence": "Historical HTTP 403: Resource not accessible by integration",
+      "retried": false
+    },
+    "codeql": {
+      "run_id": 37094524662,
+      "evidence": "Code scanning is not enabled for this repository; Resource not accessible by integration",
+      "state": "BLOCKED_EXTERNAL",
+      "current_job": "prepared; skipped until owner enables capability and CODEQL_ENABLED"
+    }
+  },
+  "dependency_advisory": {
+    "id": "GO-2026-5932",
+    "module": "golang.org/x/crypto@v0.57.0",
+    "package": "golang.org/x/crypto/openpgp",
+    "imported": false,
+    "called": false,
+    "fixed_version": "N/A",
+    "source": "https://pkg.go.dev/vuln/GO-2026-5932"
+  }
+}
