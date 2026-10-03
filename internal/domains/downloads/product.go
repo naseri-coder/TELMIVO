@@ -9,6 +9,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -91,6 +92,9 @@ func (p *Product) Submit(ctx context.Context, tx pgx.Tx, u, w, corr, raw, key st
 		return "", e
 	}
 	e = database.Event(ctx, tx, w, "telmivo.jobs.media", "downloader.queued", corr, map[string]string{"user_id": u, "job_id": id})
+	if e == nil {
+		slog.Info("downloader diagnostic", "event", "downloader_job_created", "download_job_id", id, "media_job_id", mj, "coordinate_id", CoordinateDiagnosticID(u, w), "state", "QUEUED", "transaction_phase", "PENDING_COMMIT")
+	}
 	return id, e
 }
 func (p *Product) Detail(ctx context.Context, tx pgx.Tx, u, w, id string, lock bool) (View, error) {

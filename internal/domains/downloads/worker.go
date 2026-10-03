@@ -52,7 +52,7 @@ func fence(ctx context.Context, tx pgx.Tx, l jobs.Lease) error {
 	return e
 }
 func (w *Worker) finish(ctx context.Context, x work, state, code, outcome string, messageID int64) error {
-	return w.tx(ctx, x, func(tx pgx.Tx) error {
+	err := w.tx(ctx, x, func(tx pgx.Tx) error {
 		var current string
 		var cancel bool
 		if e := tx.QueryRow(ctx, "SELECT state,cancel_requested FROM download_jobs WHERE id=$1 FOR UPDATE", x.ID).Scan(&current, &cancel); e != nil {
@@ -77,9 +77,14 @@ func (w *Worker) finish(ctx context.Context, x work, state, code, outcome string
 		}
 		return jobs.Finish(ctx, tx, x.Lease, state, "downloader-worker")
 	})
+	if err == nil {
+		workerDiagnostic("downloader_state_transition", x, "to", state, "delivery_outcome", outcome)
+	}
+	return err
 }
 func (w *Worker) step(ctx context.Context, x *work, next string) error {
-	return w.tx(ctx, *x, func(tx pgx.Tx) error {
+	prior := x.State
+	err := w.tx(ctx, *x, func(tx pgx.Tx) error {
 		var cancel bool
 		if e := tx.QueryRow(ctx, "SELECT cancel_requested FROM download_jobs WHERE id=$1 FOR UPDATE", x.ID).Scan(&cancel); e != nil {
 			return e
@@ -97,14 +102,24 @@ func (w *Worker) step(ctx context.Context, x *work, next string) error {
 		}
 		return e
 	})
+	if err == nil {
+		workerDiagnostic("downloader_state_transition", *x, "from", prior, "to", next)
+	}
+	return err
 }
 func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 	x := work{User: u, Workspace: workspace, ID: id}
+	workerDiagnostic("downloader_worker_run_started", x)
+	started := time.Now()
+	defer func() {
+		workerDiagnostic("downloader_worker_run_ended", x, "elapsed_ms", time.Since(started).Milliseconds())
+	}()
 	if w.Timeout <= 0 || w.Timeout > 10*time.Minute || w.MaxBytes <= 0 || w.Owner == "" {
 		return database.ErrInvalid
 	}
 	ctx, cancel := context.WithTimeout(parent, w.Timeout)
 	defer cancel()
+	acquireAttempted := false
 	e := w.tx(ctx, x, func(tx pgx.Tx) error {
 		var raw []byte
 		if e := tx.QueryRow(ctx, "SELECT media_job_id::text,state,idempotency_key,format_id,source_url,cancel_requested,formats FROM download_jobs WHERE id=$1 AND creator_id=$2 FOR UPDATE", id, u).Scan(&x.MediaID, &x.State, &x.Key, &x.Selected, &x.URL, &x.Cancel, &raw); e != nil {
@@ -121,6 +136,8 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		if e = tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM quota_reservations q LEFT JOIN quota_lease_allocations a USING(workspace_id,operation_key,metric) WHERE q.workspace_id=$1 AND q.operation_key=$2 AND q.state='RESERVED' AND COALESCE(a.expires_at,q.expires_at)>clock_timestamp())`, workspace, x.Key).Scan(&expired); e != nil {
 			return e
 		}
+		acquireAttempted = true
+		workerDiagnostic("downloader_lease_acquire_attempt", x, "expired_settlement", expired)
 		if expired {
 			x.Lease, e = jobs.AcquireExpiredSettlement(ctx, tx, workspace, x.MediaID, w.Owner, time.Minute)
 			x.State = "EXPIRED_RESERVATION"
@@ -130,8 +147,10 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		return e
 	})
 	if e != nil {
+		workerDiagnostic("downloader_lease_acquire_failed", x, "result", diagnosticResult(e), "acquire_attempted", acquireAttempted)
 		return e
 	}
+	workerDiagnostic("downloader_lease_acquired", x, "result", "SUCCESS")
 	// Heartbeat and durable cancel observation are independent of external work.
 	heartbeatWork := x
 	heartbeatDone := make(chan struct{})
@@ -191,6 +210,8 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 				return finalize("FAILED", "ANALYSIS_FAILED", "DELIVERY_FAILED", 0)
 			}
 		}
+		workerDiagnostic("downloader_analysis_started", x)
+		analysisStarted := time.Now()
 		a, err := w.Adapter.Analyze(ctx, s)
 		for attempt := 0; attempt < 2 && retryableProvider(err); attempt++ {
 			timer := time.NewTimer(time.Duration(attempt+1) * time.Second)
@@ -203,6 +224,7 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 			}
 		}
 
+		workerDiagnostic("downloader_analysis_completed", x, "result", diagnosticResult(err), "format_count", len(a.Formats), "elapsed_ms", time.Since(analysisStarted).Milliseconds())
 		if err != nil {
 			return finalize("FAILED", category(err, "ANALYSIS_FAILED"), "DELIVERY_FAILED", 0)
 		}
@@ -243,6 +265,9 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		})
 		if errors.Is(e, context.Canceled) {
 			return finalize("CANCELLED", "", "DELIVERY_PENDING", 0)
+		}
+		if e == nil {
+			workerDiagnostic("downloader_awaiting_format", x, "committed_state", "AWAITING_FORMAT", "format_count", len(a.Formats))
 		}
 		return e
 	}
@@ -386,11 +411,16 @@ func category(e error, fallback string) string {
 	}
 	return fallback
 }
-func (w *Worker) Poll(ctx context.Context, concurrency int) error {
+func (w *Worker) Poll(ctx context.Context, concurrency int) (pollErr error) {
+	slog.Info("downloader diagnostic", "event", "downloader_poll_started")
+	defer func() {
+		slog.Info("downloader diagnostic", "event", "downloader_poll_exited", "result", diagnosticResult(pollErr))
+	}()
 	if concurrency < 1 || concurrency > 32 {
 		return database.ErrInvalid
 	}
 	if e := w.Cleanup(ctx); e != nil {
+		slog.Info("downloader diagnostic", "event", "downloader_cleanup_failed", "result", diagnosticResult(e))
 		return e
 	}
 	lastCleanup := time.Now()
@@ -404,30 +434,41 @@ func (w *Worker) Poll(ctx context.Context, concurrency int) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			cycleStarted := time.Now()
+			invoked := 0
+			slog.Info("downloader diagnostic", "event", "downloader_dispatch_cycle_started")
 			if cleanupDue(lastCleanup) {
 				if e := w.Cleanup(ctx); e != nil {
+					slog.Info("downloader diagnostic", "event", "downloader_cleanup_failed", "result", diagnosticResult(e))
 					return e
 				}
 				lastCleanup = time.Now()
 			}
 			all, e := w.targets(ctx)
 			if e != nil {
+				slog.Info("downloader diagnostic", "event", "downloader_targets_failed", "result", diagnosticResult(e), "elapsed_ms", time.Since(cycleStarted).Milliseconds())
 				return e
 			}
 			for _, t := range all {
 				select {
 				case slots <- struct{}{}:
+					invoked++
 					running.Add(1)
 					go func(t target) {
 						defer running.Done()
 						defer func() { <-slots }()
-						if e := w.RunOne(ctx, t.u, t.ws, t.id); e != nil && !errors.Is(e, database.ErrConflict) {
-							slog.Warn("downloader work failed", "category", category(e, "WORKER_FAILURE"))
+						if e := w.RunOne(ctx, t.u, t.ws, t.id); e != nil {
+							workerDiagnostic("downloader_worker_run_result", work{User: t.u, Workspace: t.ws, ID: t.id}, "result", diagnosticResult(e))
+							if !errors.Is(e, database.ErrConflict) {
+								slog.Warn("downloader work failed", "category", category(e, "WORKER_FAILURE"))
+							}
 						}
 					}(t)
 				default:
+					workerDiagnostic("downloader_dispatch_slot_busy", work{User: t.u, Workspace: t.ws, ID: t.id})
 				}
 			}
+			slog.Info("downloader diagnostic", "event", "downloader_dispatch_cycle_completed", "eligible_jobs", len(all), "run_invocations", invoked, "elapsed_ms", time.Since(cycleStarted).Milliseconds())
 		}
 	}
 }
@@ -449,6 +490,13 @@ type target struct{ u, ws, id string }
 // Trusted internal outbox coordinates identify the submitter; each read then
 // revalidates membership and ownership. No privileged SQL function is needed.
 func (w *Worker) targets(ctx context.Context) ([]target, error) {
+	started := time.Now()
+	scanned := 0
+	passed := 0
+	cursorReset := false
+	defer func() {
+		slog.Info("downloader diagnostic", "event", "downloader_dispatch_coordinates_scanned", "coordinate_count", scanned, "filter_pass_count", passed, "cursor_reset", cursorReset, "elapsed_ms", time.Since(started).Milliseconds())
+	}()
 	rows, e := w.Product.DB.Pool.Query(ctx, `SELECT DISTINCT workspace_id::text,payload->>'user_id' FROM outbox_events
  WHERE event_type='downloader.queued' AND workspace_id IS NOT NULL AND payload->>'user_id' IS NOT NULL
  AND workspace_id::text || (payload->>'user_id') > $1 ORDER BY 1,2 LIMIT 128`, w.workspaceAfter)
@@ -469,7 +517,9 @@ func (w *Worker) targets(ctx context.Context) ([]target, error) {
 	if e != nil {
 		return nil, e
 	}
+	scanned = len(customers)
 	if len(customers) == 0 {
+		cursorReset = true
 		w.workspaceAfter = ""
 		return nil, nil
 	}
@@ -477,10 +527,15 @@ func (w *Worker) targets(ctx context.Context) ([]target, error) {
 	w.workspaceAfter = last.ws + last.u
 	var all []target
 	for _, t := range customers {
-		if w.DispatchFilter != nil && !w.DispatchFilter(ctx, t.u, t.ws) {
+		allowed := w.DispatchFilter == nil || w.DispatchFilter(ctx, t.u, t.ws)
+		slog.Info("downloader diagnostic", "event", "downloader_dispatch_filter_decision", "coordinate_id", CoordinateDiagnosticID(t.u, t.ws), "allowed", allowed)
+		if !allowed {
 			continue
 		}
+		passed++
+		dispatchStarted := time.Now()
 		ids, e := w.Product.Dispatch(ctx, t.u, t.ws)
+		slog.Info("downloader diagnostic", "event", "downloader_dispatch_jobs_found", "coordinate_id", CoordinateDiagnosticID(t.u, t.ws), "job_count", len(ids), "result", diagnosticResult(e), "elapsed_ms", time.Since(dispatchStarted).Milliseconds())
 		if errors.Is(e, database.ErrForbidden) {
 			continue
 		}
@@ -488,6 +543,7 @@ func (w *Worker) targets(ctx context.Context) ([]target, error) {
 			return nil, e
 		}
 		for _, id := range ids {
+			workerDiagnostic("downloader_dispatch_candidate_observed", work{User: t.u, Workspace: t.ws, ID: id})
 			all = append(all, target{u: t.u, ws: t.ws, id: id})
 		}
 	}

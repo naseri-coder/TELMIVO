@@ -79,7 +79,10 @@ func Run(role string) error {
 		// Native recovery fixtures must remain abandoned until the restore drill.
 		fixtureWorker.DispatchFilter = func(ctx context.Context, u, ws string) bool {
 			var telegram int64
-			return db.Pool.QueryRow(ctx, "SELECT telegram_id FROM telegram_accounts WHERE user_id=$1", u).Scan(&telegram) == nil && telegram == 98001001
+			err := db.Pool.QueryRow(ctx, "SELECT telegram_id FROM telegram_accounts WHERE user_id=$1", u).Scan(&telegram)
+			allowed := err == nil && telegram == 98001001
+			slog.Info("downloader diagnostic", "event", "downloader_fixture_account_lookup", "coordinate_id", downloads.CoordinateDiagnosticID(u, ws), "lookup_succeeded", err == nil, "allowed", allowed)
+			return allowed
 		}
 
 		go func() {
