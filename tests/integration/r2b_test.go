@@ -114,6 +114,16 @@ func TestR2BJobLease(t *testing.T) {
 		return e
 	})
 	var won atomic.Int64
+	tenant(t, u, func(tx pgx.Tx) error {
+		retry, e := jobs.Create(ctx, tx, r, "r2b-long-job", "synthetic", "retry")
+		if e == nil && retry != id {
+			t.Fatal("retry changed job identity")
+		}
+		return e
+	})
+	if n := number(t, u, "SELECT count(*) FROM quota_reservations WHERE workspace_id=$1 AND operation_key='r2b-long-job'", u.WorkspaceID); n != 1 {
+		t.Fatal("retry duplicated allocation", n)
+	}
 	var winner jobs.Lease
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -147,6 +157,12 @@ func TestR2BJobLease(t *testing.T) {
 		t.Fatal("owners", won.Load())
 	}
 	stale := winner
+	forged := winner
+	forged.Reservation = "other-reservation"
+	e := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error { return jobs.Finish(ctx, tx, forged, "COMPLETED", "forged") })
+	if !errors.Is(e, database.ErrConflict) {
+		t.Fatal("reservation ownership substitution", e)
+	}
 	tenant(t, u, func(tx pgx.Tx) error { var e error; winner, e = jobs.Renew(ctx, tx, winner, r, time.Second); return e })
 	time.Sleep(1100 * time.Millisecond)
 	tenant(t, u, func(tx pgx.Tx) error {

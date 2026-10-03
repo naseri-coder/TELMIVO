@@ -95,14 +95,14 @@ func Acquire(ctx context.Context, tx pgx.Tx, workspace, job, owner string, durat
 	return l, e
 }
 func owned(ctx context.Context, tx pgx.Tx, l Lease) (string, time.Time, error) {
-	var state, owner string
+	var state, owner, reservation string
 	var generation int64
 	var expiry, deadline, now time.Time
-	e := tx.QueryRow(ctx, "SELECT m.state,j.owner,j.generation,j.expires_at,j.deadline,clock_timestamp() FROM media_jobs m JOIN job_leases j ON j.job_id=m.id WHERE m.id=$1 AND m.workspace_id=$2 FOR UPDATE OF m,j", l.Job, l.Workspace).Scan(&state, &owner, &generation, &expiry, &deadline, &now)
+	e := tx.QueryRow(ctx, "SELECT m.state,j.owner,j.reservation_key,j.generation,j.expires_at,j.deadline,clock_timestamp() FROM media_jobs m JOIN job_leases j ON j.job_id=m.id WHERE m.id=$1 AND m.workspace_id=$2 FOR UPDATE OF m,j", l.Job, l.Workspace).Scan(&state, &owner, &reservation, &generation, &expiry, &deadline, &now)
 	if e != nil {
 		return state, deadline, e
 	}
-	if owner != l.Owner || generation != l.Generation {
+	if owner != l.Owner || generation != l.Generation || reservation != l.Reservation {
 		return state, deadline, database.ErrConflict
 	}
 	if state == "RUNNING" && !expiry.After(now) {
