@@ -74,7 +74,7 @@ func (a *API) editPlan(w http.ResponseWriter, r *http.Request) {
 	a.adminMutation(w, r, "plan.edit", "plan", r.PathValue("plan"), func(tx pgx.Tx) (any, error) {
 		if !in.Active {
 			var used bool
-			if e := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE plan_key=$1 OR previous_plan_key=$1 OR scheduled_plan_key=$1)", r.PathValue("plan")).Scan(&used); e != nil {
+			if e := tx.QueryRow(r.Context(), "SELECT platform_plan_in_use($1,$2)", user(r), r.PathValue("plan")).Scan(&used); e != nil {
 				return nil, e
 			}
 			if used || r.PathValue("plan") == "FREE" {

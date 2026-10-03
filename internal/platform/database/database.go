@@ -15,6 +15,7 @@ import (
 
 var ErrForbidden = errors.New("permission denied")
 var ErrConflict = errors.New("conflicting operation")
+var ErrInvalid = errors.New("invalid input")
 
 type Store struct{ Pool *pgxpool.Pool }
 
@@ -138,5 +139,16 @@ func Event(ctx context.Context, tx pgx.Tx, workspace, subject, kind, correlation
 func Permission(ctx context.Context, tx pgx.Tx, user, workspace, permission string) bool {
 	var yes bool
 	e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM workspace_members m JOIN role_permissions p ON p.role_key=m.role_key WHERE m.user_id=$1 AND m.workspace_id=$2 AND p.permission_key=$3)", user, workspace, permission).Scan(&yes)
+	return e == nil && yes
+}
+
+func PlatformPermission(ctx context.Context, tx pgx.Tx, user, permission string) bool {
+	var yes bool
+	e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM platform_admin_permissions WHERE user_id=$1 AND permission_key=$2)", user, permission).Scan(&yes)
+	return e == nil && yes
+}
+func (s *Store) HasPlatformPermission(ctx context.Context, user, permission string) bool {
+	var yes bool
+	e := s.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM platform_admin_permissions WHERE user_id=$1 AND permission_key=$2)", user, permission).Scan(&yes)
 	return e == nil && yes
 }

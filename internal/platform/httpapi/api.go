@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
@@ -20,6 +21,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/localization"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -109,7 +111,11 @@ func decode(w http.ResponseWriter, r *http.Request, out any) error {
 func (a *API) secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.Requests.Add(1)
-		id, _ := auth.Token()
+		id, err := auth.Token()
+		if err != nil {
+			fail(w, 500, "internal")
+			return
+		}
 		id = id[:24]
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -124,7 +130,7 @@ func (a *API) secure(next http.Handler) http.Handler {
 			if origin != "" {
 				u, e := url.Parse(origin)
 				configured, _ := url.Parse(a.Config.MiniAppURL)
-				if e != nil || (u.Host != r.Host && (configured == nil || u.Host != configured.Host || u.Scheme != configured.Scheme)) {
+				if e != nil || configured == nil || u.Host != configured.Host || u.Scheme != configured.Scheme || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 					fail(w, 403, "forbidden")
 					return
 				}
@@ -189,10 +195,29 @@ func handleError(w http.ResponseWriter, e error) {
 		fail(w, 404, "invalid")
 		return
 	}
-	fail(w, 400, "invalid")
+	if errors.Is(e, database.ErrInvalid) {
+		fail(w, 400, "invalid")
+		return
+	}
+	var pe *pgconn.PgError
+	if errors.As(e, &pe) {
+		switch pe.Code {
+		case "23505":
+			fail(w, 409, "conflict")
+			return
+		case "23503", "23514", "22P02":
+			fail(w, 400, "invalid")
+			return
+		case "42501":
+			fail(w, 403, "forbidden")
+			return
+		}
+	}
+	slog.Error("request failed", "error_code", "INTERNAL_FAILURE")
+	fail(w, 500, "internal")
 }
 func (a *API) tenant(w http.ResponseWriter, r *http.Request, admin bool, fn func(pgx.Tx) (any, error)) {
-	if admin && !a.DB.IsAdmin(r.Context(), user(r)) {
+	if admin && !a.DB.HasPlatformPermission(r.Context(), user(r), platformAction(r)) {
 		fail(w, 403, "forbidden")
 		return
 	}
@@ -524,4 +549,20 @@ func parseLimit(s *string) (*int64, error) {
 		return nil, errors.New("invalid limit")
 	}
 	return &n, nil
+}
+
+func platformAction(r *http.Request) string {
+	p := r.URL.Path
+	switch {
+	case strings.HasPrefix(p, "/api/v1/wallets/adjustments"):
+		return "platform.wallets.adjust"
+	case strings.HasPrefix(p, "/api/v1/plugins"), strings.Contains(p, "/plugins/"):
+		return "platform.plugins.manage"
+	case strings.HasPrefix(p, "/api/v1/features"):
+		return "platform.features.manage"
+	case strings.HasSuffix(p, "/preview"):
+		return "platform.plans.read"
+	default:
+		return "platform.plans.manage"
+	}
 }

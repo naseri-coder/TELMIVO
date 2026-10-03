@@ -19,11 +19,14 @@ type Adjustment struct {
 }
 
 func Adjust(ctx context.Context, tx pgx.Tx, actor, workspace, correlation string, a Adjustment) (string, error) {
+	if !database.PlatformPermission(ctx, tx, actor, "platform.wallets.adjust") {
+		return "", database.ErrForbidden
+	}
 	if a.Asset != ledger.IRR && a.Asset != ledger.USD {
-		return "", errors.New("internal service-credit asset required")
+		return "", database.ErrInvalid
 	}
 	if a.AmountAtomic == 0 || a.AmountAtomic == math.MinInt64 || len(a.Reason) < 1 || len(a.Reason) > 1000 || len(a.Key) < 8 || len(a.Key) > 200 {
-		return "", errors.New("invalid adjustment")
+		return "", database.ErrInvalid
 	}
 	// Serialize idempotency and balance checks. Clearings use the same lock order as wallets.
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", workspace+":"+string(a.Asset)); e != nil {
@@ -79,10 +82,10 @@ func Adjust(ctx context.Context, tx pgx.Tx, actor, workspace, correlation string
 		return "", e
 	}
 	if a.AmountAtomic < 0 && balance < -a.AmountAtomic {
-		return "", errors.New("insufficient funds")
+		return "", database.ErrInvalid
 	}
 	if a.AmountAtomic > 0 && balance > math.MaxInt64-a.AmountAtomic {
-		return "", errors.New("balance overflow")
+		return "", database.ErrInvalid
 	}
 	var id string
 	e = tx.QueryRow(ctx, "INSERT INTO ledger_transactions(workspace_id,asset,transaction_type,reference,idempotency_key,fingerprint,actor_id,reason,correlation_id) VALUES($1,$2,'ADMIN_ADJUSTMENT',$3,$3,$4,$5,$6,$7) RETURNING id::text", workspace, a.Asset, a.Key, fingerprint, actor, a.Reason, correlation).Scan(&id)

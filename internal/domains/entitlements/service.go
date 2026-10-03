@@ -23,8 +23,11 @@ func Resolve(ctx context.Context, tx pgx.Tx, workspace, role, feature, plugin, a
 		return entitlement.Decision{}, e
 	}
 	e = tx.QueryRow(ctx, "SELECT f.enabled,e.enabled,e.limit_value,EXISTS(SELECT 1 FROM role_permissions rp WHERE rp.role_key=$3 AND rp.permission_key=$4) FROM feature_flags f JOIN plan_entitlements e ON e.feature_key=f.feature_key JOIN plans p ON p.key=e.plan_key WHERE f.feature_key=$1 AND e.plan_key=$2 AND p.active", feature, plan, role, action).Scan(&i.Global, &i.Plan.Enabled, &i.Plan.Limit, &i.Permission)
-	if e != nil {
+	if e == pgx.ErrNoRows {
 		return entitlement.Decision{Reason: "FEATURE_UNCONFIGURED"}, nil
+	}
+	if e != nil {
+		return entitlement.Decision{}, e
 	}
 	for _, x := range []struct {
 		table string
@@ -38,7 +41,27 @@ func Resolve(ctx context.Context, tx pgx.Tx, workspace, role, feature, plugin, a
 			return entitlement.Decision{}, e
 		}
 	}
-	e = tx.QueryRow(ctx, "SELECT COALESCE(sum(used),0)::bigint FROM usage_counters WHERE workspace_id=$1 AND feature_key=$2 AND period_start<=now() AND period_end>now()", workspace, feature).Scan(&i.Usage)
+	var kind, unit string
+	var window *string
+	if e = tx.QueryRow(ctx, "SELECT limit_kind,limit_unit,reset_window FROM features WHERE key=$1", feature).Scan(&kind, &unit, &window); e != nil {
+		return entitlement.Decision{}, e
+	}
+	switch kind {
+	case "RESOURCE_COUNT":
+		tables := map[string]string{"channels": "channels", "groups": "groups", "bots": "customer_bots", "team": "workspace_members"}
+		table, ok := tables[feature]
+		if !ok {
+			return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
+		}
+		e = tx.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE workspace_id=$1", workspace).Scan(&i.Usage)
+	case "USAGE", "CREDIT":
+		e = tx.QueryRow(ctx, "SELECT COALESCE(sum(used),0)::bigint FROM usage_counters WHERE workspace_id=$1 AND feature_key=$2 AND period_start<=now() AND period_end>now()", workspace, feature).Scan(&i.Usage)
+	case "NONE":
+	case "CAPACITY", "ITEM_SIZE":
+		return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
+	default:
+		return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
+	}
 	if e != nil {
 		return entitlement.Decision{}, e
 	}
@@ -93,6 +116,13 @@ func Reserve(ctx context.Context, tx pgx.Tx, user, workspace, feature, permissio
 	}
 	if e := Require(ctx, tx, user, workspace, feature, permission, n); e != nil {
 		return e
+	}
+	var kind string
+	if e := tx.QueryRow(ctx, "SELECT limit_kind FROM features WHERE key=$1", feature).Scan(&kind); e != nil {
+		return e
+	}
+	if kind == "RESOURCE_COUNT" || kind == "NONE" {
+		return nil
 	}
 	return Consume(ctx, tx, workspace, feature, n)
 }

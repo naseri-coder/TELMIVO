@@ -2,11 +2,15 @@ package queue
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/nats-io/nats.go"
+	"regexp"
 	"time"
 )
 
@@ -50,12 +54,16 @@ func (c *Client) Publish(ctx context.Context, subject string, event Envelope) er
 	return e
 }
 func (c *Client) Relay(ctx context.Context, db *database.Store) error {
+	owner, e := auth.Token()
+	if e != nil {
+		return e
+	}
 	tx, e := db.Pool.Begin(ctx)
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback(ctx)
-	rows, e := tx.Query(ctx, "SELECT id::text,COALESCE(workspace_id::text,''),subject,event_type,correlation_id,payload FROM outbox_events WHERE published_at IS NULL AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 32 FOR UPDATE SKIP LOCKED")
+	rows, e := tx.Query(ctx, "SELECT id::text,COALESCE(workspace_id::text,''),subject,event_type,correlation_id,payload FROM outbox_events WHERE published_at IS NULL AND available_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 8 FOR UPDATE SKIP LOCKED")
 	if e != nil {
 		return e
 	}
@@ -78,7 +86,7 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 		return e
 	}
 	for _, x := range batch {
-		if _, e = tx.Exec(ctx, "UPDATE outbox_events SET lease_until=now()+interval '30 seconds',attempts=attempts+1 WHERE id=$1", x.event.ID); e != nil {
+		if _, e = tx.Exec(ctx, "UPDATE outbox_events SET lease_until=now()+interval '60 seconds',lease_owner=$2,attempts=attempts+1 WHERE id=$1", x.event.ID, owner); e != nil {
 			return e
 		}
 	}
@@ -86,10 +94,17 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 		return e
 	}
 	for _, x := range batch {
-		if e = c.Publish(ctx, x.subject, x.event); e != nil {
+		publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		e = c.Publish(publishCtx, x.subject, x.event)
+		cancel()
+		if e != nil {
+			_, releaseErr := db.Pool.Exec(ctx, "UPDATE outbox_events SET lease_until=NULL,lease_owner=NULL,available_at=now()+LEAST(attempts,60)*interval '1 second' WHERE id=$1 AND lease_owner=$2", x.event.ID, owner)
+			if releaseErr != nil {
+				return releaseErr
+			}
 			return e
 		}
-		if _, e = db.Pool.Exec(ctx, "UPDATE outbox_events SET published_at=now(),lease_until=NULL WHERE id=$1", x.event.ID); e != nil {
+		if _, e = db.Pool.Exec(ctx, "UPDATE outbox_events SET published_at=now(),lease_until=NULL,lease_owner=NULL WHERE id=$1 AND lease_owner=$2", x.event.ID, owner); e != nil {
 			return e
 		}
 	}
@@ -98,10 +113,17 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 
 type Handler func(context.Context, pgx.Tx, Envelope) error
 
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
 func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durable string, handler Handler) error {
-	sub, e := c.JS.PullSubscribe(subject, durable, nats.BindStream("TELMIVO"), nats.AckExplicit(), nats.MaxDeliver(6), nats.AckWait(30*time.Second), nats.MaxAckPending(32), nats.BackOff([]time.Duration{time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute}))
-	if e != nil {
-		return e
+	// Explicitly create the durable, then bind: unsubscribe must not delete it.
+	_, err := c.JS.AddConsumer("TELMIVO", &nats.ConsumerConfig{Durable: durable, FilterSubject: subject, AckPolicy: nats.AckExplicitPolicy, AckWait: 30 * time.Second, MaxDeliver: 6, MaxAckPending: 32, BackOff: []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second, 5 * time.Second, 6 * time.Second}})
+	if err != nil {
+		return err
+	}
+	sub, err := c.JS.PullSubscribe(subject, durable, nats.Bind("TELMIVO", durable))
+	if err != nil {
+		return err
 	}
 	defer sub.Unsubscribe()
 	for ctx.Err() == nil {
@@ -115,29 +137,34 @@ func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durab
 		for _, m := range msgs {
 			var event Envelope
 			e = json.Unmarshal(m.Data, &event)
-			if e == nil && (event.ID == "" || event.WorkspaceID == "") {
-				e = errors.New("invalid event envelope")
+			malformed := e != nil || !uuidPattern.MatchString(event.ID) || !uuidPattern.MatchString(event.WorkspaceID) || event.Type == ""
+			meta, me := m.Metadata()
+			if me != nil {
+				return me
 			}
-			var tx pgx.Tx
-			if e == nil {
-				tx, e = db.Pool.Begin(ctx)
-			}
-			if e == nil {
-				e = database.Scope(ctx, tx, event.WorkspaceID)
-			}
-			if e == nil {
-				tag, err := tx.Exec(ctx, "INSERT INTO inbox_events(consumer,event_id) VALUES($1,$2) ON CONFLICT DO NOTHING", durable, event.ID)
-				e = err
-				if e == nil && tag.RowsAffected() > 0 {
-					e = handler(ctx, tx, event)
-				}
-			}
-			if tx != nil {
+			if malformed {
+				e = errors.New("invalid envelope")
+			} else {
+				tx, beginErr := db.Pool.Begin(ctx)
+				e = beginErr
 				if e == nil {
-					e = tx.Commit(ctx)
-				} else {
-					tx.Rollback(ctx)
+					e = database.Scope(ctx, tx, event.WorkspaceID)
+					if e == nil {
+						tag, insertErr := tx.Exec(ctx, "INSERT INTO inbox_events(consumer,event_id) VALUES($1,$2) ON CONFLICT DO NOTHING", durable, event.ID)
+						e = insertErr
+						if e == nil && tag.RowsAffected() > 0 {
+							e = handler(ctx, tx, event)
+						}
+					}
+					if e == nil {
+						e = tx.Commit(ctx)
+					} else {
+						_ = tx.Rollback(context.Background())
+					}
 				}
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
 			}
 			if e == nil {
 				if e = m.AckSync(nats.Context(ctx)); e != nil {
@@ -145,20 +172,23 @@ func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durab
 				}
 				continue
 			}
-			meta, me := m.Metadata()
-			if me == nil && meta.NumDelivered >= 6 {
-				if event.ID == "" {
-					event.ID = "00000000-0000-0000-0000-000000000000"
+			if malformed || meta.NumDelivered >= 6 {
+				code := "HANDLER_FAILED"
+				id := event.ID
+				if malformed {
+					code = "MALFORMED_EVENT"
+					h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", meta.Stream, meta.Sequence.Stream)))
+					id = fmt.Sprintf("%x-%x-%x-%x-%x", h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
 				}
-				_, de := db.Pool.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,'HANDLER_FAILED',$3) ON CONFLICT DO NOTHING", durable, event.ID, map[string]any{"type": event.Type, "workspace_id": event.WorkspaceID})
-				if de != nil {
-					return de
+				_, e = db.Pool.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING", durable, id, code, map[string]any{"stream_sequence": meta.Sequence.Stream})
+				if e != nil {
+					return e
 				}
 				if e = m.Term(); e != nil {
 					return e
 				}
 			} else {
-				if e = m.NakWithDelay(5 * time.Second); e != nil {
+				if e = m.NakWithDelay(time.Duration(meta.NumDelivered) * time.Second); e != nil {
 					return e
 				}
 			}

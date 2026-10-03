@@ -24,7 +24,7 @@ type Ticket struct {
 
 func Create(ctx context.Context, tx pgx.Tx, user, workspace, correlation string, in CreateInput) (string, error) {
 	if len(in.Subject) < 1 || len(in.Subject) > 200 || len(in.Body) < 1 || len(in.Body) > 4000 || len(in.Key) < 8 || len(in.Key) > 200 {
-		return "", errors.New("invalid ticket")
+		return "", database.ErrInvalid
 	}
 	if in.Priority == "" {
 		in.Priority = "NORMAL"
@@ -69,7 +69,7 @@ type ReplyInput struct {
 
 func Reply(ctx context.Context, tx pgx.Tx, user, workspace, ticket, correlation string, in ReplyInput) error {
 	if len(in.Body) < 1 || len(in.Body) > 4000 || len(in.Key) < 8 || len(in.Key) > 200 {
-		return errors.New("invalid reply")
+		return database.ErrInvalid
 	}
 	if e := entitlements.Require(ctx, tx, user, workspace, "tickets", "tickets.reply", 0); e != nil {
 		return e

@@ -60,7 +60,7 @@ func Resolve(i Input) Decision {
 		d.Reason = "INVALID_USAGE"
 		return d
 	}
-	if r.Limit != nil && (*r.Limit < 0 || i.Usage > *r.Limit || i.Requested > *r.Limit-i.Usage) {
+	if i.Requested > 0 && r.Limit != nil && (*r.Limit < 0 || i.Usage > *r.Limit || i.Requested > *r.Limit-i.Usage) {
 		d.Reason = "QUOTA_EXCEEDED"
 		return d
 	}

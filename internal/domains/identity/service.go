@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"strconv"
@@ -49,6 +50,9 @@ func Bootstrap(ctx context.Context, tx pgx.Tx, u auth.TelegramUser, admins []int
 		if id == u.ID {
 			_, e = tx.Exec(ctx, "INSERT INTO platform_admins(user_id) VALUES($1) ON CONFLICT DO NOTHING", out.UserID)
 			if e != nil {
+				return out, e
+			}
+			if _, e = tx.Exec(ctx, "INSERT INTO platform_admin_permissions SELECT $1,key FROM platform_permissions ON CONFLICT DO NOTHING", out.UserID); e != nil {
 				return out, e
 			}
 		}
@@ -103,7 +107,11 @@ func (s *Service) Login(ctx context.Context, u auth.TelegramUser, raw string) (R
 		return out, "", e
 	}
 	if _, e = tx.Exec(ctx, "INSERT INTO auth_replays(digest,expires_at) VALUES($1,$2)", auth.Digest(raw), time.Now().Add(10*time.Minute)); e != nil {
-		return out, "", auth.ErrInvalid
+		var pe *pgconn.PgError
+		if errors.As(e, &pe) && pe.Code == "23505" {
+			return out, "", auth.ErrInvalid
+		}
+		return out, "", e
 	}
 	out, e = Bootstrap(ctx, tx, u, s.Admins)
 	if e != nil {

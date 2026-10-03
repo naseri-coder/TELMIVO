@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -63,6 +64,11 @@ func Run(role string) error {
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 		mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
+			if c.Synthetic {
+				w.Header().Set("X-Telmivo-Mode", "synthetic-disabled")
+				w.WriteHeader(200)
+				return
+			}
 			if role != "main-bot" || c.WebhookSecret == "" {
 				w.WriteHeader(503)
 				return
@@ -70,6 +76,10 @@ func Run(role string) error {
 			w.WriteHeader(200)
 		})
 		mux.HandleFunc("POST /webhook", func(w http.ResponseWriter, r *http.Request) {
+			if c.Synthetic {
+				w.WriteHeader(501)
+				return
+			}
 			if c.WebhookSecret == "" || subtle.ConstantTimeCompare([]byte(c.WebhookSecret), []byte(r.Header.Get("X-Telegram-Bot-Api-Secret-Token"))) != 1 {
 				w.WriteHeader(401)
 				return
@@ -109,9 +119,14 @@ func Run(role string) error {
 	}
 }
 func worker(ctx context.Context, role string, db *database.Store, q *queue.Client, c config.Config) error {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	defer func() { cancel(); wg.Wait() }()
 	errorsCh := make(chan error, 2)
 	if role == "worker" {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
 			for {
@@ -131,7 +146,9 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 	if role == "media-worker" {
 		subject, durable = "telmivo.jobs.download", "media-fixture-v1"
 	}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		errorsCh <- q.Consume(ctx, db, subject, durable, func(ctx context.Context, tx pgx.Tx, e queue.Envelope) error {
 			var payload struct {
 				UserID        string `json:"user_id"`

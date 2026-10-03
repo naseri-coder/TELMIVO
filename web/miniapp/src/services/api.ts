@@ -1,3 +1,4 @@
+import {operationKey,completeOperation} from './operation';
 export interface User{user_id:string;name:string;is_admin:boolean;synthetic_mode:boolean;}
 export interface Workspace{id:string;name:string;role_key:string;}
 export interface Decision{allowed:boolean;reason:string;limit?:number;usage:number;}
@@ -9,4 +10,5 @@ export async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
 declare global{interface Window{Telegram?:{WebApp?:{initData:string;ready:()=>void;expand:()=>void}}}}
 let bootPromise:Promise<{user:User;workspaces:Workspace[]}>|undefined;
 export function bootstrap(){if(!bootPromise)bootPromise=(async()=>{let user:User;try{user=await api<User>('/auth/me');}catch(e){if(!(e instanceof APIError)||e.status!==401)throw e;const initData=window.Telegram?.WebApp?.initData;if(!initData)throw e;await api('/auth/telegram','POST',{init_data:initData});user=await api<User>('/auth/me');}const workspaces=await api<Workspace[]>('/workspaces');if(workspaces[0])setWorkspace(workspaces[0].id);window.Telegram?.WebApp?.ready();window.Telegram?.WebApp?.expand();return {user,workspaces};})();return bootPromise;}
-export function idempotencyKey(){return crypto.randomUUID();}
+export async function mutation<T>(path:string,body:Record<string,unknown>):Promise<T>{const scope=workspaceID+':'+path;const idempotency_key=await operationKey(scope,body);const result=await api<T>(path,'POST',{...body,idempotency_key});completeOperation(scope);return result;}
+

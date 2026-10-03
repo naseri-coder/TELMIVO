@@ -23,7 +23,7 @@ func CreateSynthetic(ctx context.Context, tx pgx.Tx, user, workspace, correlatio
 		return "", e
 	}
 	if len(in.URL) > 2048 || len(in.Key) < 8 || len(in.Key) > 200 {
-		return "", errors.New("invalid download")
+		return "", database.ErrInvalid
 	}
 	formats := FixtureFormats()
 	if _, e = Select(formats, in.FormatID); e != nil {
