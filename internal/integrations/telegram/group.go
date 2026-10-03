@@ -2,20 +2,31 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 )
 
 func (c *Client) Inspect(ctx context.Context, chat, user int64) (groupbot.Member, error) {
 	var out groupbot.Member
 	e := c.call(ctx, "getChatMember", map[string]int64{"chat_id": chat, "user_id": user}, &out)
+	if e == nil {
+		switch out.Status {
+		case "creator", "administrator", "member", "restricted", "left", "kicked":
+		default:
+			return out, groupbot.ErrAuthority
+		}
+	}
 	return out, e
 }
 func (c *Client) Bot(ctx context.Context, chat int64) (int64, groupbot.Member, error) {
 	var me struct {
 		ID int64 `json:"id"`
 	}
-	if e := c.call(ctx, "getMe", nil, &me); e != nil {
+	if e := c.call(ctx, "getMe", map[string]any{}, &me); e != nil {
 		return 0, groupbot.Member{}, e
+	}
+	if me.ID <= 0 {
+		return 0, groupbot.Member{}, groupbot.ErrAuthority
 	}
 	m, e := c.Inspect(ctx, chat, me.ID)
 	return me.ID, m, e
@@ -48,5 +59,10 @@ func (c *Client) Execute(ctx context.Context, chat, target, msg int64, a groupbo
 	default:
 		return groupbot.ErrRights
 	}
-	return c.call(ctx, method, p, nil)
+	var ok bool
+	e := c.call(ctx, method, p, &ok)
+	if e == nil && !ok {
+		return errors.New("Telegram action not acknowledged")
+	}
+	return e
 }

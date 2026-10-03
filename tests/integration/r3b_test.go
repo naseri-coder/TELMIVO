@@ -45,7 +45,9 @@ func (a *r3bAuthority) Inspect(_ context.Context, _ int64, user int64) (groupbot
 	if user == 99997000 {
 		status = "creator"
 	}
-	return groupbot.Member{Status: status, Delete: a.delete, Restrict: a.restrict, Manage: true}, nil
+	out := groupbot.Member{Status: status, Delete: a.delete, Restrict: a.restrict, Manage: true}
+	out.User.IsBot = user == 99997001
+	return out, nil
 }
 func (a *r3bAuthority) Bot(ctx context.Context, chat int64) (int64, groupbot.Member, error) {
 	m, e := a.Inspect(ctx, chat, 99997999)
@@ -190,7 +192,7 @@ func TestR3BGroupJourney(t *testing.T) {
 			t.Fatal(e)
 		}
 		a.botDelete = true
-		for _, target := range []int64{99997000, 99997999} {
+		for _, target := range []int64{99997000, 99997999, 99997001} {
 			e = db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
 				return s.Moderate(ctx, tx, u.UserID, u.WorkspaceID, id, fmt.Sprint(target), "c", target, 0, groupbot.Ban, "reason")
 			})
@@ -534,6 +536,13 @@ func TestR3BTelegramFixtures(t *testing.T) {
 		}
 		return nil
 	}))
+	handle(`{"update_id":97030400,"message":{"message_id":4,"from":{"id":97030001},"chat":{"id":-97030001,"type":"supergroup"},"migrate_to_chat_id":-10097030001}}`)
+	handle(`{"update_id":97030401,"message":{"message_id":5,"from":{"id":97030001},"chat":{"id":-10097030001,"type":"supergroup"},"migrate_from_chat_id":-97030001}}`)
+	var migrated string
+	must(t, db.Pool.QueryRow(ctx, "SELECT group_id::text FROM telegram_group_route($1)", -10097030001).Scan(&migrated))
+	if migrated != id {
+		t.Fatal("migration changed identity")
+	}
 	if s.Handle(ctx, groupbot.Update{}, "malformed") == nil {
 		t.Fatal("malformed accepted")
 	}
@@ -601,4 +610,71 @@ func TestR3BAPIIsolationAuthority(t *testing.T) {
 			t.Fatal(rec.Code, rec.Body.String())
 		}
 	})
+}
+func TestR3BPrivateStartAndHiddenLink(t *testing.T) {
+	s := &groupbot.Service{DB: db, Identity: r3aService(), MiniAppURL: "https://mini.test"}
+	handle := func(tg, update int64) {
+		var u groupbot.Update
+		must(t, json.Unmarshal([]byte(fmt.Sprintf(`{"update_id":%d,"message":{"from":{"id":%d,"first_name":"Group First"},"chat":{"id":%d,"type":"private"},"text":"/start"}}`, update, tg, tg)), &u))
+		must(t, s.Handle(ctx, u, "private"))
+	}
+	handle(97060001, 97060001)
+	handle(97060001, 97060001)
+	handle(97060001, 97060002)
+	u, _ := r3aLogin(t, 97060001, false)
+	must(t, db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		var n int
+		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM telegram_accounts WHERE telegram_id=97060001").Scan(&n))
+		if n != 1 {
+			t.Fatal(n)
+		}
+		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM workspaces WHERE owner_id=$1", u.UserID).Scan(&n))
+		if n != 1 {
+			t.Fatal(n)
+		}
+		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM identity_entries WHERE user_id=$1 AND source='GROUP_BOT'", u.UserID).Scan(&n))
+		if n != 1 {
+			t.Fatal(n)
+		}
+		return nil
+	}))
+	mini, _ := r3aLogin(t, 97060002, false)
+	handle(97060002, 97060003)
+	after, e := s.Enter(ctx, auth.TelegramUser{ID: 97060002, FirstName: "known"}, "after-group")
+	must(t, e)
+	if mini.UserID != after.UserID || mini.WorkspaceID != after.WorkspaceID {
+		t.Fatal("entry mismatch")
+	}
+	s, _ = groupService(u, 97060001)
+	var id string
+	must(t, db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		var e error
+		id, e = s.Claim(ctx, tx, u.UserID, u.WorkspaceID, "claim", 97060001, -97060001, "Hidden links")
+		return e
+	}))
+	p := groupbot.DefaultPolicy()
+	p.Enabled = true
+	p.LinkMode = "DENY_EXTERNAL"
+	p.DetectionAction = groupbot.Warn
+	must(t, db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		_, e := s.Configure(ctx, tx, u.UserID, u.WorkspaceID, id, "config", 1, p)
+		return e
+	}))
+	var update groupbot.Update
+	must(t, json.Unmarshal([]byte(`{"update_id":97060020,"message":{"message_id":20,"from":{"id":97069999},"chat":{"id":-97060001,"type":"supergroup"},"text":"click","entities":[{"type":"text_link","url":"https://attacker.test"}]}}`), &update))
+	must(t, s.Handle(ctx, update, "hidden"))
+	must(t, db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		var n int
+		must(t, tx.QueryRow(ctx, "SELECT count(*) FROM group_moderation_events WHERE group_id=$1 AND reason='LINK_POLICY' AND kind='WARNING'", id).Scan(&n))
+		if n != 1 {
+			t.Fatal(n)
+		}
+		return nil
+	}))
+	e = db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		return s.Moderate(ctx, tx, u.UserID, u.WorkspaceID, id, "update:97060020", "reuse", 97069999, 20, groupbot.Ban, "different action")
+	})
+	if !errors.Is(e, database.ErrConflict) {
+		t.Fatal(e)
+	}
 }

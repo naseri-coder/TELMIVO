@@ -58,3 +58,18 @@ func TestPolicyBounds(t *testing.T) {
 		t.Fatal("digest")
 	}
 }
+func TestHiddenAndBareLinks(t *testing.T) {
+	p := DefaultPolicy()
+	p.Enabled = true
+	p.LinkMode = "ALLOWLIST"
+	p.Domains = []string{"example.com"}
+	p.DetectionAction = Warn
+	for _, m := range []Message{{Text: "click", Links: []string{"https://attacker.test"}}, {Text: "t.me/spam"}} {
+		if d := Evaluate(p, m, 1, 1); d.Reason != "LINK_POLICY" {
+			t.Fatal(d)
+		}
+	}
+	if d := Evaluate(p, Message{Text: "example.com/allowed"}, 1, 1); d.Reason != "NO_MATCH" {
+		t.Fatal(d)
+	}
+}

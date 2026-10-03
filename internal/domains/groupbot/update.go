@@ -19,6 +19,10 @@ type Chat struct {
 type Update struct {
 	ID      *int64 `json:"update_id"`
 	Message *struct {
+		Entities []struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"entities"`
 		ID          int64             `json:"message_id"`
 		From        auth.TelegramUser `json:"from"`
 		Chat        Chat              `json:"chat"`
@@ -93,8 +97,11 @@ func (s *Service) Handle(ctx context.Context, u Update, corr string) error {
 			if e != nil || tag.RowsAffected() == 0 {
 				return e
 			}
-			_, e = s.Claim(ctx, tx, r.UserID, r.WorkspaceID, corr, from.ID, chat.ID, chat.Title)
-			return e
+			id, e := s.Claim(ctx, tx, r.UserID, r.WorkspaceID, corr, from.ID, chat.ID, chat.Title)
+			if e != nil {
+				return e
+			}
+			return database.Event(ctx, tx, r.WorkspaceID, "telmivo.jobs.notification", "group.reply", corr, map[string]any{"chat_id": chat.ID, "user_id": r.UserID, "body": "گروه به فضای کاری متصل شد. پنل گروه: " + s.MiniAppURL + "/groups/" + id, "idempotency_key": key})
 		})
 	}
 	if e != nil {
@@ -113,7 +120,16 @@ func (s *Service) Handle(ctx context.Context, u Update, corr string) error {
 		return e
 	}
 	if u.Message != nil && u.Message.MigrateTo == 0 && u.Message.MigrateFrom == 0 && !strings.HasPrefix(u.Message.Text, "/") {
-		_, e = s.Message(ctx, tx, owner, ws, id, corr, *u.ID, Message{ID: u.Message.ID, User: from.ID, Text: u.Message.Text})
+		links := []string{}
+		if len(u.Message.Entities) > 100 {
+			return database.ErrInvalid
+		}
+		for _, entity := range u.Message.Entities {
+			if entity.Type == "text_link" {
+				links = append(links, entity.URL)
+			}
+		}
+		_, e = s.Message(ctx, tx, owner, ws, id, corr, *u.ID, Message{ID: u.Message.ID, User: from.ID, Text: u.Message.Text, Links: links})
 		if e != nil {
 			return e
 		}

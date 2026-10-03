@@ -67,11 +67,12 @@ func (p Policy) Validate() error {
 }
 
 type Message struct {
-	ID      int64  `json:"message_id"`
-	User    int64  `json:"user_id"`
-	Text    string `json:"text"`
-	Time    int64  `json:"time"`
-	Trusted bool   `json:"trusted"`
+	ID      int64    `json:"message_id"`
+	User    int64    `json:"user_id"`
+	Text    string   `json:"text"`
+	Time    int64    `json:"time"`
+	Trusted bool     `json:"trusted"`
+	Links   []string `json:"links"`
 }
 type Decision struct {
 	Action Action `json:"action"`
@@ -117,10 +118,10 @@ func Evaluate(p Policy, m Message, count, duplicates int) Decision {
 		return Decision{p.DetectionAction, "MENTION_SPAM"}
 	}
 	// Parse bounded text only; classification never follows URLs or fetches content.
-	for _, word := range strings.Fields(m.Text) {
+	for _, word := range append(strings.Fields(m.Text), m.Links...) {
 		word = strings.Trim(word, "()<>[],.!؟")
 		raw := word
-		if strings.HasPrefix(strings.ToLower(raw), "www.") {
+		if strings.HasPrefix(strings.ToLower(raw), "www.") || !strings.Contains(raw, ":") && strings.Contains(raw, ".") {
 			raw = "https://" + raw
 		}
 		u, e := url.Parse(raw)

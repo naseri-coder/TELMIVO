@@ -10,6 +10,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"log/slog"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -20,6 +21,9 @@ var ErrRights = errors.New("GROUP_BOT_RIGHT_MISSING")
 var ErrProtected = errors.New("GROUP_TARGET_PROTECTED")
 
 type Member struct {
+	User struct {
+		IsBot bool `json:"is_bot"`
+	} `json:"user"`
 	Status   string `json:"status"`
 	Delete   bool   `json:"can_delete_messages"`
 	Restrict bool   `json:"can_restrict_members"`
@@ -220,11 +224,23 @@ func (s *Service) request(ctx context.Context, tx pgx.Tx, user, ws, id, key, cor
 	if e != nil {
 		return ErrAuthority
 	}
-	if member.Admin() {
+	if member.Admin() || member.User.IsBot {
 		return ErrProtected
 	}
 	if !rightsFor(bot, a) {
 		return ErrRights
+	}
+	var priorAction, priorReason string
+	var priorTarget, priorMsg int64
+	err := tx.QueryRow(ctx, "SELECT action,reason,target_id,message_id FROM group_moderation_events WHERE workspace_id=$1 AND group_id=$2 AND operation_key=$3 AND kind IN('DECISION','WARNING','CLEAR_WARNINGS')", ws, id, key).Scan(&priorAction, &priorReason, &priorTarget, &priorMsg)
+	if err == nil {
+		if priorAction != string(a) || priorReason != reason || priorTarget != target || priorMsg != msg {
+			return database.ErrConflict
+		}
+		return nil
+	}
+	if err != pgx.ErrNoRows {
+		return err
 	}
 	kind := "DECISION"
 	outcome := "RECORDED"
@@ -297,6 +313,14 @@ func (s *Service) Message(ctx context.Context, tx pgx.Tx, user, ws, id, corr str
 	if update < 0 || m.ID <= 0 || m.User <= 0 || utf8.RuneCountInString(m.Text) > 4096 || len(m.Text) > 16384 {
 		return Decision{}, database.ErrInvalid
 	}
+	if len(m.Links) > 50 {
+		return Decision{}, database.ErrInvalid
+	}
+	for _, link := range m.Links {
+		if len(link) > 4096 {
+			return Decision{}, database.ErrInvalid
+		}
+	}
 	v, chat, e := s.read(ctx, tx, ws, id)
 	if e != nil {
 		return Decision{}, e
@@ -345,7 +369,8 @@ func (s *Service) Message(ctx context.Context, tx pgx.Tx, user, ws, id, corr str
 		return Decision{}, e
 	}
 	decision := Evaluate(v.Policy, m, count, duplicates)
-	if member.Admin() || m.User == botID {
+	slog.Info("group moderation decision", "decision", decision.Action, "reason", decision.Reason)
+	if member.Admin() || member.User.IsBot || m.User == botID {
 		decision = Decision{Log, "PROTECTED_TARGET"}
 		_, e = record(ctx, tx, user, ws, id, key, "DECISION", m.User, m.ID, Log, decision.Reason, "RECORDED", corr, "")
 		return decision, e
@@ -424,7 +449,7 @@ func (s *Service) Deliver(ctx context.Context, tx pgx.Tx, ws, corr string, raw [
 	if e == nil {
 		var m Member
 		m, e = s.Authority.Inspect(ctx, chat, in.Target)
-		if e == nil && (m.Admin() || in.Target == botID) {
+		if e == nil && (m.Admin() || m.User.IsBot || in.Target == botID) {
 			e = ErrProtected
 		}
 	}
@@ -448,6 +473,7 @@ func (s *Service) Deliver(ctx context.Context, tx pgx.Tx, ws, corr string, raw [
 			outcome = "ACTION_OUTCOME_UNKNOWN"
 		}
 	}
+	slog.Info("group action result", "outcome", outcome)
 	_, err := record(ctx, tx, in.Actor, ws, in.Group, in.Key, "ACTION_RESULT", in.Target, in.Message, in.Action, "TRANSPORT_RESULT", outcome, corr, "")
 	if err != nil {
 		return err
