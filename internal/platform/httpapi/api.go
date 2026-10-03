@@ -10,6 +10,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
+	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
 	"github.com/naseri-coder/TELMIVO/internal/domains/tickets"
 	"github.com/naseri-coder/TELMIVO/internal/domains/wallets"
@@ -51,6 +52,12 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /api/v1/auth/me", a.me)
+	protected.HandleFunc("GET /api/v1/auth/permissions", a.adminPermissions)
+	protected.HandleFunc("GET /api/v1/access-policies", a.policyList)
+	protected.HandleFunc("POST /api/v1/access-policies", a.policySave)
+	protected.HandleFunc("POST /api/v1/access-policies/preview", a.policyPreview)
+	protected.HandleFunc("POST /api/v1/access/decision", a.policyRuntime)
+	protected.HandleFunc("GET /api/v1/safety-limits", a.safetyLimits)
 	protected.HandleFunc("POST /api/v1/auth/logout", a.logout)
 	protected.HandleFunc("GET /api/v1/workspaces", a.workspaces)
 	protected.HandleFunc("GET /api/v1/dashboard", a.dashboard)
@@ -187,6 +194,11 @@ func handleError(w http.ResponseWriter, e error) {
 		fail(w, 403, "forbidden")
 		return
 	}
+	var policyDenied *policies.Denied
+	if errors.As(e, &policyDenied) {
+		respond(w, 403, map[string]any{"error": map[string]string{"code": "forbidden", "message": localization.Text("forbidden")}, "decision": policyDenied.Decision})
+		return
+	}
 	var denied *entitlements.Denied
 	if errors.As(e, &denied) {
 		fail(w, 403, "forbidden")
@@ -271,7 +283,17 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid")
 		return
 	}
-	u, e := auth.ValidateInitData(in.InitData, a.Config.BotToken, time.Now(), 10*time.Minute)
+	var u auth.TelegramUser
+	e := auth.ErrInvalid
+	for _, token := range []string{a.Config.BotToken, a.Config.GroupBotToken, a.Config.DownloaderBotToken} {
+		if token == "" {
+			continue
+		}
+		u, e = auth.ValidateInitData(in.InitData, token, time.Now(), 10*time.Minute)
+		if e == nil {
+			break
+		}
+	}
 	if e != nil {
 		fail(w, 401, "unauthorized")
 		return
@@ -341,10 +363,10 @@ func (a *API) access(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return nil, e
 		}
-		return accessMap(r.Context(), tx, workspace(r), role)
+		return accessMap(r.Context(), tx, workspace(r), role, user(r))
 	})
 }
-func accessMap(ctx context.Context, tx pgx.Tx, workspace, role string) (any, error) {
+func accessMap(ctx context.Context, tx pgx.Tx, workspace, role string, subject ...string) (any, error) {
 	fs, e := rows(ctx, tx, "SELECT key,permission_key FROM features ORDER BY key")
 	if e != nil {
 		return nil, e
@@ -352,7 +374,12 @@ func accessMap(ctx context.Context, tx pgx.Tx, workspace, role string) (any, err
 	out := map[string]entitlement.Decision{}
 	for _, f := range fs {
 		k := f["key"].(string)
-		d, e := entitlements.Resolve(ctx, tx, workspace, role, k, "", f["permission_key"].(string), 0)
+		var d entitlement.Decision
+		if len(subject) > 0 {
+			d, e = entitlements.ResolveForUser(ctx, tx, subject[0], workspace, role, k, "", f["permission_key"].(string), 0)
+		} else {
+			d, e = entitlements.Resolve(ctx, tx, workspace, role, k, "", f["permission_key"].(string), 0)
+		}
 		if e != nil {
 			return nil, e
 		}
@@ -392,7 +419,11 @@ func (a *API) features(w http.ResponseWriter, r *http.Request) {
 func (a *API) plugins(w http.ResponseWriter, r *http.Request) {
 	a.tenant(w, r, false, func(tx pgx.Tx) (any, error) {
 		catalog, e := rows(r.Context(), tx, "SELECT key,name_key,version,status,required_feature,configuration_schema FROM plugins ORDER BY key")
-		return map[string]any{"catalog": catalog, "modules": botmodules.Defaults().List()}, e
+		if e != nil {
+			return nil, e
+		}
+		capabilities, e := pluginGovernanceRows(r, tx)
+		return map[string]any{"catalog": catalog, "modules": botmodules.Defaults().List(), "capabilities": capabilities}, e
 	})
 }
 func (a *API) changePlan(w http.ResponseWriter, r *http.Request) {

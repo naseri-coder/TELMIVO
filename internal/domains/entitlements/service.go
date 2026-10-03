@@ -3,8 +3,9 @@ package entitlements
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
+	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
+	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/entitlement"
-	"time"
 )
 
 func EffectivePlan(ctx context.Context, tx pgx.Tx, workspace string) (string, error) {
@@ -13,72 +14,15 @@ func EffectivePlan(ctx context.Context, tx pgx.Tx, workspace string) (string, er
 	return plan, e
 }
 func Resolve(ctx context.Context, tx pgx.Tx, workspace, role, feature, plugin, action string, requested int64) (entitlement.Decision, error) {
-	var i entitlement.Input
-	i.Now = time.Now()
-	i.Requested = requested
-	i.PluginAllowed = true
-	i.DependenciesValid = true
-	plan, e := EffectivePlan(ctx, tx, workspace)
-	if e != nil {
+	var owner string
+	if e := tx.QueryRow(ctx, "SELECT owner_id::text FROM workspaces WHERE id=$1", workspace).Scan(&owner); e != nil {
 		return entitlement.Decision{}, e
 	}
-	e = tx.QueryRow(ctx, "SELECT f.enabled,e.enabled,e.limit_value,EXISTS(SELECT 1 FROM role_permissions rp WHERE rp.role_key=$3 AND rp.permission_key=$4) FROM feature_flags f JOIN plan_entitlements e ON e.feature_key=f.feature_key JOIN plans p ON p.key=e.plan_key WHERE f.feature_key=$1 AND e.plan_key=$2 AND p.active", feature, plan, role, action).Scan(&i.Global, &i.Plan.Enabled, &i.Plan.Limit, &i.Permission)
-	if e == pgx.ErrNoRows {
-		return entitlement.Decision{Reason: "FEATURE_UNCONFIGURED"}, nil
-	}
-	if e != nil {
-		return entitlement.Decision{}, e
-	}
-	for _, x := range []struct {
-		table string
-		dest  **entitlement.Rule
-	}{{"temporary_grants", &i.Grant}, {"workspace_entitlement_overrides", &i.Override}} {
-		var r entitlement.Rule
-		e = tx.QueryRow(ctx, "SELECT enabled,limit_value,expires_at FROM "+x.table+" WHERE workspace_id=$1 AND feature_key=$2", workspace, feature).Scan(&r.Enabled, &r.Limit, &r.ExpiresAt)
-		if e == nil {
-			*x.dest = &r
-		} else if e != pgx.ErrNoRows {
-			return entitlement.Decision{}, e
-		}
-	}
-	var kind, unit string
-	var window *string
-	if e = tx.QueryRow(ctx, "SELECT limit_kind,limit_unit,reset_window FROM features WHERE key=$1", feature).Scan(&kind, &unit, &window); e != nil {
-		return entitlement.Decision{}, e
-	}
-	if (kind == "USAGE" || kind == "CREDIT") && (window == nil || *window != "MONTH") {
-		return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
-	}
-	switch kind {
-	case "RESOURCE_COUNT":
-		tables := map[string]string{"channels": "channels", "groups": "groups", "bots": "customer_bots", "team": "workspace_members"}
-		table, ok := tables[feature]
-		if !ok {
-			return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
-		}
-		e = tx.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE workspace_id=$1", workspace).Scan(&i.Usage)
-	case "USAGE", "CREDIT":
-		e = tx.QueryRow(ctx, "SELECT COALESCE(sum(used),0)::bigint FROM usage_counters WHERE workspace_id=$1 AND feature_key=$2 AND period_start<=now() AND period_end>now()", workspace, feature).Scan(&i.Usage)
-	case "NONE":
-	case "CAPACITY", "ITEM_SIZE":
-		return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
-	default:
-		return entitlement.Decision{Reason: "LIMIT_UNIMPLEMENTED"}, nil
-	}
-	if e != nil {
-		return entitlement.Decision{}, e
-	}
-	if plugin != "" {
-		e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM plan_plugin_entitlements pe JOIN plugins p ON p.key=pe.plugin_key WHERE pe.plan_key=$1 AND p.key=$2 AND pe.enabled AND p.status IN('ENABLED','BETA') AND p.required_feature=$3)", plan, plugin, feature).Scan(&i.PluginAllowed)
-		if e != nil {
-			return entitlement.Decision{}, e
-		}
-		e = tx.QueryRow(ctx, "WITH RECURSIVE deps(k) AS (SELECT dependency_key FROM plugin_dependencies WHERE plugin_key=$2 UNION SELECT d.dependency_key FROM plugin_dependencies d JOIN deps ON d.plugin_key=deps.k) SELECT NOT EXISTS(SELECT 1 FROM deps LEFT JOIN plan_plugin_entitlements pe ON pe.plugin_key=deps.k AND pe.plan_key=$1 LEFT JOIN plugins p ON p.key=deps.k WHERE COALESCE(pe.enabled,false)=false OR p.status='DISABLED')", plan, plugin).Scan(&i.DependenciesValid)
-		if e != nil {
-			return entitlement.Decision{}, e
-		}
-	}
-	return entitlement.Resolve(i), nil
+	return ResolveForUser(ctx, tx, owner, workspace, role, feature, plugin, action, requested)
+}
+func ResolveForUser(ctx context.Context, tx pgx.Tx, user, workspace, role, feature, plugin, action string, requested int64) (entitlement.Decision, error) {
+	d, e := policies.Resolve(ctx, tx, policies.Request{User: user, Workspace: workspace, Role: role, Feature: feature, Plugin: plugin, Permission: action, Requested: requested})
+	return entitlement.Decision{Allowed: d.Allowed, Reason: d.Reason, Limit: d.Limit, Usage: d.Usage, Policy: d}, e
 }
 func Role(ctx context.Context, tx pgx.Tx, user, workspace string) (string, error) {
 	var role string
@@ -90,7 +34,7 @@ func Require(ctx context.Context, tx pgx.Tx, user, workspace, feature, permissio
 	if e != nil {
 		return e
 	}
-	d, e := Resolve(ctx, tx, workspace, role, feature, "", permission, n)
+	d, e := ResolveForUser(ctx, tx, user, workspace, role, feature, "", permission, n)
 	if e != nil {
 		return e
 	}
@@ -107,15 +51,45 @@ func Consume(ctx context.Context, tx pgx.Tx, workspace, feature string, n int64)
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", workspace+":"+feature); e != nil {
 		return e
 	}
-	_, e := tx.Exec(ctx, "INSERT INTO usage_counters(workspace_id,feature_key,used,period_start,period_end) VALUES($1,$2,$3,date_trunc('month',now()),date_trunc('month',now())+interval '1 month') ON CONFLICT(workspace_id,feature_key,period_start) DO UPDATE SET used=usage_counters.used+EXCLUDED.used", workspace, feature, n)
+	var window string
+	if e := tx.QueryRow(ctx, "SELECT reset_window FROM features WHERE key=$1", feature).Scan(&window); e != nil {
+		return e
+	}
+	period := "month"
+	interval := "1 month"
+	if window == "DAY" {
+		period = "day"
+		interval = "1 day"
+	} else if window != "MONTH" {
+		return database.ErrInvalid
+	}
+	_, e := tx.Exec(ctx, "INSERT INTO usage_counters(workspace_id,feature_key,used,period_start,period_end) VALUES($1,$2,$3,date_trunc($4,now()),date_trunc($4,now())+$5::interval) ON CONFLICT(workspace_id,feature_key,period_start) DO UPDATE SET used=usage_counters.used+EXCLUDED.used", workspace, feature, n, period, interval)
 	return e
 }
-func Reserve(ctx context.Context, tx pgx.Tx, user, workspace, feature, permission string, n int64) error {
+func Reserve(ctx context.Context, tx pgx.Tx, user, workspace, feature, permission string, n int64, operation ...string) error {
 	if n < 1 {
 		return &Denied{Reason: "INVALID_USAGE"}
 	}
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", workspace+":"+feature); e != nil {
 		return e
+	}
+	role, e := Role(ctx, tx, user, workspace)
+	if e != nil {
+		return e
+	}
+	resolved, e := policies.Resolve(ctx, tx, policies.Request{User: user, Workspace: workspace, Role: role, Feature: feature, Permission: permission, Requested: n})
+	if e != nil {
+		return e
+	}
+	if len(resolved.Resources) > 0 {
+		if len(operation) != 1 {
+			return database.ErrInvalid
+		}
+		_, e = policies.Reserve(ctx, tx, policies.Request{User: user, Workspace: workspace, Role: role, Feature: feature, Permission: permission, Requested: n}, operation[0])
+		if e != nil {
+			return e
+		}
+		return policies.Settle(ctx, tx, workspace, operation[0], true)
 	}
 	if e := Require(ctx, tx, user, workspace, feature, permission, n); e != nil {
 		return e

@@ -46,7 +46,7 @@ func Create(ctx context.Context, tx pgx.Tx, user, workspace, correlation string,
 	if e != pgx.ErrNoRows {
 		return "", e
 	}
-	if e = entitlements.Reserve(ctx, tx, user, workspace, "tickets", "tickets.create", 1); e != nil {
+	if e = entitlements.Reserve(ctx, tx, user, workspace, "tickets", "tickets.create", 1, "ticket:"+in.Key); e != nil {
 		return "", e
 	}
 	e = tx.QueryRow(ctx, "INSERT INTO tickets(workspace_id,creator_id,subject,priority) VALUES($1,$2,$3,$4) RETURNING id::text", workspace, user, in.Subject, in.Priority).Scan(&id)

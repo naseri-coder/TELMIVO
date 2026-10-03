@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
-	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
+	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 )
 
@@ -43,7 +43,11 @@ func CreateSynthetic(ctx context.Context, tx pgx.Tx, user, workspace, correlatio
 	if e != pgx.ErrNoRows {
 		return "", e
 	}
-	if e = entitlements.Reserve(ctx, tx, user, workspace, "downloads", "downloads.create", 1); e != nil {
+	var role string
+	if e = tx.QueryRow(ctx, "SELECT role_key FROM workspace_members WHERE workspace_id=$1 AND user_id=$2", workspace, user).Scan(&role); e != nil {
+		return "", e
+	}
+	if _, e = policies.Reserve(ctx, tx, policies.Request{User: user, Workspace: workspace, Role: role, Feature: "downloads", Permission: "downloads.create", Requested: 1}, in.Key); e != nil {
 		return "", e
 	}
 	e = tx.QueryRow(ctx, "INSERT INTO download_jobs(workspace_id,creator_id,provider,source_url,format_id,formats,state,synthetic,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,'QUEUED',true,$7) RETURNING id::text", workspace, user, provider, in.URL, in.FormatID, formats, in.Key).Scan(&id)
@@ -56,16 +60,19 @@ func CreateSynthetic(ctx context.Context, tx pgx.Tx, user, workspace, correlatio
 	return id, database.Event(ctx, tx, workspace, "telmivo.jobs.download", "download.queued", correlation, map[string]any{"download_job_id": id})
 }
 func CompleteFixture(ctx context.Context, tx pgx.Tx, workspace, id string) error {
-	var state string
+	var state, key string
 	var synthetic bool
-	if e := tx.QueryRow(ctx, "SELECT state,synthetic FROM download_jobs WHERE id=$1 AND workspace_id=$2 FOR UPDATE", id, workspace).Scan(&state, &synthetic); e != nil {
+	if e := tx.QueryRow(ctx, "SELECT state,synthetic,idempotency_key FROM download_jobs WHERE id=$1 AND workspace_id=$2 FOR UPDATE", id, workspace).Scan(&state, &synthetic, &key); e != nil {
 		return e
 	}
 	if !synthetic {
 		return errors.New("live downloader disabled")
 	}
-	if state == "COMPLETED" || state == "CANCELLED" {
+	if state == "COMPLETED" {
 		return nil
+	}
+	if state == "CANCELLED" {
+		return policies.Settle(ctx, tx, workspace, key, false)
 	}
 	for _, next := range []string{"ANALYZING", "DOWNLOADING", "PROCESSING", "UPLOADING", "COMPLETED"} {
 		if e := Transition(state, next); e != nil {
@@ -75,6 +82,9 @@ func CompleteFixture(ctx context.Context, tx pgx.Tx, workspace, id string) error
 			return e
 		}
 		state = next
+	}
+	if e := policies.Settle(ctx, tx, workspace, key, true); e != nil {
+		return e
 	}
 	// This tests durable orchestration, not a fabricated real media download or Telegram delivery.
 	return nil

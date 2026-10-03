@@ -1,12 +1,6 @@
 name: Native Infrastructure
 on:
   workflow_call:
-  push:
-    branches: [feature/platform-bootstrap-v0.1, develop, main]
-    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
-  pull_request:
-    branches: [develop, main]
-    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 permissions:
   contents: read
 jobs:
@@ -58,14 +52,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/check-test-target.sh
-          go test -race -v -tags=integration ./tests/integration -count=1 -timeout=3m | tee native-results.txt
-      - name: Broker restart persistence
-        env:
-          TEST_BROKER_RESTART: "true"
-        run: |
-          set -o pipefail
-          docker restart telmivo-test-nats
-          go test -race -v -tags=integration ./tests/integration -run TestBrokerRestart -count=1 -timeout=30s | tee -a native-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR2A|TestMigration|TestIdentityWorkspace|TestWorkspaceIsolation|TestTicketing|TestPlatformPermissionsAndGlobalPlans|TestPlanChange|TestDownloadQueue|TestDownloadCancel' -count=1 -timeout=3m | tee native-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -53,7 +53,8 @@ func (s *Service) Start(ctx context.Context, bot, url, correlation string, u Upd
 	if tag.RowsAffected() == 0 {
 		return out, nil
 	}
-	out, e = Bootstrap(ctx, tx, u.Message.From, s.Admins)
+	source := map[string]string{"main-bot": "MAIN_BOT", "group-bot": "GROUP_BOT", "downloader-bot": "DOWNLOADER_BOT", "main": "MAIN_BOT", "group": "GROUP_BOT", "downloader": "DOWNLOADER_BOT"}[bot]
+	out, e = Enter(ctx, tx, u.Message.From, s.Admins, source, bot+":"+UpdateKey(u.ID))
 	if e != nil {
 		return out, e
 	}

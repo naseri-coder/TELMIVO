@@ -113,7 +113,7 @@ func TestMigration(t *testing.T) {
 		must(t, owner.Migrate(ctx))
 		var n int
 		must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&n))
-		if n != 6 {
+		if n != 7 {
 			t.Fatalf("migration count %d", n)
 		}
 	})
@@ -448,11 +448,11 @@ func TestPlanChange(t *testing.T) {
 		t.Fatal("plan audit")
 	}
 	tenant(t, u, func(tx pgx.Tx) error {
-		_, e := tx.Exec(ctx, "INSERT INTO temporary_grants(workspace_id,feature_key,enabled,expires_at,reason) VALUES($1,'downloads',true,now()-interval '1 second','expired')", u.WorkspaceID)
+		_, e := tx.Exec(ctx, "INSERT INTO temporary_grants(workspace_id,feature_key,enabled,expires_at,reason) VALUES($1,'analytics',true,now()-interval '1 second','expired')", u.WorkspaceID)
 		if e != nil {
 			return e
 		}
-		d, e := entitlements.Resolve(ctx, tx, u.WorkspaceID, "OWNER", "downloads", "", "downloads.create", 1)
+		d, e := entitlements.Resolve(ctx, tx, u.WorkspaceID, "OWNER", "analytics", "", "analytics.read", 1)
 		if e == nil && d.Allowed {
 			t.Fatal("expired grant allowed")
 		}

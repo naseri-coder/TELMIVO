@@ -21,6 +21,7 @@ type Decision struct {
 	Reason  string `json:"reason"`
 	Limit   *int64 `json:"limit,omitempty"`
 	Usage   int64  `json:"usage"`
+	Policy  any    `json:"policy,omitempty"`
 }
 
 func active(r *Rule, now time.Time) bool {

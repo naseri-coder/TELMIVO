@@ -113,7 +113,7 @@ func (s *Service) Login(ctx context.Context, u auth.TelegramUser, raw string) (R
 		}
 		return out, "", e
 	}
-	out, e = Bootstrap(ctx, tx, u, s.Admins)
+	out, e = Enter(ctx, tx, u, s.Admins, "MINIAPP", auth.Digest(raw))
 	if e != nil {
 		return out, "", e
 	}

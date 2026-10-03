@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL      string
 	BotToken, WebhookSecret, CredentialKey, StorageEndpoint, StorageBucket string
+	GroupBotToken, DownloaderBotToken                                      string
 	AdminIDs                                                               []int64
 	Synthetic                                                              bool
 	SessionTTL, JobTimeout                                                 time.Duration
@@ -19,7 +20,7 @@ type Config struct {
 }
 
 func Load(get func(string) string) (Config, error) {
-	c := Config{Environment: get("TELMIVO_ENV"), HTTPAddr: get("HTTP_ADDR"), DatabaseURL: get("DATABASE_URL"), RedisURL: get("REDIS_URL"), NATSURL: get("NATS_URL"), MiniAppURL: get("MINIAPP_URL"), BotToken: get("BOT_TOKEN"), WebhookSecret: get("WEBHOOK_SECRET"), CredentialKey: get("CREDENTIAL_KEY"), StorageEndpoint: get("S3_ENDPOINT"), StorageBucket: get("S3_BUCKET"), SessionTTL: time.Hour, JobTimeout: 5 * time.Minute, MediaConcurrency: 2, MaxMediaBytes: 100 << 20}
+	c := Config{Environment: get("TELMIVO_ENV"), HTTPAddr: get("HTTP_ADDR"), DatabaseURL: get("DATABASE_URL"), RedisURL: get("REDIS_URL"), NATSURL: get("NATS_URL"), MiniAppURL: get("MINIAPP_URL"), BotToken: get("BOT_TOKEN"), GroupBotToken: get("GROUP_BOT_TOKEN"), DownloaderBotToken: get("DOWNLOADER_BOT_TOKEN"), WebhookSecret: get("WEBHOOK_SECRET"), CredentialKey: get("CREDENTIAL_KEY"), StorageEndpoint: get("S3_ENDPOINT"), StorageBucket: get("S3_BUCKET"), SessionTTL: time.Hour, JobTimeout: 5 * time.Minute, MediaConcurrency: 2, MaxMediaBytes: 100 << 20}
 	if c.Environment == "" {
 		c.Environment = "development"
 	}
