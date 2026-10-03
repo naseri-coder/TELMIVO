@@ -1,6 +1,6 @@
 # R3C validation
 
-Validated source: `0d6d601c99e464c53bd91495738dd15bbbd6f1d1`. Final delivery is the evidence-only child commit; exact SHA is recorded in the Draft PR and delivery response. Source CI is authoritative; docs-only push does not repeat it.
+Validated diagnostic source: `08352a52edb1dd4403e05e985335e1a4456a31d9` (previously validated functional source: `0d6d601c99e464c53bd91495738dd15bbbd6f1d1`). Final delivery is the evidence-only child commit; exact SHA is recorded in the Draft PR and delivery response. Source CI is authoritative; docs-only push does not repeat it.
 
 ## Recovery and schema
 
@@ -8,7 +8,7 @@ The original local R3C implementation was recovered at 14b27792936c6d004e7e127f3
 
 LOCAL_POSTGRES_ENVIRONMENT_UNAVAILABLE: local root/non-root process limitations were respected. No host users/services/security were altered. Fresh migration and runtime behavior used existing isolated GitHub Actions PostgreSQL 17 services with dedicated migration role and NOSUPERUSER/NOBYPASSRLS runtime. TestR3CSchema proves authorized dispatch, denied foreign enumeration/lease/binding, durable cancellation and expiry. Restore validates durable relationship/reservation/cancel/outcomes and stale fencing.
 
-## Final source CI
+## Prior functional source CI
 
 - [Security Baseline 37150904191](https://github.com/naseri-coder/TELMIVO/actions/runs/37150904191): SUCCESS; actual logs reviewed.
 - [CI Web 37150904207](https://github.com/naseri-coder/TELMIVO/actions/runs/37150904207): SUCCESS; actual logs reviewed.
@@ -19,11 +19,11 @@ Test counts (verbose native counts are actual emitted PASS lines; non-verbose Go
 
 ```json
 {
-  "go_unit_contract_top_level_static": 33,
+  "go_unit_contract_top_level_static": 34,
   "go_count_method": "Static Test function enumeration in successfully executed non-verbose Go race packages, not a verbose individual count",
-  "native_before_restore_top_level": 40,
+  "native_before_restore_top_level": 41,
   "native_before_restore_subtests_including_nested": 74,
-  "r3c_native_top_level_before_restore": 14,
+  "r3c_native_top_level_before_restore": 15,
   "r3c_native_subtests": 9,
   "native_counts_include_fixture_preparation": true,
   "restored_recovery_top_level": 2,
@@ -41,7 +41,7 @@ Test counts (verbose native counts are actual emitted PASS lines; non-verbose Go
 
 | Gate | Verdict | Evidence |
 |---|---|---|
-| SOURCE_CONTINUITY_GATE | PASS | Recovered local delta at exact R3B parent, six source/test commits; exact source checkout SHA in all five reviewed job logs. |
+| SOURCE_CONTINUITY_GATE | PASS | Exact R3B ancestry preserved; seven source/test/diagnostic commits and two evidence commits; diagnostic SQL literals/dispatch/browser/0011 unchanged. |
 | R3B_FREEZE_GATE | PASS | Remote R3B SHA unchanged; 0001–0010 hashes byte-identical; R3B native and browser regressions pass. |
 | BRANCH_ISOLATION_GATE | PASS | Frozen R3A/Foundation/main/develop refs verified; only R3C advanced; PR1–3 open/draft/unmerged. |
 | LOCAL_RECOVERY_GATE | PASS | Preserved original 16 modified + 21 untracked-path checkpoint, tar/patch/inventory; implementation resumed, not reconstructed. Generated cache/node_modules excluded. |
@@ -74,14 +74,15 @@ Test counts (verbose native counts are actual emitted PASS lines; non-verbose Go
 | UPDATE_IDEMPOTENCY_GATE | PASS | BotCallbacks duplicate same update produces one job/reservation; repeated worker terminal execution denied, native same-job concurrency has one outcome; inherited inbox/outbox replay tests pass. |
 | HISTORY_GATE | PASS | TestR3CHistoryPagination stable 20+1 keyset pages; journey detail/history and browser history/reload pass. |
 | WORKSPACE_ISOLATION_GATE | PASS | Native foreign callback/cancel/dispatch/lease/binding/history isolation; real browser workspace switch hides jobs and foreign cancel denied; restored isolation pass. |
-| RECOVERY_GATE | PASS | Fresh dump→independent restore canonical manifest identical; TestR3CRecovered reservation, binding, cancel, reclaim, stale settlement, completed/unknown no replay and isolation; TestR2BRecovered pass. |
+| RECOVERY_GATE | PASS | Fresh backup/restore and TestR2BRecovered/TestR3CRecovered actually PASS in all three instrumented executions; before/after manifests identical; representative R3C durable states/fencing/isolation retained. |
 | DOWNLOADER_MINIAPP_GATE | PASS | Native downloader browser real frontend/API/PostgreSQL submission, formats, selection, worker completion, history, cancellation/reload and workspace isolation; no API interception. |
-| NATIVE_BROWSER_E2E_GATE | PASS | Four native browser scenarios pass: existing infrastructure, customer, groups and downloader; separate eight lightweight browser tests are not the authoritative product proof. |
+| NATIVE_BROWSER_E2E_GATE | PASS | Four separate real API/PostgreSQL scenarios PASS in each of three instrumented executions; historical single flake retained and explicitly accepted CASE B. |
 | PERSIAN_RTL_GATE | PASS | Native Downloader browser mobile 390×844 html RTL/no overflow, Persian states; existing customer/group mobile regression. |
 | REGRESSION_GATE | PASS | Native existing R3A/R3B/R2B and restored R2B assertions plus successful Go race, Web unit and browser regressions; prior assertions retained. |
 | SECURITY_GATE | PASS | Actual Security job zero secret matches/npm advisories, zero reachable Go vulnerabilities with inherited module-only advisory disclosure; native tenant/callback/fencing negatives and SSRF/command/path tests. |
-| CI_GATE | PASS | All four final source workflows and five job logs reviewed with exact source SHA, no FAIL/panic/runner error; native/restore pipelines pipefail. |
-| DOCUMENTATION_GATE | PASS | Four final documents include exact inventory, migration hashes, test count method, source CI and disclosed superseded failures/limits; evidence-only final commit. |
+| CI_GATE | PASS | Required PR CI Go/Web/Security/Images all PASS at diagnostic source; two additional no-code native reruns PASS; actual logs inspected. Cancelled superseded push workflows disclosed separately. |
+| DOCUMENTATION_GATE | PASS | Four existing architecture/validation/evidence/inventory files updated with diagnostic commit, three observations and explicit unresolved historical limitation; documentation-only ninth commit. |
+
 
 ## Superseded failures
 
@@ -110,3 +111,23 @@ yt-dlp 2026.08.19 is exact-version/hash pinned, Unlicense; no runtime self-updat
 - Browser processing journey (processing exercised natively; browser journey uses direct MP4)
 
 CodeQL remains BLOCKED_EXTERNAL and Branch Protection EXTERNAL_BLOCKER, without retries. R3D, Uploader, Bot Factory, payments, AI, bypass/session import, generic URL fetching and production operations remain deferred. Frozen branch histories were not changed; the narrow compatible expired-settlement helper exists on R3C only.
+
+## R3C-R6 diagnostic validation and explicit CASE B acceptance
+
+Commit `08352a52edb1dd4403e05e985335e1a4456a31d9` adds safe structured dispatch diagnostics and TestR3CDiagnostics; no dispatch SQL/ordering/frequency, quota, lease, migration or browser timeout/assertion changes. Coordinate IDs are hashed; job/media/generation references are log fields only. Created events are marked PENDING_COMMIT; AWAITING_FORMAT is logged after successful durable transaction. Existing native-api.log/native-results artifacts retain diagnostics.
+
+Required workflows: CI Web 37157360431: SUCCESS, CI Go 37157360611: SUCCESS, Build Images 37157360425: SUCCESS, Security Baseline 37157360423: SUCCESS. Actual logs reviewed. Three observations of CI Go 37157360611:
+
+| Attempt | Native job | Result | Browser | Fresh restore/recovery |
+|---|---|---|---|---|
+| 1 | 111303419414 | SUCCESS | 4/4 | PASS |
+| 2 | 111304355763 | SUCCESS | 4/4 | PASS |
+| 3 | 111305324161 | SUCCESS | 4/4 | PASS |
+
+Each execution passed TestR3CDiagnostics and 41 native top-level tests +74 subtests (R3C 15+9), plus both recovered tests. No code changed between attempts. First-job creation→committed AWAITING_FORMAT milliseconds: 1351, 198, 1947.
+
+Historical PR run 37151427539 attempt 1: first job QUEUED through 15-second MP4 timeout, reservation present, polling 200, no observed lease; restore skipped. Same merge-ref attempt 2 passed all four browser scenarios and recovery. Job-specific root cause was not captured. Starvation was NOT_PROVEN for this fixture; fixed-population cursor model is not native behavioral proof. The instrumented executions did not reproduce failure: FLAKINESS_NOT_REPRODUCED_WITH_DIAGNOSTICS. ROOT_CAUSE_STATUS=NOT_PROVEN; ROOT_CAUSE=UNKNOWN; PRODUCT_DEFECT_REQUIRES_FIX=NOT_PROVEN.
+
+Acceptance is explicitly CASE B authorized in R3C-R6: three instrumented passes plus valid prior source/retry/recovery evidence; the single historical flake remains an unresolved known limitation with improved future diagnostics. This does not claim a behavioral repair. Diagnostic sampling is bounded to three source executions. Cancelled push workflows were superseded by PR concurrency, not successful native observations.
+
+Commit budget: authorized9, used9; ninth commit documentation only. PR #4 stays open/draft/unmerged on R3B. No production or live provider/Telegram operation.

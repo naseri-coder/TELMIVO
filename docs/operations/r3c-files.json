@@ -1,8 +1,8 @@
 {
   "base": "14b27792936c6d004e7e127f3d5de8f1be91ae79",
-  "validated_source_head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
-  "source_count": 44,
-  "final_count": 48,
+  "validated_source_head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+  "source_count": 47,
+  "final_count": 51,
   "paths": [
     {
       "path": ".github/workflows/build-images.yml",
@@ -26,7 +26,7 @@
       "path": ".github/workflows/migration-check.yml",
       "kind": "source_config_test",
       "new": false,
-      "sha256": "3f2bc19248afe63ba2380dd4a9772591526f93d1aaff2494dbe4d0931b723e85"
+      "sha256": "61b65a534464431fe4e81386f7f73f7f25a1058c7abea333eb431db7411ebcda"
     },
     {
       "path": ".github/workflows/security.yml",
@@ -79,16 +79,28 @@
       "sha256": "7c9c99cb8cce9fb9e4aa371b267fb825fe93e71ed55e1959b43ce8f43b81e874"
     },
     {
+      "path": "internal/domains/downloads/diagnostics.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "3bf22e41d01f0febb1e51a2b1e500725500b3d6c33a3aada5c88fd23a8719d7c"
+    },
+    {
+      "path": "internal/domains/downloads/diagnostics_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "8ba43eb9f64f0288dd54d346beb092a927dd750f88579a2efafe93971bc4e005"
+    },
+    {
       "path": "internal/domains/downloads/product.go",
       "kind": "source_config_test",
       "new": true,
-      "sha256": "2871304084a21b11f7122951be7e91086eb71c72b97c8becbab16bb025c5e8c4"
+      "sha256": "9373bcc259508e63ce7ec462ec58f806dd9a69349473875537c42358dc33ff1e"
     },
     {
       "path": "internal/domains/downloads/worker.go",
       "kind": "source_config_test",
       "new": true,
-      "sha256": "301233f9f1cdf3ce41625a396797597c2a765afd78acdfc7448d64d0ae6ebf1b"
+      "sha256": "2b89afa46931fab1aa98ad877577ea8d9c7e0856a26c021c8f3ea4c96b96493c"
     },
     {
       "path": "internal/domains/jobs/lease.go",
@@ -166,7 +178,7 @@
       "path": "internal/platform/runtime/runtime.go",
       "kind": "source_config_test",
       "new": false,
-      "sha256": "db841c714cd0c4dbeaa4328d169745f8e31e0b300b362fa2e15afc07c0f65701"
+      "sha256": "ff0afa0a88253aadc60414544430f14a06b7dc953e56fab76ce8e204ee10b293"
     },
     {
       "path": "internal/platform/testfixtures/downloader.go",
@@ -215,6 +227,12 @@
       "kind": "source_config_test",
       "new": true,
       "sha256": "79deb6898997fc8650bf58b91d2654f2dc5d6ccff4d6c7a9003b2b6269784965"
+    },
+    {
+      "path": "tests/integration/r3c_diagnostics_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "7a16304439c22799cb3a3a91208fa1ddc9aafd1b71e459ad023401b572317f87"
     },
     {
       "path": "tests/integration/r3c_history_test.go",

@@ -1,4 +1,4 @@
-> Validated source: `0d6d601c99e464c53bd91495738dd15bbbd6f1d1`. Final source CI and independent restore/recovery PASS; live provider/Telegram networks remain untested. See r3c-validation.md.
+> Validated diagnostic source: `08352a52edb1dd4403e05e985335e1a4456a31d9`; prior validated functional source: `0d6d601c99e464c53bd91495738dd15bbbd6f1d1`. Final source CI and independent restore/recovery PASS; live provider/Telegram networks remain untested. See r3c-validation.md.
 
 # R3C Downloader
 
@@ -41,3 +41,11 @@ PostgreSQL is authoritative for relationship, cancellation, analyzed snapshot, q
 ## Acceptance boundary
 
 Native tests use restricted PostgreSQL runtime roles and deterministic provider/Telegram adapters. The authoritative browser connects the real Mini App to real API/PostgreSQL without API interception. Only external dependencies are injected; the explicit synthetic worker is limited to the browser fixture customer so abandoned restore fixtures remain unchanged until the recovery drill. Live Telegram/provider credentials and production operations are excluded. Exact test/CI evidence and limitations are in `docs/operations/r3c-evidence.json` and `r3c-validation.md`.
+
+## Dispatch diagnostic boundary (R3C-R6)
+
+The existing historical outbox coordinate scan and Tenant/RLS dispatch remain unchanged. Diagnostic events correlate a trusted download job and media job, lease generation and committed lifecycle transitions. Customer/workspace coordinates use a truncated SHA256 pseudonym; no source URLs, raw errors, tokens or reservation keys are logged. Elapsed milliseconds/counts and fixed event/result categories expose worker health, filtering, discovery, lease acquisition and analysis. IDs are structured log fields, never metric labels. At most the existing128 coordinates per discovery page are logged; verbose diagnostic overhead is a known operational consideration.
+
+A native diagnostic test runs real Poll→targets→Dispatch→Acquire→analysis and asserts ordered diagnostics plus committed AWAITING_FORMAT. It observes a channel signal after the real transaction, with bounded failure horizon rather than fixed sleep synchronization. Production scheduling and browser timeouts/assertions are unchanged.
+
+One historical PR flake remains UNKNOWN. Three instrumented executions passed with unchanged behavior; finalization follows explicit R3C-R6 CASE B, not a claim of fixed dispatch or proven environmental cause. Historical coordinate scan scalability remains a known limitation and was not redesigned in this wave.

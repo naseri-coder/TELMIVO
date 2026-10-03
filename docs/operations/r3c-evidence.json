@@ -3,11 +3,11 @@
   "visibility": "PRIVATE",
   "branch": "feature/r3c-downloader-bot-v0.1",
   "r3b_parent_sha": "14b27792936c6d004e7e127f3d5de8f1be91ae79",
-  "validated_source_head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
-  "validated_source_tree": "e3bff29e73b0c4d96993dc0fc8e77853805aadfc",
+  "validated_source_head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+  "validated_source_tree": "3a75ada362756778daa6e8e98e950cfd3e00e12d",
   "final_delivery_head": {
     "git_revision": "HEAD at this documentation commit",
-    "expected_parent": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+    "expected_parent": "08352a52edb1dd4403e05e985335e1a4456a31d9",
     "exact_sha_record_location": "Draft PR body and final response; commit SHA cannot be embedded in its own content"
   },
   "recovered_checkpoint": {
@@ -51,15 +51,26 @@
       "kind": "source"
     },
     {
-      "git_revision": "HEAD at this evidence-only commit",
-      "expected_parent": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "sha": "c456cd57ffff9955dc71087af46d2c68ab215c52",
       "title": "docs(r3c): record validated downloader vertical evidence",
+      "kind": "evidence_documentation_only"
+    },
+    {
+      "sha": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+      "title": "test(r3c): add correlated downloader dispatch diagnostics",
+      "kind": "diagnostic_source_test_only"
+    },
+    {
+      "git_revision": "HEAD at this documentation commit",
+      "expected_parent": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+      "exact_sha_record_location": "Draft PR body and final response; commit SHA cannot be embedded in its own content",
+      "title": "docs(r3c): record dispatch diagnostic validation and residual flake",
       "kind": "evidence_documentation_only"
     }
   ],
-  "r3c_commit_count": 7,
-  "source_changed_file_count": 44,
-  "final_changed_file_count": 48,
+  "r3c_commit_count": 9,
+  "source_changed_file_count": 47,
+  "final_changed_file_count": 51,
   "migration_inventory": [
     {
       "path": "db/migrations/0001_core.sql",
@@ -175,11 +186,11 @@
     "image_runtime_uid": 10001
   },
   "test_counts": {
-    "go_unit_contract_top_level_static": 33,
+    "go_unit_contract_top_level_static": 34,
     "go_count_method": "Static Test function enumeration in successfully executed non-verbose Go race packages, not a verbose individual count",
-    "native_before_restore_top_level": 40,
+    "native_before_restore_top_level": 41,
     "native_before_restore_subtests_including_nested": 74,
-    "r3c_native_top_level_before_restore": 14,
+    "r3c_native_top_level_before_restore": 15,
     "r3c_native_subtests": 9,
     "native_counts_include_fixture_preparation": true,
     "restored_recovery_top_level": 2,
@@ -193,68 +204,98 @@
   },
   "final_source_ci_runs": [
     {
-      "id": 37150904191,
-      "name": "Security Baseline",
-      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904191"
-    },
-    {
-      "id": 37150904207,
+      "id": 37157360431,
       "name": "CI Web",
-      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904207"
+      "run_attempt": 1,
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37157360431"
     },
     {
-      "id": 37150904309,
-      "name": "Build Images",
-      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904309"
-    },
-    {
-      "id": 37150904505,
+      "id": 37157360611,
       "name": "CI Go",
-      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904505"
+      "run_attempt": 3,
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37157360611"
+    },
+    {
+      "id": 37157360425,
+      "name": "Build Images",
+      "head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37157360425"
+    },
+    {
+      "id": 37157360423,
+      "name": "Security Baseline",
+      "head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37157360423"
     }
   ],
   "reviewed_job_logs": [
     {
-      "job_id": 111284417250,
-      "sha256": "316cd4b12e52e3be4525dd73a54f4636c2d08b10cb489d70afc6cb32580ece23",
-      "bytes": 19326,
-      "inspected": true
+      "job_id": 111303419263,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 0,
+      "recovery_tests_passed": false,
+      "characters": 83700
     },
     {
-      "job_id": 111284417641,
-      "sha256": "9010839f2daeadee4aa3b101d657882d8be15dcbdbeb5cfbd2603ec0ca8fc227",
-      "bytes": 46078,
-      "inspected": true
+      "job_id": 111303416261,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 0,
+      "recovery_tests_passed": false,
+      "characters": 20125
     },
     {
-      "job_id": 111284417705,
-      "sha256": "eaf5b540d98d4d9ea5ca0a89b68f55441fda26139cdaa5200fa0c59c8c933d40",
-      "bytes": 235046,
-      "inspected": true
+      "job_id": 111303414816,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 0,
+      "recovery_tests_passed": false,
+      "characters": 44213
     },
     {
-      "job_id": 111284418180,
-      "sha256": "3cd8547399b2926eff4c1aa88a30e0e439902de16cf11668cd69af4c3649959a",
-      "bytes": 82839,
-      "inspected": true
+      "job_id": 111304257721,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 0,
+      "recovery_tests_passed": false,
+      "characters": 238989
     },
     {
-      "job_id": 111284418360,
-      "sha256": "b778eab9b87a4e174d06d85410d647af66753d227db69f1dc41a8b4011459818",
-      "bytes": 204160,
-      "inspected": true
+      "job_id": 111303419414,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 4,
+      "recovery_tests_passed": true,
+      "characters": 363805
+    },
+    {
+      "job_id": 111304355763,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 4,
+      "recovery_tests_passed": true,
+      "characters": 363658
+    },
+    {
+      "job_id": 111305324161,
+      "inspected": true,
+      "unexpected_failure_lines": 0,
+      "native_browser_passes": 4,
+      "recovery_tests_passed": true,
+      "characters": 363624
     }
   ],
   "recovery": {
@@ -265,27 +306,63 @@
       "TestR3CRecovered"
     ],
     "canonical_manifest_lines": 88,
-    "manifest_before_sha256": "952b7887c890aea9a3316aaa24f4e24ad941975dd90ec93b3d1e9a7cecc42eb2",
-    "manifest_after_sha256": "952b7887c890aea9a3316aaa24f4e24ad941975dd90ec93b3d1e9a7cecc42eb2",
     "identical": true,
     "artifact": [
       {
-        "id": 11283862958,
+        "id": 11286950436,
         "name": "native-results",
-        "size_in_bytes": 557692,
-        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11283862958",
-        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11283862958/zip",
+        "size_in_bytes": 585459,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286950436",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286950436/zip",
         "expired": false,
-        "created_at": "2026-10-03T20:20:12Z",
-        "expires_at": "2027-01-01T20:15:44Z",
-        "updated_at": "2026-10-03T20:20:12Z",
-        "digest": "sha256:41dabca266e6ac7d6e17026b2677d179d335430c26b5323c910ff102f7b086d5",
+        "created_at": "2026-10-03T22:23:32Z",
+        "expires_at": "2027-01-01T22:18:34Z",
+        "updated_at": "2026-10-03T22:23:32Z",
+        "digest": "sha256:ee506bc4b6ca3adcc9674d92c0c56a190b6911c8aa23787f1b7e9bac97a178f7",
         "workflow_run": {
-          "id": 37150904505,
+          "id": 37157360611,
           "repository_id": 1402424650,
           "head_repository_id": 1402424650,
           "head_branch": "feature/r3c-downloader-bot-v0.1",
-          "head_sha": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1"
+          "head_sha": "08352a52edb1dd4403e05e985335e1a4456a31d9"
+        }
+      },
+      {
+        "id": 11286540296,
+        "name": "native-results",
+        "size_in_bytes": 583975,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286540296",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286540296/zip",
+        "expired": false,
+        "created_at": "2026-10-03T22:12:21Z",
+        "expires_at": "2027-01-01T22:07:26Z",
+        "updated_at": "2026-10-03T22:12:21Z",
+        "digest": "sha256:9beb32f120fe10d20d5804ef9a5f48d0b711c2351b7bd859311054a1eabf4f8a",
+        "workflow_run": {
+          "id": 37157360611,
+          "repository_id": 1402424650,
+          "head_repository_id": 1402424650,
+          "head_branch": "feature/r3c-downloader-bot-v0.1",
+          "head_sha": "08352a52edb1dd4403e05e985335e1a4456a31d9"
+        }
+      },
+      {
+        "id": 11285564211,
+        "name": "native-results",
+        "size_in_bytes": 586885,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11285564211",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11285564211/zip",
+        "expired": false,
+        "created_at": "2026-10-03T22:17:59Z",
+        "expires_at": "2027-01-01T22:13:01Z",
+        "updated_at": "2026-10-03T22:17:59Z",
+        "digest": "sha256:1a3c2ef26b9e0e59aca7fe5dd2252ed1288bbe691e03f628095128d1c91ca975",
+        "workflow_run": {
+          "id": 37157360611,
+          "repository_id": 1402424650,
+          "head_repository_id": 1402424650,
+          "head_branch": "feature/r3c-downloader-bot-v0.1",
+          "head_sha": "08352a52edb1dd4403e05e985335e1a4456a31d9"
         }
       }
     ],
@@ -298,12 +375,32 @@
       "completed/unknown no replay",
       "one acknowledged delivery",
       "workspace isolation"
+    ],
+    "instrumented_observations": [
+      {
+        "run_id": 37157360611,
+        "attempt": 1,
+        "job_id": 111303419414,
+        "conclusion": "success"
+      },
+      {
+        "run_id": 37157360611,
+        "attempt": 2,
+        "job_id": 111304355763,
+        "conclusion": "success"
+      },
+      {
+        "run_id": 37157360611,
+        "attempt": 3,
+        "job_id": 111305324161,
+        "conclusion": "success"
+      }
     ]
   },
   "gate_results": {
     "SOURCE_CONTINUITY_GATE": {
       "verdict": "PASS",
-      "evidence": "Recovered local delta at exact R3B parent, six source/test commits; exact source checkout SHA in all five reviewed job logs."
+      "evidence": "Exact R3B ancestry preserved; seven source/test/diagnostic commits and two evidence commits; diagnostic SQL literals/dispatch/browser/0011 unchanged."
     },
     "R3B_FREEZE_GATE": {
       "verdict": "PASS",
@@ -435,7 +532,7 @@
     },
     "RECOVERY_GATE": {
       "verdict": "PASS",
-      "evidence": "Fresh dump→independent restore canonical manifest identical; TestR3CRecovered reservation, binding, cancel, reclaim, stale settlement, completed/unknown no replay and isolation; TestR2BRecovered pass."
+      "evidence": "Fresh backup/restore and TestR2BRecovered/TestR3CRecovered actually PASS in all three instrumented executions; before/after manifests identical; representative R3C durable states/fencing/isolation retained."
     },
     "DOWNLOADER_MINIAPP_GATE": {
       "verdict": "PASS",
@@ -443,7 +540,7 @@
     },
     "NATIVE_BROWSER_E2E_GATE": {
       "verdict": "PASS",
-      "evidence": "Four native browser scenarios pass: existing infrastructure, customer, groups and downloader; separate eight lightweight browser tests are not the authoritative product proof."
+      "evidence": "Four separate real API/PostgreSQL scenarios PASS in each of three instrumented executions; historical single flake retained and explicitly accepted CASE B."
     },
     "PERSIAN_RTL_GATE": {
       "verdict": "PASS",
@@ -459,11 +556,11 @@
     },
     "CI_GATE": {
       "verdict": "PASS",
-      "evidence": "All four final source workflows and five job logs reviewed with exact source SHA, no FAIL/panic/runner error; native/restore pipelines pipefail."
+      "evidence": "Required PR CI Go/Web/Security/Images all PASS at diagnostic source; two additional no-code native reruns PASS; actual logs inspected. Cancelled superseded push workflows disclosed separately."
     },
     "DOCUMENTATION_GATE": {
       "verdict": "PASS",
-      "evidence": "Four final documents include exact inventory, migration hashes, test count method, source CI and disclosed superseded failures/limits; evidence-only final commit."
+      "evidence": "Four existing architecture/validation/evidence/inventory files updated with diagnostic commit, three observations and explicit unresolved historical limitation; documentation-only ninth commit."
     }
   },
   "superseded_failures": [
@@ -504,6 +601,21 @@
       "cause": "First native.spec.ts positional regex selected four files; old ordinary login assertion failed after shared rate-window traffic; restore skipped",
       "correction": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1 uses /$spec$ so each iteration executes exactly one intended scenario, preserving all assertions and rate limits",
       "superseded_by": 37150904505
+    },
+    {
+      "run_id": 37151427539,
+      "attempt": 1,
+      "head": "c456cd57ffff9955dc71087af46d2c68ab215c52",
+      "cause": "UNKNOWN: first Downloader job remained QUEUED through MP4 assertion timeout; HTTP polling 200, reservation present, no observed lease; restore skipped",
+      "no_code_retry": {
+        "attempt": 2,
+        "native_job_id": 111288325247,
+        "conclusion": "success",
+        "four_native_browser_scenarios": "PASS",
+        "restore_recovery": "PASS"
+      },
+      "root_cause_proven": false,
+      "status": "Historical unresolved flake explicitly accepted under R3C-R6 CASE B; not claimed fixed"
     }
   ],
   "deferred": [
@@ -532,8 +644,9 @@
     }
   ],
   "commit_budget_exception": {
-    "authorized_total": 7,
-    "used_total": 7
+    "authorization": "R3C-R6",
+    "authorized_total": 9,
+    "used_total": 9
   },
   "prevalidation_publication": {
     "authorized": "R3C-R3",
@@ -558,7 +671,8 @@
     "Inherited 24-hour lease horizon requires operator recovery beyond its deadline.",
     "Cleanup considers at most 1024 job directories per pass and retains unknown paths for operator review; production capacity/retention tuning unvalidated.",
     "Operational outcomes are durable audit/state/failure categories and bounded category logging; no new dedicated metrics backend.",
-    "No external exactly-once delivery claim. Inherited GO-2026-5932 remains disclosed: final govulncheck reports one module-only advisory, zero imported-package/called vulnerabilities; no advisory-free graph claim."
+    "No external exactly-once delivery claim. Inherited GO-2026-5932 remains disclosed: final govulncheck reports one module-only advisory, zero imported-package/called vulnerabilities; no advisory-free graph claim.",
+    "One historical PR Downloader browser QUEUED/no-format flake has UNKNOWN root cause. Not reproduced in three instrumented executions; accepted under explicit R3C-R6 CASE B, not claimed repaired. Future recurrences require correlation diagnostics and corrective authorization."
   ],
   "r3b_changes": "NONE (frozen branch unchanged)",
   "r3a_changes": "NONE (frozen branch unchanged)",
@@ -615,5 +729,365 @@
     }
   ],
   "no_production_operations": true,
-  "verdict": "TELMIVO_R3C_DOWNLOADER_VERTICAL_PASS"
+  "verdict": "TELMIVO_R3C_DOWNLOADER_VERTICAL_PASS",
+  "previously_validated_functional_source_head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+  "previous_final_delivery_head": "c456cd57ffff9955dc71087af46d2c68ab215c52",
+  "previous_source_ci_runs": [
+    {
+      "id": 37150904191,
+      "name": "Security Baseline",
+      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904191"
+    },
+    {
+      "id": 37150904207,
+      "name": "CI Web",
+      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904207"
+    },
+    {
+      "id": 37150904309,
+      "name": "Build Images",
+      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904309"
+    },
+    {
+      "id": 37150904505,
+      "name": "CI Go",
+      "head": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37150904505"
+    }
+  ],
+  "previous_reviewed_job_logs": [
+    {
+      "job_id": 111284417250,
+      "sha256": "316cd4b12e52e3be4525dd73a54f4636c2d08b10cb489d70afc6cb32580ece23",
+      "bytes": 19326,
+      "inspected": true
+    },
+    {
+      "job_id": 111284417641,
+      "sha256": "9010839f2daeadee4aa3b101d657882d8be15dcbdbeb5cfbd2603ec0ca8fc227",
+      "bytes": 46078,
+      "inspected": true
+    },
+    {
+      "job_id": 111284417705,
+      "sha256": "eaf5b540d98d4d9ea5ca0a89b68f55441fda26139cdaa5200fa0c59c8c933d40",
+      "bytes": 235046,
+      "inspected": true
+    },
+    {
+      "job_id": 111284418180,
+      "sha256": "3cd8547399b2926eff4c1aa88a30e0e439902de16cf11668cd69af4c3649959a",
+      "bytes": 82839,
+      "inspected": true
+    },
+    {
+      "job_id": 111284418360,
+      "sha256": "b778eab9b87a4e174d06d85410d647af66753d227db69f1dc41a8b4011459818",
+      "bytes": 204160,
+      "inspected": true
+    }
+  ],
+  "previous_recovery_evidence": {
+    "verdict": "PASS",
+    "actual_stage_executed": true,
+    "tests": [
+      "TestR2BRecovered",
+      "TestR3CRecovered"
+    ],
+    "canonical_manifest_lines": 88,
+    "manifest_before_sha256": "952b7887c890aea9a3316aaa24f4e24ad941975dd90ec93b3d1e9a7cecc42eb2",
+    "manifest_after_sha256": "952b7887c890aea9a3316aaa24f4e24ad941975dd90ec93b3d1e9a7cecc42eb2",
+    "identical": true,
+    "artifact": [
+      {
+        "id": 11283862958,
+        "name": "native-results",
+        "size_in_bytes": 557692,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11283862958",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11283862958/zip",
+        "expired": false,
+        "created_at": "2026-10-03T20:20:12Z",
+        "expires_at": "2027-01-01T20:15:44Z",
+        "updated_at": "2026-10-03T20:20:12Z",
+        "digest": "sha256:41dabca266e6ac7d6e17026b2677d179d335430c26b5323c910ff102f7b086d5",
+        "workflow_run": {
+          "id": 37150904505,
+          "repository_id": 1402424650,
+          "head_repository_id": 1402424650,
+          "head_branch": "feature/r3c-downloader-bot-v0.1",
+          "head_sha": "0d6d601c99e464c53bd91495738dd15bbbd6f1d1"
+        }
+      }
+    ],
+    "assertions": [
+      "relationship",
+      "reserved snapshot",
+      "cancel intent",
+      "reclaim",
+      "stale Finish denied",
+      "completed/unknown no replay",
+      "one acknowledged delivery",
+      "workspace isolation"
+    ]
+  },
+  "dispatch_diagnostic_wave": {
+    "authorization": "R3C-R6",
+    "observability_defect": "PROVEN",
+    "scope": "Structured diagnostics + one native diagnostic assertion + unit privacy/classes coverage; SQL literals, dispatch ordering/frequency/filter result, lease/quota behavior, 0011 and browser assertions/timeouts unchanged",
+    "coordinate_redaction": "SHA256(workspace:user), first 12 bytes; structured correlation field, never metric label",
+    "transaction_semantics": "job_created explicitly PENDING_COMMIT; state_transition and awaiting_format only after transaction succeeds; committed_state is authoritative when in-memory state field still ANALYZING",
+    "events": [
+      "downloader_job_created",
+      "downloader_poll_started",
+      "downloader_poll_exited",
+      "downloader_dispatch_cycle_started",
+      "downloader_dispatch_cycle_completed",
+      "downloader_dispatch_coordinates_scanned",
+      "downloader_fixture_account_lookup",
+      "downloader_dispatch_filter_decision",
+      "downloader_dispatch_jobs_found",
+      "downloader_dispatch_candidate_observed",
+      "downloader_dispatch_slot_busy",
+      "downloader_worker_run_started",
+      "downloader_worker_run_ended",
+      "downloader_worker_run_result",
+      "downloader_lease_acquire_attempt",
+      "downloader_lease_acquired",
+      "downloader_lease_acquire_failed",
+      "downloader_state_transition",
+      "downloader_analysis_started",
+      "downloader_analysis_completed",
+      "downloader_awaiting_format",
+      "downloader_cleanup_failed",
+      "downloader_targets_failed"
+    ],
+    "native_test": "TestR3CDiagnostics uses real restricted PostgreSQL, existing Poll/targets/Dispatch/Acquire and injected provider; ordered committed-state diagnostic signal, no fixed sleep or browser assertion weakening",
+    "instrumented_executions": [
+      {
+        "run_id": 37157360611,
+        "attempt": 1,
+        "job_id": 111303419414,
+        "conclusion": "success"
+      },
+      {
+        "run_id": 37157360611,
+        "attempt": 2,
+        "job_id": 111304355763,
+        "conclusion": "success"
+      },
+      {
+        "run_id": 37157360611,
+        "attempt": 3,
+        "job_id": 111305324161,
+        "conclusion": "success"
+      }
+    ],
+    "diagnostic_artifacts": [
+      {
+        "id": 11286950436,
+        "name": "native-results",
+        "size_in_bytes": 585459,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286950436",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286950436/zip",
+        "expired": false,
+        "created_at": "2026-10-03T22:23:32Z",
+        "expires_at": "2027-01-01T22:18:34Z",
+        "updated_at": "2026-10-03T22:23:32Z",
+        "digest": "sha256:ee506bc4b6ca3adcc9674d92c0c56a190b6911c8aa23787f1b7e9bac97a178f7",
+        "workflow_run": {
+          "id": 37157360611,
+          "repository_id": 1402424650,
+          "head_repository_id": 1402424650,
+          "head_branch": "feature/r3c-downloader-bot-v0.1",
+          "head_sha": "08352a52edb1dd4403e05e985335e1a4456a31d9"
+        }
+      },
+      {
+        "id": 11286540296,
+        "name": "native-results",
+        "size_in_bytes": 583975,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286540296",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11286540296/zip",
+        "expired": false,
+        "created_at": "2026-10-03T22:12:21Z",
+        "expires_at": "2027-01-01T22:07:26Z",
+        "updated_at": "2026-10-03T22:12:21Z",
+        "digest": "sha256:9beb32f120fe10d20d5804ef9a5f48d0b711c2351b7bd859311054a1eabf4f8a",
+        "workflow_run": {
+          "id": 37157360611,
+          "repository_id": 1402424650,
+          "head_repository_id": 1402424650,
+          "head_branch": "feature/r3c-downloader-bot-v0.1",
+          "head_sha": "08352a52edb1dd4403e05e985335e1a4456a31d9"
+        }
+      },
+      {
+        "id": 11285564211,
+        "name": "native-results",
+        "size_in_bytes": 586885,
+        "url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11285564211",
+        "archive_download_url": "https://api.github.com/repos/naseri-coder/TELMIVO/actions/artifacts/11285564211/zip",
+        "expired": false,
+        "created_at": "2026-10-03T22:17:59Z",
+        "expires_at": "2027-01-01T22:13:01Z",
+        "updated_at": "2026-10-03T22:17:59Z",
+        "digest": "sha256:1a3c2ef26b9e0e59aca7fe5dd2252ed1288bbe691e03f628095128d1c91ca975",
+        "workflow_run": {
+          "id": 37157360611,
+          "repository_id": 1402424650,
+          "head_repository_id": 1402424650,
+          "head_branch": "feature/r3c-downloader-bot-v0.1",
+          "head_sha": "08352a52edb1dd4403e05e985335e1a4456a31d9"
+        }
+      }
+    ],
+    "journey_observations": [
+      {
+        "job_id": "475dec18-5ef3-472c-a6ba-53ecb8f91d2b",
+        "media_job_id": "2f8f0f77-0347-4ed5-8cda-48722752d0fc",
+        "coordinate_id": "d5540da61354d30ede162752",
+        "awaiting_format_ms": 1351,
+        "events": [
+          "downloader_job_created",
+          "downloader_dispatch_candidate_observed",
+          "downloader_worker_run_started",
+          "downloader_lease_acquire_attempt",
+          "downloader_lease_acquired",
+          "downloader_state_transition",
+          "downloader_analysis_started",
+          "downloader_analysis_completed",
+          "downloader_awaiting_format",
+          "downloader_worker_run_ended",
+          "downloader_dispatch_candidate_observed",
+          "downloader_worker_run_started",
+          "downloader_lease_acquire_attempt",
+          "downloader_lease_acquired",
+          "downloader_state_transition",
+          "downloader_state_transition",
+          "downloader_worker_run_ended"
+        ],
+        "max_coordinates_scanned": 23,
+        "max_discovery_ms": 10,
+        "manifest_identical": true,
+        "manifest_sha256": "6530274875d9c5aed005c2f96b86d516d8b9a2ce437a0d739ee97fbba9330f43"
+      },
+      {
+        "job_id": "903e8459-a8ea-4470-b25a-85edd590e51a",
+        "media_job_id": "118282a0-72d8-4f9d-a3a0-0c985ce14973",
+        "coordinate_id": "fa472807e0ec9c3e94f351e0",
+        "awaiting_format_ms": 198,
+        "events": [
+          "downloader_job_created",
+          "downloader_dispatch_candidate_observed",
+          "downloader_worker_run_started",
+          "downloader_lease_acquire_attempt",
+          "downloader_lease_acquired",
+          "downloader_state_transition",
+          "downloader_analysis_started",
+          "downloader_analysis_completed",
+          "downloader_awaiting_format",
+          "downloader_worker_run_ended",
+          "downloader_dispatch_candidate_observed",
+          "downloader_worker_run_started",
+          "downloader_lease_acquire_attempt",
+          "downloader_lease_acquired",
+          "downloader_state_transition",
+          "downloader_state_transition",
+          "downloader_worker_run_ended"
+        ],
+        "max_coordinates_scanned": 23,
+        "max_discovery_ms": 64,
+        "manifest_identical": true,
+        "manifest_sha256": "de49b1719bc3e0ce71d37883d4ed4575bd3a8e981b2176409383fc891b4816c2"
+      },
+      {
+        "job_id": "e189f393-28cd-4655-92f4-1696fcf8c58e",
+        "media_job_id": "0783903c-537c-4a44-beb2-db9975ed8c52",
+        "coordinate_id": "376b69685721201679e182bc",
+        "awaiting_format_ms": 1947,
+        "events": [
+          "downloader_job_created",
+          "downloader_dispatch_candidate_observed",
+          "downloader_worker_run_started",
+          "downloader_lease_acquire_attempt",
+          "downloader_lease_acquired",
+          "downloader_state_transition",
+          "downloader_analysis_started",
+          "downloader_analysis_completed",
+          "downloader_awaiting_format",
+          "downloader_worker_run_ended",
+          "downloader_dispatch_candidate_observed",
+          "downloader_worker_run_started",
+          "downloader_lease_acquire_attempt",
+          "downloader_lease_acquired",
+          "downloader_state_transition",
+          "downloader_state_transition",
+          "downloader_worker_run_ended"
+        ],
+        "max_coordinates_scanned": 23,
+        "max_discovery_ms": 17,
+        "manifest_identical": true,
+        "manifest_sha256": "594061e421eea9171a54064ef61fbedf87f381694198afef21a319167075eeca"
+      }
+    ],
+    "flake_reproduced": false,
+    "classification": "FLAKINESS_NOT_REPRODUCED_WITH_DIAGNOSTICS",
+    "root_cause_status": "NOT_PROVEN",
+    "root_cause": "UNKNOWN",
+    "product_defect_requires_fix": "NOT_PROVEN",
+    "acceptance": "CASE B: three instrumented native/browser/restore executions PASS, prior functional source and retry evidence valid; historical single flake retained as unresolved known limitation",
+    "cancelled_push_runs": [
+      {
+        "run_id": 37157357426,
+        "status": "cancelled",
+        "reason": "push superseded by pull_request concurrency",
+        "native_observation": false
+      },
+      {
+        "run_id": 37157357649,
+        "status": "cancelled",
+        "reason": "push superseded by pull_request concurrency",
+        "native_observation": false
+      },
+      {
+        "run_id": 37157357491,
+        "status": "cancelled",
+        "reason": "push superseded by pull_request concurrency",
+        "native_observation": false
+      },
+      {
+        "run_id": 37157357401,
+        "status": "cancelled",
+        "reason": "push superseded by pull_request concurrency",
+        "native_observation": false
+      }
+    ],
+    "starvation_analysis": {
+      "observed_failure_hypothesis": "NOT_PROVEN",
+      "historical_candidates": "All historical downloader.queued coordinates including terminal jobs; filter/eligibility applied afterward",
+      "cursor": "Canonical fixed-width UUID text concatenation matches tuple order; model check only, no new native collation claim",
+      "current_fixture_evidence": "Prior successful source and retry restore manifests: 51 download_jobs, 70 workspaces, 279 total outbox events; diagnostic runs scan maximum 23 coordinates",
+      "model": "Fixed 51/70/128 coordinate population behind intermediate cursor: at most 3 discovery calls; model with 2049: 18 calls; not claimed native PostgreSQL reproduction",
+      "large_scale_limitation": "Historical scan cost/cycling latency can grow; continuous arrivals ahead of cursor can delay wrap. No dispatch redesign authorized or implemented"
+    }
+  },
+  "draft_pr": {
+    "number": 4,
+    "url": "https://github.com/naseri-coder/TELMIVO/pull/4",
+    "state": "OPEN",
+    "draft": true,
+    "merged": false,
+    "base": "feature/r3b-group-bot-v0.1"
+  }
 }
