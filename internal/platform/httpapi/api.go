@@ -9,6 +9,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
+	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
@@ -40,6 +41,7 @@ type API struct {
 	Config   config.Config
 	Identity *identity.Service
 	Requests atomic.Uint64
+	Groups   *groupbot.Service
 	Storage  *storage.Scoped
 }
 type ctxKey string
@@ -53,6 +55,12 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /health/ready", a.ready)
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/groups", a.groupList)
+	protected.HandleFunc("POST /api/v1/groups/claims", a.groupClaim)
+	protected.HandleFunc("GET /api/v1/groups/{group}", a.groupDetail)
+	protected.HandleFunc("PATCH /api/v1/groups/{group}/policy", a.groupConfigure)
+	protected.HandleFunc("POST /api/v1/groups/{group}/actions", a.groupModerate)
+	protected.HandleFunc("GET /api/v1/groups/{group}/history", a.groupHistory)
 	protected.HandleFunc("GET /api/v1/auth/me", a.me)
 	protected.HandleFunc("GET /api/v1/auth/permissions", a.adminPermissions)
 	protected.HandleFunc("GET /api/v1/access-policies", a.policyList)
@@ -206,6 +214,18 @@ func workspace(r *http.Request) string   { return r.Header.Get("X-Workspace-ID")
 func handleError(w http.ResponseWriter, e error) {
 	if errors.Is(e, database.ErrForbidden) {
 		fail(w, 403, "forbidden")
+		return
+	}
+	if errors.Is(e, groupbot.ErrAuthority) {
+		fail(w, 503, "GROUP_AUTHORITY_UNAVAILABLE")
+		return
+	}
+	if errors.Is(e, groupbot.ErrRights) {
+		fail(w, 403, "GROUP_BOT_RIGHT_MISSING")
+		return
+	}
+	if errors.Is(e, groupbot.ErrProtected) {
+		fail(w, 403, "GROUP_TARGET_PROTECTED")
 		return
 	}
 	var policyDenied *policies.Denied

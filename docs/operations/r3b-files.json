@@ -1,0 +1,178 @@
+{
+  "base": "05fc043c53a7a4361b1b99b092c0d253fdf2e881",
+  "validated_source_head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+  "delivery_revision": "HEAD at documentation commit",
+  "source_count": 28,
+  "final_count": 33,
+  "inventory_method": "git diff --name-status base..validated source plus exactly five documentation additions; final commit comparison verifies same set",
+  "files": [
+    {
+      "status": "M",
+      "path": ".github/workflows/build-images.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci-go.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci-web.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/migration-check.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/security.yml"
+    },
+    {
+      "status": "A",
+      "path": "db/migrations/0010_group_moderation.sql"
+    },
+    {
+      "status": "M",
+      "path": "infrastructure/postgres/grants.sql"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/groupbot/policy.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/groupbot/policy_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/groupbot/service.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/groupbot/update.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/integrations/telegram/group.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/integrations/telegram/group_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/integrations/telegram/group_webhook.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/config/config.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/httpapi/api.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/httpapi/groups.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/runtime/runtime.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/testfixtures/group.go"
+    },
+    {
+      "status": "M",
+      "path": "tests/integration/native_test.go"
+    },
+    {
+      "status": "A",
+      "path": "tests/integration/r3b_test.go"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/e2e/groups.native.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/playwright.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/playwright.native.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/app/App.tsx"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/locales/fa/group-product.json"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/locales/index.ts"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/pages/Groups.tsx"
+    },
+    {
+      "status": "A",
+      "path": "docs/adr/ADR-019-group-moderation-history.md",
+      "kind": "documentation"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/r3b-group-bot.md",
+      "kind": "documentation"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r3b-validation.md",
+      "kind": "documentation"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r3b-evidence.json",
+      "kind": "documentation"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r3b-files.json",
+      "kind": "documentation"
+    }
+  ],
+  "content_hashes": {
+    ".github/workflows/build-images.yml": "cf5dbe8a1d4f46657c3188ffe56c727863e59411039a992b1c5ef4608b7e828c",
+    ".github/workflows/ci-go.yml": "63e6856f30de0aee6ee143384628b3f9891f4e33766bbc3c9320aad38dcf30bd",
+    ".github/workflows/ci-web.yml": "1c498ef104084a9a74ae76b65e5d650826aaf54c1f1e46627e2d819e02374244",
+    ".github/workflows/migration-check.yml": "f250a23f3a1d6f5dc609809dfacc3f8740d7e664fe31c12d7990a166bd686759",
+    ".github/workflows/security.yml": "f65547587e13a3a1d8f9d236191b79931e16763713ae830ec3933527cc167b46",
+    "db/migrations/0010_group_moderation.sql": "d20377a245c1ccba5bc158d6e4e1b464056ef7f641cc1f8fde5356f21c7ca99b",
+    "infrastructure/postgres/grants.sql": "8ec3db4b3a0f9484369f05f9b6e49739b84e6312f25fcb937d35ec772230521d",
+    "internal/domains/groupbot/policy.go": "deb43474a5ed1cfa2789d0caf12f199b45980d067f933bcdbc0d8b276ce7f059",
+    "internal/domains/groupbot/policy_test.go": "d831d04fcd77d3f5a7882eca0a99ac271a1c5c314c1aa2ab6505844ec6cada21",
+    "internal/domains/groupbot/service.go": "5cfdf03312ea203639119abbbc6660116b7af8d7fe7c41902a7df3940831b950",
+    "internal/domains/groupbot/update.go": "db5df3d575c89f79f48042890e7a783a063faf81a417a17db0c228505cfa4a83",
+    "internal/integrations/telegram/group.go": "080bb1064f86c435de91eed7993108f977f33cf54e0b0c6ff4c54ebcd4f46b61",
+    "internal/integrations/telegram/group_test.go": "18e313ce4ba898d14eb921afb49a095dd674497746f38b7d60b22e9bccf8eff9",
+    "internal/integrations/telegram/group_webhook.go": "db6a5638228d46f017f3ab0f1794c71e693a31688c738261ae0f3af3fc948c84",
+    "internal/platform/config/config.go": "c02d846e56eba748a960525458dfe30100d5e42265b1657b6160e6d5c202b41a",
+    "internal/platform/httpapi/api.go": "332d0cde50e88ec0ec764b9c650ad2e8287a127663c417d8e678f27769fef4b2",
+    "internal/platform/httpapi/groups.go": "18f078282be6622d521df00046f8beb44f1639416d5feab17470cd0a71663f8a",
+    "internal/platform/runtime/runtime.go": "920391eb00c758446acde9c12a969d928ac94c8e18f8450f684734b7b2f7839e",
+    "internal/platform/testfixtures/group.go": "82658dd883ea7b5326410921fa69e3c690f8f0554c86ccbe00f2d9b348e5a876",
+    "tests/integration/native_test.go": "ae31a829b657f82215570b8551c6679f0b42ecff0371524bdd3f0483089dcd80",
+    "tests/integration/r3b_test.go": "a60a64a72c2aec7089b8a795ee8a49066dbac371bbe5d974227c992118257465",
+    "web/miniapp/e2e/groups.native.spec.ts": "5dcf516ba2da4cddb815dd09cd47604af4ef5d04c2d6c4bdca7cf5517d7ee8fe",
+    "web/miniapp/playwright.config.ts": "98377e1ed95ec44ec2fd6b6f445bbb688e9e74538273469a13d2c9dcbb51f03c",
+    "web/miniapp/playwright.native.config.ts": "f3cd8d506ccc7598969e0c22d57e35699edabd61cb71e08b030a77e63f5eff9f",
+    "web/miniapp/src/app/App.tsx": "0c63bb57acd373c103d3ad633c31c222ac4eb14fd3ebb07e72c984b68c30af3b",
+    "web/miniapp/src/locales/fa/group-product.json": "a36e3eb4a481fb3638cd5192bdd1ca123fd06b640d74dadd31c3fca26304c136",
+    "web/miniapp/src/locales/index.ts": "285fc8c695f56977278b1e986d359061b075782e6cdcc3c072c9fbfd975bce5d",
+    "web/miniapp/src/pages/Groups.tsx": "0470fdf939911f6d66cdd2972ab1ac766c11a2fab56e6fdaf034a01f8181ac1c"
+  },
+  "self_hash_policy": "Evidence/inventory own hashes omitted to avoid recursive content; Git tree/blob identity provides immutable final documentation hashes."
+}

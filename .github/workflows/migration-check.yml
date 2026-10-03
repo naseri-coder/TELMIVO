@@ -64,7 +64,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/check-test-target.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -72,6 +72,7 @@ jobs:
         env:
           TELMIVO_ENV: test
           SYNTHETIC_MODE: 'true'
+          TEST_GROUP_AUTHORITY_FIXTURE: 'true'
           BOT_TOKEN: synthetic-signing-only
           ADMIN_TELEGRAM_IDS: '94000001'
           HTTP_ADDR: 127.0.0.1:8080

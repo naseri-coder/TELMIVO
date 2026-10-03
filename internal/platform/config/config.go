@@ -15,6 +15,7 @@ type Config struct {
 	GroupBotToken, DownloaderBotToken                                      string
 	AdminIDs                                                               []int64
 	Synthetic                                                              bool
+	GroupTestAuthority                                                     bool
 	SessionTTL, JobTimeout                                                 time.Duration
 	MediaConcurrency, MaxMediaBytes                                        int64
 }
@@ -41,6 +42,13 @@ func Load(get func(string) string) (Config, error) {
 		c.Synthetic, e = strconv.ParseBool(v)
 		if e != nil {
 			return c, errors.New("invalid synthetic mode")
+		}
+	}
+	if v := get("TEST_GROUP_AUTHORITY_FIXTURE"); v != "" {
+		var e error
+		c.GroupTestAuthority, e = strconv.ParseBool(v)
+		if e != nil || c.GroupTestAuthority && (c.Environment != "test" || !c.Synthetic) {
+			return c, errors.New("group fixture requires explicit synthetic test mode")
 		}
 	}
 	for _, id := range strings.Split(get("ADMIN_TELEGRAM_IDS"), ",") {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
+	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/mainbot"
 	telegramclient "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
@@ -15,10 +16,12 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/httpapi"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
 	telegramtransport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
+	"github.com/naseri-coder/TELMIVO/internal/platform/testfixtures"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -57,7 +60,12 @@ func Run(role string) error {
 		return e
 	}
 	ident := &identity.Service{DB: db, Admins: c.AdminIDs, SessionTTL: c.SessionTTL}
-	api := &httpapi.API{DB: db, Cache: redis, Queue: q, Config: c, Identity: ident}
+	groupClient := telegramclient.New(c.GroupBotToken, !c.Synthetic)
+	groups := &groupbot.Service{DB: db, Identity: ident, Authority: groupClient, Transport: groupClient, MiniAppURL: c.MiniAppURL}
+	if c.GroupTestAuthority {
+		groups.Authority = testfixtures.GroupAuthority{}
+	}
+	api := &httpapi.API{DB: db, Cache: redis, Queue: q, Config: c, Identity: ident, Groups: groups}
 	if role == "worker" || role == "media-worker" {
 		return worker(ctx, role, db, q, c)
 	}
@@ -71,7 +79,7 @@ func Run(role string) error {
 				w.WriteHeader(200)
 				return
 			}
-			if role != "main-bot" || c.WebhookSecret == "" || c.BotToken == "" {
+			if (role != "main-bot" && role != "group-bot") || c.WebhookSecret == "" || (role == "main-bot" && c.BotToken == "") || (role == "group-bot" && c.GroupBotToken == "") {
 				w.WriteHeader(503)
 				return
 			}
@@ -80,6 +88,8 @@ func Run(role string) error {
 		if role == "main-bot" && !c.Synthetic {
 			client := telegramclient.New(c.BotToken, true)
 			mux.Handle("POST /webhook", telegramclient.MainBotWebhook(c.WebhookSecret, &mainbot.Service{Identity: ident, MiniAppURL: c.MiniAppURL, Membership: client}))
+		} else if role == "group-bot" && !c.Synthetic {
+			mux.Handle("POST /webhook", telegramclient.GroupBotWebhook(c.WebhookSecret, groups))
 		} else {
 			mux.HandleFunc("POST /webhook", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(501) })
 		}
@@ -129,6 +139,22 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 	go func() {
 		defer wg.Done()
 		errorsCh <- q.Consume(ctx, db, subject, durable, func(ctx context.Context, tx pgx.Tx, e queue.Envelope) error {
+			if e.Type == "group.action" {
+				client := telegramclient.New(c.GroupBotToken, !c.Synthetic)
+				s := &groupbot.Service{DB: db, Authority: client, Transport: client}
+				return s.Deliver(ctx, tx, e.WorkspaceID, e.CorrelationID, e.Payload)
+			}
+			if e.Type == "group.reply" && !c.Synthetic {
+				var p struct {
+					Chat int64  `json:"chat_id"`
+					Body string `json:"body"`
+				}
+				if json.Unmarshal(e.Payload, &p) != nil || p.Chat >= 0 {
+					return database.ErrInvalid
+				}
+				_, err := telegramclient.New(c.GroupBotToken, true).Send(ctx, telegramtransport.Message{ChatID: p.Chat, Text: p.Body})
+				return err
+			}
 			var payload struct {
 				UserID        string `json:"user_id"`
 				DownloadJobID string `json:"download_job_id"`
@@ -153,7 +179,12 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 				if err != nil {
 					return err
 				}
-				_, err = telegramclient.New(c.BotToken, true).Send(ctx, telegramtransport.Message{ChatID: chat, Text: payload.Body, Markup: payload.Markup})
+				_, err = telegramclient.New(func() string {
+					if strings.HasPrefix(payload.Key, "group-bot:") {
+						return c.GroupBotToken
+					}
+					return c.BotToken
+				}(), true).Send(ctx, telegramtransport.Message{ChatID: chat, Text: payload.Body, Markup: payload.Markup})
 				return err
 			}
 			_, err := tx.Exec(ctx, "INSERT INTO notifications(workspace_id,user_id,message_key,parameters,status,idempotency_key) VALUES($1,$2,$3,$4,'SIMULATED',$5) ON CONFLICT(workspace_id,idempotency_key) DO NOTHING", e.WorkspaceID, payload.UserID, e.Type, map[string]any{"body": payload.Body, "markup": payload.Markup}, payload.Key)
