@@ -1,5 +1,16 @@
 # Changelog
 
+## Foundation Extension R2A — 2026-10-03
+
+- Shared official entry onboarding and once-per-subject versioned trial snapshots.
+- Dynamic calendar/rolling allowances, idempotent reservations and success/failure settlement.
+- Plugin capabilities, resource merge strategies and separate database-protected safety caps.
+- Effective-dated price/offer/paywall configuration and granular policy administration.
+- Persian policy management and runtime-equivalent backend Preview.
+- Migrations 0007–0008, native targeted acceptance tests and policy UI browser smoke.
+
+Evidence and bounded limitations: `docs/operations/r2a-validation.md`.
+
 ## Foundation Validation R1 — 2026-10-03
 
 - Preserve the V0.1 source checkpoint; add granular platform permissions and a global plan usage guard.
