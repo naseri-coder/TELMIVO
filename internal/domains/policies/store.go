@@ -59,6 +59,9 @@ func Save(ctx context.Context, tx pgx.Tx, actor, workspace, correlation string, 
 	if e := Validate(v); e != nil {
 		return v, e
 	}
+	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(7100201)"); e != nil {
+		return v, e
+	}
 	if _, e := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "policy:"+v.Key); e != nil {
 		return v, e
 	}

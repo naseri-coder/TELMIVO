@@ -125,6 +125,12 @@ type groupAuthority bool
 
 func (g groupAuthority) CanAdmin(context.Context, int64, int64) (bool, error) { return bool(g), nil }
 func TestR2AGroupTrial(t *testing.T) {
+	_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=true,rollout_status='ON' WHERE feature_key='groups'")
+	must(t, e)
+	defer func() {
+		_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=false,rollout_status='OFF' WHERE feature_key='groups'")
+		must(t, e)
+	}()
 	u := fixture(t, true)
 	var telegram int64
 	must(t, db.Pool.QueryRow(ctx, "SELECT telegram_id FROM telegram_accounts WHERE user_id=$1", u.UserID).Scan(&telegram))
@@ -166,24 +172,52 @@ func TestR2AGroupTrial(t *testing.T) {
 	t.Run("config_survives_expiry_policy_editable", func(t *testing.T) {
 		v := activePolicy(t, u, "group_product_trial")
 		v.Definition.Duration = 30 * 86400
-		savePolicy(t, u, v)
+		v = savePolicy(t, u, v)
+		var nextGroup string
+		tenant(t, u, func(tx pgx.Tx) error {
+			var e error
+			nextGroup, e = identity.ClaimGroup(ctx, tx, u.UserID, u.WorkspaceID, "new-group-version", telegram, chat-1000, "گروه دوم", groupAuthority(true))
+			return e
+		})
+		if n := number(t, u, "SELECT extract(epoch FROM ends_at-started_at)::bigint FROM trial_enrollments WHERE subject_id=$1", nextGroup); n != 30*86400 {
+			t.Fatal("new group duration", n)
+		}
 		tenant(t, u, func(tx pgx.Tx) error {
 			var end time.Time
 			if e := tx.QueryRow(ctx, "SELECT ends_at FROM trial_enrollments WHERE subject_id=$1", group).Scan(&end); e != nil {
 				return e
 			}
-			r := policies.Request{User: u.UserID, Workspace: u.WorkspaceID, Role: "OWNER", Feature: "groups", Permission: "groups.read", Group: group, Now: end.Add(time.Second)}
+			r := policies.Request{User: u.UserID, Workspace: u.WorkspaceID, Role: "OWNER", Feature: "groups", Permission: "groups.read", Group: group, Now: end.Add(-time.Second)}
+			active, e := policies.Resolve(ctx, tx, r)
+			if e != nil {
+				return e
+			}
+			if !active.Allowed {
+				t.Fatalf("active group trial denied %+v", active)
+			}
+			r.Now = end.Add(time.Second)
 			d, e := policies.Resolve(ctx, tx, r)
 			if e != nil {
 				return e
 			}
-			if d.Allowed {
-				t.Fatal("expired/disabled group allowed")
+			if d.Allowed || d.Reason != "TRIAL_EXPIRED" {
+				t.Fatal("expired/disabled group allowed", d)
 			}
 			return nil
 		})
 		if number(t, u, "SELECT count(*) FROM group_settings WHERE group_id=$1", group) != 1 {
 			t.Fatal("settings deleted")
+		}
+		v.Enabled = false
+		savePolicy(t, u, v)
+		var disabledGroup string
+		tenant(t, u, func(tx pgx.Tx) error {
+			var e error
+			disabledGroup, e = identity.ClaimGroup(ctx, tx, u.UserID, u.WorkspaceID, "disabled-group-trial", telegram, chat-2000, "بدون دوره", groupAuthority(true))
+			return e
+		})
+		if number(t, u, "SELECT count(*) FROM trial_enrollments WHERE subject_id=$1", disabledGroup) != 0 {
+			t.Fatal("disabled trial enrolled")
 		}
 	})
 }
@@ -442,4 +476,65 @@ func apiJSON(t *testing.T, u identity.Result, path, body string) []byte {
 		t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
 	}
 	return w.Body.Bytes()
+}
+
+func TestR2AMiniAppOfficialSigning(t *testing.T) {
+	id := int64(93000000) + sequence.Add(1)
+	raw := signed(id)
+	b, e := json.Marshal(map[string]string{"init_data": raw})
+	must(t, e)
+	a := httpapi.API{DB: db, Identity: &identity.Service{DB: db, SessionTTL: time.Hour}, Config: config.Config{MiniAppURL: "http://localhost:5173", BotToken: "unrelated-synthetic-token", DownloaderBotToken: "synthetic-signing-only", Synthetic: true}}
+	r := httptest.NewRequest("POST", "/api/v1/auth/telegram", strings.NewReader(string(b)))
+	r.Header.Set("Origin", "http://localhost:5173")
+	w := httptest.NewRecorder()
+	a.Handler().ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("direct official Mini App %d %s", w.Code, w.Body.String())
+	}
+	var first identity.Result
+	must(t, json.Unmarshal(w.Body.Bytes(), &first))
+	same := discover(t, id, "MAIN_BOT")
+	if same.UserID != first.UserID || same.WorkspaceID != first.WorkspaceID {
+		t.Fatal("main gateway required")
+	}
+}
+func TestR2AAdminRevisions(t *testing.T) {
+	u := fixture(t, true)
+	if code := apiRequest(t, u, "/api/v1/plans", "POST", `{"key":"R2A_TEST","name":"پلن آزمون","clone":"FREE"}`); code != 200 {
+		t.Fatal("create API", code)
+	}
+	if code := apiRequest(t, u, "/api/v1/plans/R2A_TEST/entitlements/tickets", "PUT", `{"enabled":true,"limit":"15"}`); code != 200 {
+		t.Fatal("plan access API", code)
+	}
+	if n := number(t, u, "SELECT (new_summary->>'version')::bigint FROM audit_logs WHERE action='plan.entitlement.edit' AND entity_id='R2A_TEST'"); n != 2 {
+		t.Fatal("catalog revision audit", n)
+	}
+	if n := number(t, u, "SELECT (old_summary->>'version')::bigint FROM audit_logs WHERE action='plan.entitlement.edit' AND entity_id='R2A_TEST'"); n != 1 {
+		t.Fatal("old catalog revision", n)
+	}
+	price := policies.Version{Key: "price_api_fixture", Kind: "PRICE", Feature: "downloads", Enabled: true, EffectiveFrom: time.Now().Add(-time.Second), Reason: "synthetic API policy", Definition: policies.Definition{Asset: "USD", AmountAtomic: "123", Scale: 2}}
+	b, e := json.Marshal(policies.Change{Version: price})
+	must(t, e)
+	if code := apiRequest(t, u, "/api/v1/access-policies", "POST", string(b)); code != 200 {
+		t.Fatal("policy save API", code)
+	}
+	if number(t, u, "SELECT count(*) FROM audit_logs WHERE entity_id='price_api_fixture' AND action='policy.version.create'") != 1 {
+		t.Fatal("API mutation audit")
+	}
+	target := fixture(t, false)
+	r := policyRequest(target)
+	tenant(t, target, func(tx pgx.Tx) error {
+		_, e := policies.Reserve(ctx, tx, r, "sealed-reservation")
+		if e != nil {
+			return e
+		}
+		return policies.Settle(ctx, tx, target.WorkspaceID, "sealed-reservation", false)
+	})
+	e = db.Tenant(ctx, target.UserID, target.WorkspaceID, false, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, "UPDATE quota_reservations SET state='RESERVED' WHERE operation_key='sealed-reservation'")
+		return e
+	})
+	if e == nil {
+		t.Fatal("terminal reservation resurrected")
+	}
 }

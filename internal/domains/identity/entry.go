@@ -62,6 +62,9 @@ func ClaimGroup(ctx context.Context, tx pgx.Tx, user, workspace, correlation str
 	if !allowed || !database.Permission(ctx, tx, user, workspace, "groups.moderate") {
 		return "", database.ErrForbidden
 	}
+	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "trial-user:"+user); e != nil {
+		return "", e
+	}
 	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", chat); e != nil {
 		return "", e
 	}

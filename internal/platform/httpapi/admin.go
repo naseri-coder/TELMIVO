@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
@@ -17,13 +18,56 @@ func (a *API) adminMutation(w http.ResponseWriter, r *http.Request, action, enti
 		if _, e := tx.Exec(r.Context(), "SELECT pg_advisory_xact_lock(7100201)"); e != nil {
 			return nil, e
 		}
+		before, old, e := catalogRevision(r.Context(), tx, entity, id, action)
+		if e != nil {
+			return nil, e
+		}
 		out, e := fn(tx)
 		if e != nil {
 			return nil, e
 		}
-		e = database.Audit(r.Context(), tx, user(r), workspace(r), action, entity, id, correlation(r), map[string]any{}, out)
+		if action == "plan.entitlement.edit" || action == "plan.plugin.edit" {
+			if _, e = tx.Exec(r.Context(), "UPDATE plans SET version=version+1,updated_at=now() WHERE key=$1", id); e != nil {
+				return nil, e
+			}
+		}
+		after, next, e := catalogRevision(r.Context(), tx, entity, id, action)
+		if e != nil {
+			return nil, e
+		}
+		if after == 0 && before > 0 {
+			after = before + 1
+		}
+		e = database.Audit(r.Context(), tx, user(r), workspace(r), action, entity, id, correlation(r), map[string]any{"version": before, "state": old}, map[string]any{"version": after, "state": next, "result": out, "effective_at": time.Now()})
 		return out, e
 	})
+}
+func catalogRevision(ctx context.Context, tx pgx.Tx, entity, id, action string) (int64, any, error) {
+	query := ""
+	switch entity {
+	case "plan":
+		query = "SELECT version,jsonb_build_object('name',name,'active',active) FROM plans WHERE key=$1"
+	case "plugin":
+		query = "SELECT configuration_version,jsonb_build_object('module_version',version,'status',status) FROM plugins WHERE key=$1"
+	case "feature":
+		query = "SELECT configuration_version,jsonb_build_object('enabled',enabled,'status',rollout_status) FROM feature_flags WHERE feature_key=$1"
+	case "entitlement":
+		table := "workspace_entitlement_overrides"
+		if action == "grant.set" || action == "grant.revoke" {
+			table = "temporary_grants"
+		}
+		query = "SELECT version,jsonb_build_object('enabled',enabled,'limit',limit_value,'expires_at',expires_at) FROM " + table + " WHERE feature_key=$1"
+	}
+	if query == "" {
+		return 0, nil, nil
+	}
+	var revision int64
+	var raw []byte
+	e := tx.QueryRow(ctx, query, id).Scan(&revision, &raw)
+	if e == pgx.ErrNoRows {
+		return 0, nil, nil
+	}
+	return revision, json.RawMessage(raw), e
 }
 func (a *API) createPlan(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -152,7 +196,7 @@ func (a *API) editPluginStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.adminMutation(w, r, "plugin.status", "plugin", r.PathValue("plugin"), func(tx pgx.Tx) (any, error) {
-		tag, e := tx.Exec(r.Context(), "UPDATE plugins SET status=$2,updated_at=now() WHERE key=$1", r.PathValue("plugin"), in.Status)
+		tag, e := tx.Exec(r.Context(), "UPDATE plugins SET status=$2,configuration_version=configuration_version+1,updated_at=now() WHERE key=$1", r.PathValue("plugin"), in.Status)
 		if e != nil {
 			return nil, e
 		}
@@ -175,7 +219,7 @@ func (a *API) editFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.adminMutation(w, r, "feature.flag.edit", "feature", r.PathValue("feature"), func(tx pgx.Tx) (any, error) {
-		tag, e := tx.Exec(r.Context(), "UPDATE feature_flags SET enabled=$2,rollout_status=$3,updated_at=now() WHERE feature_key=$1", r.PathValue("feature"), in.Enabled, in.Status)
+		tag, e := tx.Exec(r.Context(), "UPDATE feature_flags SET enabled=$2,rollout_status=$3,configuration_version=configuration_version+1,updated_at=now() WHERE feature_key=$1", r.PathValue("feature"), in.Enabled, in.Status)
 		if e != nil {
 			return nil, e
 		}
@@ -205,7 +249,7 @@ func (a *API) setRule(w http.ResponseWriter, r *http.Request, table, action stri
 		return
 	}
 	a.adminMutation(w, r, action, "entitlement", r.PathValue("feature"), func(tx pgx.Tx) (any, error) {
-		_, e := tx.Exec(r.Context(), "INSERT INTO "+table+"(workspace_id,feature_key,enabled,limit_value,expires_at,reason) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(workspace_id,feature_key) DO UPDATE SET enabled=EXCLUDED.enabled,limit_value=EXCLUDED.limit_value,expires_at=EXCLUDED.expires_at,reason=EXCLUDED.reason", workspace(r), r.PathValue("feature"), in.Enabled, limit, in.ExpiresAt, in.Reason)
+		_, e := tx.Exec(r.Context(), "INSERT INTO "+table+"(workspace_id,feature_key,enabled,limit_value,expires_at,reason) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(workspace_id,feature_key) DO UPDATE SET enabled=EXCLUDED.enabled,limit_value=EXCLUDED.limit_value,expires_at=EXCLUDED.expires_at,reason=EXCLUDED.reason,version="+table+".version+1", workspace(r), r.PathValue("feature"), in.Enabled, limit, in.ExpiresAt, in.Reason)
 		return in, e
 	})
 }
