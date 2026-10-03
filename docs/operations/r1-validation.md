@@ -4,7 +4,7 @@ Verdict: **R1 core validation complete, with external administration/security-se
 
 Repository `naseri-coder/TELMIVO` is PRIVATE. Branch remains `feature/platform-bootstrap-v0.1`; PR #1 remains open/Draft, targeting `develop`. Initial feature HEAD was exactly `493a016f71ad5ddf1d32f1110b759a5450713e9a`; `main` and `develop` were both `024b3a3465285f9758ce109551a6574ced087dc7`. The local recovery snapshot had a different commit history but exactly the same Git tree (`01d1acacd8eb94e802fdb0fd3f44af79f9b84fd1`); no unexpected source drift, reset, force push or history rewrite occurred.
 
-Validated source/infrastructure commit: **`aa1706d540844b0a1a5dea9400cc5c54ec9b1d98`**. The final documentation checkpoint adds this evidence and quality files only. The delivery HEAD and full commit list are recorded in Draft PR #1 and the owner delivery response. [Machine-readable evidence](r1-evidence.json) and [complete changed-file inventory](r1-files.json) accompany this report.
+Validated source/infrastructure commit: **`004bf65ff482ace9f8121f6f0b336d18beb8c1da`**. Documentation checkpoints add evidence and quality files; the final refresh changes evidence only. The delivery HEAD and full commit list are recorded in Draft PR #1 and the owner delivery response. [Machine-readable evidence](r1-evidence.json) and [complete changed-file inventory](r1-files.json) accompany this report.
 
 ## Implemented and validated
 
@@ -38,18 +38,18 @@ Browser tests use intercepted synthetic API fixtures, not a browser-to-native-AP
 
 ## Inspected CI executions
 
-All below use validated commit `aa1706d540844b0a1a5dea9400cc5c54ec9b1d98`; completed job steps/logs were inspected.
+All below use validated commit `004bf65ff482ace9f8121f6f0b336d18beb8c1da`; completed job steps/logs were inspected.
 
 | Workflow | Run | Result |
 | --- | --- | --- |
-| CI Go | [37095668642](https://github.com/naseri-coder/TELMIVO/actions/runs/37095668642) | SUCCESS |
-| CI Web | [37095668551](https://github.com/naseri-coder/TELMIVO/actions/runs/37095668551) | SUCCESS |
-| Native Infrastructure / migration-check | [37095668589](https://github.com/naseri-coder/TELMIVO/actions/runs/37095668589) | SUCCESS |
-| Security Baseline | [37095668547](https://github.com/naseri-coder/TELMIVO/actions/runs/37095668547) | SUCCESS with non-reachable module advisory |
-| Build Images + synthetic Compose | [37095668555](https://github.com/naseri-coder/TELMIVO/actions/runs/37095668555) | SUCCESS |
-| CodeQL prepared job | [37095668691](https://github.com/naseri-coder/TELMIVO/actions/runs/37095668691) | SKIPPED; externally disabled capability, not PASS |
+| CI Go | [37096551199](https://github.com/naseri-coder/TELMIVO/actions/runs/37096551199) | SUCCESS; includes reusable native/financial job |
+| CI Web | [37096550886](https://github.com/naseri-coder/TELMIVO/actions/runs/37096550886) | SUCCESS |
+| Native Infrastructure / migration-check | [37096550917](https://github.com/naseri-coder/TELMIVO/actions/runs/37096550917) | SUCCESS |
+| Security Baseline | [37096550965](https://github.com/naseri-coder/TELMIVO/actions/runs/37096550965) | SUCCESS with non-reachable module advisory |
+| Build Images + synthetic Compose | [37096550919](https://github.com/naseri-coder/TELMIVO/actions/runs/37096550919) | SUCCESS |
+| CodeQL prepared job | [37096550875](https://github.com/naseri-coder/TELMIVO/actions/runs/37096550875) | SKIPPED; externally disabled capability, not PASS |
 
-CI used Go 1.27.0 and Node 24.21.0; local and container Go is 1.27.1. Full relevant CI ran at the final source checkpoint; subsequent documentation-only changes do not rerun unchanged build suites.
+CI used Go 1.27.0 and Node 24.21.0; local and container Go is 1.27.1. Full relevant CI ran at the validated source checkpoint. GitHub also automatically started checks when repository templates were added; unchanged source suites were not manually restarted. Native integration/financial validation is additionally required directly by ci-go through the reusable migration-check workflow.
 
 ## Failures found and resolved
 

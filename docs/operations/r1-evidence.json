@@ -3,16 +3,9 @@
   "repository": "naseri-coder/TELMIVO",
   "visibility": "PRIVATE",
   "branch": "feature/platform-bootstrap-v0.1",
-  "validated_source_commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+  "validated_source_commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
   "initial_feature_commit": "493a016f71ad5ddf1d32f1110b759a5450713e9a",
   "base_branches_commit": "024b3a3465285f9758ce109551a6574ced087dc7",
-  "source_commits": [
-    "6633c398dca8dfbc9d97507e814d81b4bcb6dc73",
-    "a6ff91b96eaea6229f3b4c471378fa953c156d20",
-    "9237d3d4d525342615e7f6ac59458f3ff743fdf6",
-    "cff48038a4cfdd34a22e627a9d2c6c59519bc228",
-    "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98"
-  ],
   "versions": {
     "postgresql": "17.11",
     "redis": "7.4.11",
@@ -34,52 +27,52 @@
   },
   "runs": [
     {
-      "id": 37095668691,
+      "id": 37096551199,
+      "name": "CI Go",
+      "commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37096551199"
+    },
+    {
+      "id": 37096550965,
+      "name": "Security Baseline",
+      "commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37096550965"
+    },
+    {
+      "id": 37096550919,
+      "name": "Build Images",
+      "commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37096550919"
+    },
+    {
+      "id": 37096550917,
+      "name": "Native Infrastructure",
+      "commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37096550917"
+    },
+    {
+      "id": 37096550886,
+      "name": "CI Web",
+      "commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37096550886"
+    },
+    {
+      "id": 37096550875,
       "name": "CodeQL",
-      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+      "commit": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
       "status": "completed",
       "conclusion": "skipped",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668691"
-    },
-    {
-      "id": 37095668642,
-      "name": "CI Go",
-      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668642"
-    },
-    {
-      "id": 37095668589,
-      "name": "Native Infrastructure",
-      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668589"
-    },
-    {
-      "id": 37095668555,
-      "name": "Build Images",
-      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668555"
-    },
-    {
-      "id": 37095668551,
-      "name": "CI Web",
-      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668551"
-    },
-    {
-      "id": 37095668547,
-      "name": "Security Baseline",
-      "commit": "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37095668547"
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37096550875"
     }
   ],
   "gates": {
@@ -130,5 +123,25 @@
     "called": false,
     "fixed_version": "N/A",
     "source": "https://pkg.go.dev/vuln/GO-2026-5932"
+  },
+  "checkpoint_commits_through_validation": [
+    "6633c398dca8dfbc9d97507e814d81b4bcb6dc73",
+    "a6ff91b96eaea6229f3b4c471378fa953c156d20",
+    "9237d3d4d525342615e7f6ac59458f3ff743fdf6",
+    "cff48038a4cfdd34a22e627a9d2c6c59519bc228",
+    "aa1706d540844b0a1a5dea9400cc5c54ec9b1d98",
+    "4551a14df8168977476c9c553aa76ef3b6302082",
+    "004bf65ff482ace9f8121f6f0b336d18beb8c1da"
+  ],
+  "go_ci_native_job": {
+    "id": 111127551403,
+    "run_id": 37096551199,
+    "conclusion": "success",
+    "includes": "native integration, isolation, financial concurrency, broker restart"
+  },
+  "r1_file_changes": {
+    "added": 56,
+    "modified": 24,
+    "total": 80
   }
 }
