@@ -37,7 +37,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Start isolated JetStream
-        run: docker run -d --name telmivo-test-nats -p 127.0.0.1:4222:4222 nats:2.11-alpine -js
+        run: docker run -d --name telmivo-test-nats -p 127.0.0.1:4222:4222 nats:2.11-alpine -js -sd /data
       - name: Create restricted runtime and dedicated migration roles
         env:
           PGPASSWORD: dev-admin-only
@@ -56,6 +56,13 @@ jobs:
           set -o pipefail
           sh scripts/ci/check-test-target.sh
           go test -race -v -tags=integration ./tests/integration -count=1 -timeout=3m | tee native-results.txt
+      - name: Broker restart persistence
+        env:
+          TEST_BROKER_RESTART: "true"
+        run: |
+          set -o pipefail
+          docker restart telmivo-test-nats
+          go test -race -v -tags=integration ./tests/integration -run TestBrokerRestart -count=1 -timeout=30s | tee -a native-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

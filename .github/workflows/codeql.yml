@@ -7,8 +7,11 @@ on:
 permissions:
   contents: read
   security-events: write
+  actions: read
 jobs:
   analyze:
+    # Private repo code scanning is externally disabled at R1. Owner enables capability first.
+    if: vars.CODEQL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

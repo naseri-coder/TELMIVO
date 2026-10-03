@@ -26,3 +26,7 @@ dist/
 .tmp/
 .data/
 *.log
+
+# Browser validation artifacts
+playwright-report/
+test-results/

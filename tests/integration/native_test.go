@@ -113,7 +113,7 @@ func TestMigration(t *testing.T) {
 		must(t, owner.Migrate(ctx))
 		var n int
 		must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&n))
-		if n != 5 {
+		if n != 6 {
 			t.Fatalf("migration count %d", n)
 		}
 	})
@@ -260,7 +260,18 @@ func TestWorkspaceIsolation(t *testing.T) {
 		must(t, e)
 		secret, e := store.Seal(ctx, b.WorkspaceID+":bot", []byte("synthetic-credential"))
 		must(t, e)
-		plain, e := store.Open(ctx, b.WorkspaceID+":bot", secret)
+		var bot string
+		tenant(t, b, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, "INSERT INTO customer_bots(workspace_id,name,username,key_id,encrypted_token,status,idempotency_key) VALUES($1,'fixture',$2,$3,$4,'DRAFT','credential-test') RETURNING id::text", b.WorkspaceID, "fixture_"+b.UserID, secret.KeyID, secret.Ciphertext).Scan(&bot)
+		})
+		if n := number(t, a, "SELECT count(*) FROM customer_bots WHERE id=$1", bot); n != 0 {
+			t.Fatal("credential storage leaked")
+		}
+		var stored cred.EncryptedSecret
+		tenant(t, b, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, "SELECT key_id,encrypted_token FROM customer_bots WHERE id=$1", bot).Scan(&stored.KeyID, &stored.Ciphertext)
+		})
+		plain, e := store.Open(ctx, b.WorkspaceID+":bot", stored)
 		must(t, e)
 		if string(plain) != "synthetic-credential" {
 			t.Fatal("wrong credential")
@@ -689,6 +700,7 @@ func TestDownloadQueue(t *testing.T) {
 	must(t, q.Relay(ctx, db))
 	cancel, done = consumer(t, q, "telmivo.jobs.download", "r1-download", handler)
 	wait(t, func() bool {
+		must(t, q.Relay(ctx, db))
 		return number(t, u, "SELECT count(*) FROM download_jobs WHERE id=$1 AND state='COMPLETED'", job) == 1
 	})
 	stop(t, cancel, done)
@@ -756,7 +768,14 @@ func TestJetStreamRecovery(t *testing.T) {
 	})
 	event := queue.Envelope{ID: "11111111-1111-4111-8111-111111111111", WorkspaceID: u.WorkspaceID, Type: "fixture.retry", Payload: json.RawMessage(`{}`)}
 	must(t, q.Publish(ctx, "telmivo.jobs.retry", event))
-	wait(t, func() bool { return attempts.Load() == 2 })
+	wait(t, func() bool {
+		var n int
+		e := db.Pool.QueryRow(ctx, "SELECT count(*) FROM inbox_events WHERE consumer='r1-retry' AND event_id=$1", event.ID).Scan(&n)
+		return e == nil && n == 1
+	})
+	if attempts.Load() != 2 {
+		t.Fatal("unexpected retry count")
+	}
 	stop(t, cancel, done)
 	cancel, done = consumer(t, q, "telmivo.jobs.failure", "r1-failure", func(_ context.Context, _ pgx.Tx, _ queue.Envelope) error { return errors.New("synthetic permanent") })
 	event.ID = "22222222-2222-4222-8222-222222222222"
@@ -773,5 +792,84 @@ func TestJetStreamRecovery(t *testing.T) {
 	must(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM inbox_events WHERE consumer='r1-failure'").Scan(&n))
 	if n != 0 {
 		t.Fatal("failed handler committed inbox")
+	}
+}
+
+func TestOutboxLease(t *testing.T) {
+	u := fixture(t, false)
+	q, e := queue.Open(os.Getenv("TEST_NATS_URL"))
+	must(t, e)
+	defer q.Conn.Close()
+	must(t, q.Ensure())
+	var id string
+	must(t, db.Pool.QueryRow(ctx, "INSERT INTO outbox_events(workspace_id,subject,event_type,payload,correlation_id,lease_owner,lease_until) VALUES($1,'telmivo.events.lease','lease.fixture','{}','lease-test','old-owner',now()+interval '1 minute') RETURNING id::text", u.WorkspaceID).Scan(&id))
+	must(t, q.Relay(ctx, db))
+	var published bool
+	must(t, db.Pool.QueryRow(ctx, "SELECT published_at IS NOT NULL FROM outbox_events WHERE id=$1", id).Scan(&published))
+	if published {
+		t.Fatal("live lease stolen")
+	}
+	_, e = db.Pool.Exec(ctx, "UPDATE outbox_events SET lease_until=now()-interval '1 second' WHERE id=$1", id)
+	must(t, e)
+	wait(t, func() bool {
+		must(t, q.Relay(ctx, db))
+		must(t, db.Pool.QueryRow(ctx, "SELECT published_at IS NOT NULL FROM outbox_events WHERE id=$1", id).Scan(&published))
+		return published
+	})
+	tag, e := db.Pool.Exec(ctx, "UPDATE outbox_events SET published_at=NULL WHERE id=$1 AND lease_owner='old-owner'", id)
+	must(t, e)
+	if tag.RowsAffected() != 0 {
+		t.Fatal("stale lease owner updated completion")
+	}
+	event := queue.Envelope{ID: id, WorkspaceID: u.WorkspaceID, Type: "lease.fixture", Payload: json.RawMessage(`{}`)}
+	raw, e := json.Marshal(event)
+	must(t, e)
+	msg := nats.NewMsg("telmivo.events.lease")
+	msg.Header.Set("Nats-Msg-Id", id)
+	msg.Data = raw
+	ack, e := q.JS.PublishMsg(msg)
+	must(t, e)
+	if !ack.Duplicate {
+		t.Fatal("JetStream dedup failed")
+	}
+}
+func TestDownloadCancel(t *testing.T) {
+	u := fixture(t, true)
+	tenant(t, u, func(tx pgx.Tx) error {
+		return subscriptions.ChangePlan(ctx, tx, u.UserID, u.WorkspaceID, "cancel-plan", subscriptions.Change{Plan: "PRO", Reason: "fixture", Key: "cancel-plan-key"})
+	})
+	var id string
+	tenant(t, u, func(tx pgx.Tx) error {
+		var e error
+		id, e = downloads.CreateSynthetic(ctx, tx, u.UserID, u.WorkspaceID, "cancel", downloads.CreateInput{URL: "https://youtube.com/watch?v=cancel-fixture", FormatID: "fixture-360", Key: "cancel-fixture-key"})
+		if e != nil {
+			return e
+		}
+		_, e = tx.Exec(ctx, "UPDATE download_jobs SET state='CANCELLED' WHERE id=$1", id)
+		return e
+	})
+	tenant(t, u, func(tx pgx.Tx) error { return downloads.CompleteFixture(ctx, tx, u.WorkspaceID, id) })
+	if n := number(t, u, "SELECT count(*) FROM download_jobs WHERE id=$1 AND state='CANCELLED'", id); n != 1 {
+		t.Fatal("cancel overwritten")
+	}
+}
+
+// Run separately after restarting the same isolated NATS container/storage.
+func TestBrokerRestart(t *testing.T) {
+	if os.Getenv("TEST_BROKER_RESTART") != "true" {
+		t.Skip("separate broker restart step")
+	}
+	q, e := queue.Open(os.Getenv("TEST_NATS_URL"))
+	must(t, e)
+	defer q.Conn.Close()
+	info, e := q.JS.ConsumerInfo("TELMIVO", "r1-download")
+	must(t, e)
+	if info.AckFloor.Stream == 0 {
+		t.Fatal("durable acknowledgement lost after broker restart")
+	}
+	stream, e := q.JS.StreamInfo("TELMIVO")
+	must(t, e)
+	if stream.State.Msgs == 0 {
+		t.Fatal("stream lost after restart")
 	}
 }
