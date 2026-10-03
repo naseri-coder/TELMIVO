@@ -104,6 +104,7 @@ jobs:
         with:
           name: native-results
           path: |
+            native-api.log
             native-results.txt
             recovered-results.txt
             before-restore.txt

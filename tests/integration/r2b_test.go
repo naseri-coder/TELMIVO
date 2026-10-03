@@ -295,6 +295,24 @@ func TestR2BPluginContracts(t *testing.T) {
 		check(t, false)
 		r.Capability = "uploader.use"
 	})
+
+	t.Run("trial_entitlement_independent_of_plan", func(t *testing.T) {
+		tenant(t, u, func(tx pgx.Tx) error {
+			_, e := tx.Exec(ctx, "UPDATE subscriptions SET plan_key='FREE' WHERE workspace_id=$1", u.WorkspaceID)
+			return e
+		})
+		check(t, false)
+		savePolicy(t, u, policies.Version{Key: "r2b_plugin_trial", Kind: "TRIAL", Workspace: u.WorkspaceID, Enabled: true, EffectiveFrom: time.Now().Add(-time.Second), Reason: "trial entitlement fixture", Definition: policies.Definition{Scope: "PER_WORKSPACE", Duration: 1, Eligibility: "ANY", Trigger: "INSTALLATION", Once: true, Stacking: "PARALLEL", Fallback: "FREE_LIMITED", GrantKind: "PRODUCT_TRIAL", Features: []string{"uploader"}, Plugins: []string{"uploader"}, Capabilities: []string{"uploader.use"}}})
+		tenant(t, u, func(tx pgx.Tx) error {
+			return policies.Enroll(ctx, tx, policies.Subject{User: u.UserID, Workspace: u.WorkspaceID, Source: "MINIAPP", Event: "plugin-trial"}, "INSTALLATION")
+		})
+		check(t, true)
+		r.Role = "MEMBER"
+		check(t, false)
+		r.Role = "OWNER"
+		time.Sleep(1100 * time.Millisecond)
+		check(t, false)
+	})
 	t.Run("commercial_grants_cannot_bypass_security", func(t *testing.T) {
 		v := savePolicy(t, u, policies.Version{Key: "r2b_addon", Kind: "GRANT", Workspace: u.WorkspaceID, Enabled: true, EffectiveFrom: time.Now().Add(-time.Second), EffectiveUntil: ptrTime(time.Now().Add(time.Hour)), Reason: "test addon", Definition: policies.Definition{GrantKind: "ADDON", Features: []string{"uploader"}, Plugins: []string{"uploader"}, Capabilities: []string{"uploader.use"}}})
 		check(t, true)
@@ -312,11 +330,11 @@ func TestR2BPluginContracts(t *testing.T) {
 		}{{"ADD", 10, 20000000010}, {"MAX", 30000000000, 30000000000}, {"MIN", 10, 10}, {"REPLACE", 42, 42}} {
 			t.Run(test.strategy, func(t *testing.T) {
 				v := activePolicy(t, u, "r2b_addon")
-				v.Definition.Limits = map[string]policies.LimitGrant{"uploader.storage_bytes": {Amount: test.amount, Strategy: test.strategy}}
+				v.Definition.Limits = map[string]policies.LimitGrant{"uploader.storage_bytes": {Amount: test.amount, Strategy: test.strategy}, "uploader.max_file_bytes": {Amount: 10000000000, Strategy: "MAX"}}
 				savePolicy(t, u, v)
 				tenant(t, u, func(tx pgx.Tx) error {
 					d, e := policies.Resolve(ctx, tx, r)
-					if e == nil && d.Resources["uploader.storage_bytes"].Limit != test.want {
+					if e == nil && (d.Resources["uploader.storage_bytes"].Limit != test.want || d.Resources["uploader.max_file_bytes"].Limit != 5000000000) {
 						t.Fatal("merge", d.Resources)
 					}
 					return e
@@ -332,6 +350,7 @@ func TestR2BPluginContracts(t *testing.T) {
 		v.Key = "r2b_storage_override"
 		v.Version = 0
 		v.Workspace = u.WorkspaceID
+		v.Plan = ""
 		v.Definition.Source = "WORKSPACE_OVERRIDE"
 		v.Definition.Strategy = "REPLACE"
 		v.Definition.Limit = 77

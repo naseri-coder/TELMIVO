@@ -3,6 +3,7 @@ import {createHmac} from 'node:crypto';
 import labels from '../src/locales/fa/policies.json' with {type:'json'};
 function signed(id:number){const p=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id,first_name:'Synthetic Native'})});const check=[...p.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');const key=createHmac('sha256','WebAppData').update('synthetic-signing-only').digest();p.set('hash',createHmac('sha256',key).update(check).digest('hex'));return p.toString();}
 test('native login, policy mutation, Preview equivalence and permission denial',async({page,browser})=>{
+ page.on('request',request=>expect(new URL(request.url()).hostname).toBe('127.0.0.1'));
  await page.addInitScript(raw=>{window.Telegram={WebApp:{initData:raw,ready(){},expand(){}}};},signed(94000001));
  await page.goto('/plans');await expect(page.getByRole('heading',{name:labels.policyTitle})).toBeVisible();
  const wsResponse=await page.request.get('/api/v1/workspaces');expect(wsResponse.ok()).toBeTruthy();const ws=(await wsResponse.json())[0].id;
