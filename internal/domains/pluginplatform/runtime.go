@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 )
 
