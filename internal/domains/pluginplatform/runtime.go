@@ -72,9 +72,29 @@ type TransactionalCapabilityHandler interface {
 	InvokeTx(context.Context, pgx.Tx, string, sdk.Scope, string, json.RawMessage) (json.RawMessage, error)
 }
 
+type transactionalAdmission interface {
+	AuthorizeTx(context.Context, pgx.Tx, sdk.Admission) (sdk.Grant, error)
+}
+
+type executionPolicy struct {
+	policy transactionalAdmission
+	tx     pgx.Tx
+}
+
+func (p executionPolicy) Authorize(ctx context.Context, in sdk.Admission) (sdk.Grant, error) {
+	return p.policy.AuthorizeTx(ctx, p.tx, in)
+}
+
 // ValidateExecutionTx retains the runtime's admission checks for trusted composed operations.
 // Management can configure active plugins on DRAFT bots; external effects require RUNNING.
 func (s *Service) ValidateExecutionTx(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, capability string, running bool) error {
+	// Trusted transactional policies reuse the caller's connection. Parallel
+	// runtime requests must not exhaust the pool awaiting nested admission.
+	if p, ok := s.Policy.(transactionalAdmission); ok {
+		bound := *s
+		bound.Policy = executionPolicy{policy: p, tx: tx}
+		s = &bound
+	}
 	if err := lockBot(ctx, tx, actor, scope.AccountID, scope.BotID); err != nil {
 		return err
 	}

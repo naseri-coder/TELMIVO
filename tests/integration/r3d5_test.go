@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
@@ -490,4 +491,45 @@ func TestR3D5OccupancyAndReplyQuotas(t *testing.T) {
 	_, e = f.srv.Inbound(ctx, f.scope(tickets.ID), tickets.Inbound{User: 10002, Name: "Other", Body: "Now allowed", Key: "after-close"})
 	must(t, e)
 	set("ticketing.active_tickets.count", commerce.Limit{Unlimited: true})
+}
+
+// A dashboard issues concurrent reads. Admission must reuse the transaction,
+// and inbound principal lookup must release its connection before runtime entry.
+func TestR3D5SingleConnectionRuntime(t *testing.T) {
+	f := r3d5Fixture(t)
+	cfg := db.Pool.Config()
+	cfg.MaxConns = 1
+	cfg.MinConns = 0
+	pool, e := pgxpool.NewWithConfig(ctx, cfg)
+	must(t, e)
+	defer pool.Close()
+	store := &database.Store{Pool: pool}
+	commercial := &commerce.Service{DB: store, Clock: f.clock}
+	core := *f.core
+	core.DB = store
+	core.Policy = commercial
+	service := *f.srv
+	service.DB = store
+	service.Core = &core
+	service.Commercial = commercial
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ticket, e := service.Inbound(bounded, f.scope(tickets.ID), tickets.Inbound{User: 10001, Name: "Synthetic customer", Body: "Single connection", Key: "single-connection"})
+	must(t, e)
+	reads := []func() error{
+		func() error {
+			_, e := service.Detail(bounded, f.agent.UserID, f.scope(tickets.ID), ticket.Reference, "")
+			return e
+		},
+		func() error { _, e := service.Agents(bounded, f.agent.UserID, f.scope(tickets.ID)); return e },
+		func() error { _, e := service.Departments(bounded, f.agent.UserID, f.scope(tickets.ID)); return e },
+		func() error { _, e := service.Templates(bounded, f.agent.UserID, f.scope(tickets.ID)); return e },
+	}
+	results := make(chan error, len(reads))
+	for _, read := range reads {
+		go func(fn func() error) { results <- fn() }(read)
+	}
+	for range reads {
+		must(t, <-results)
+	}
 }

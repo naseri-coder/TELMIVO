@@ -140,6 +140,10 @@ func (s *Service) Inbound(ctx context.Context, scope sdk.Scope, in tickets.Inbou
 	if e != nil {
 		return tickets.Ticket{}, e
 	}
+	// Release the identity lookup before the runtime owns its transaction.
+	if e = tx.Rollback(ctx); e != nil {
+		return tickets.Ticket{}, e
+	}
 	scope.PluginID = tickets.ID
 	return (tickets.Plugin{Runtime: (&platform.Runtime{Service: s.Core, Handler: s}).Bind(actor, scope)}).Receive(ctx, in)
 }

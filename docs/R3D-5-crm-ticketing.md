@@ -88,6 +88,10 @@ including internal notes and failed outgoing attempts. Occupancy uses current pe
 state, not a cumulative creation meter, so closing frees active-ticket capacity. Catalog
 scope controls bot/account occupancy. Defaults unlimited; no plan-specific constants.
 Shared catalog/account lock precedes bot lock, serializing quota checks and policy changes.
+Trusted runtime admission reuses the same transaction when the commercial policy supports
+AuthorizeTx; concurrent dashboard reads cannot exhaust the pool through nested admission.
+Inbound principal lookup releases its connection before entering the runtime. A one-connection
+PostgreSQL regression proves both inbound processing and concurrent dashboard reads.
 Quota denial rolls back contact/ticket/message creation together; agent reply denial
 leaves no SENDING row or external delivery. Plugin dependency/entitlement failures block
 execution while safe lifecycle disable/uninstall retains content.
