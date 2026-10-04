@@ -18,6 +18,7 @@ type Config struct {
 	GroupTestAuthority                                                     bool
 	DownloaderTestFixture                                                  bool
 	BotFactoryTestFixture                                                  bool
+	ContentTestFixture                                                     bool
 	SessionTTL, JobTimeout                                                 time.Duration
 	MediaConcurrency, MaxMediaBytes                                        int64
 }
@@ -76,6 +77,13 @@ func Load(get func(string) string) (Config, error) {
 			return c, errors.New("invalid admin ID")
 		}
 		c.AdminIDs = append(c.AdminIDs, v)
+	}
+	if v := get("TEST_CONTENT_PLUGIN_FIXTURE"); v != "" {
+		value, e := strconv.ParseBool(v)
+		c.ContentTestFixture = value
+		if e != nil || value && (c.Environment != "test" || !c.Synthetic) {
+			return c, errors.New("invalid content plugin test fixture")
+		}
 	}
 	if v := get("TEST_BOT_FACTORY_FIXTURE"); v != "" {
 		value, eFactory := strconv.ParseBool(v)
