@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
+	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
@@ -56,6 +57,15 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /health/ready", a.ready)
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/commercial/catalog", a.commercialCatalog)
+	protected.HandleFunc("GET /api/v1/commercial/catalog/{kind}/{key}/history", a.commercialHistory)
+	protected.HandleFunc("POST /api/v1/commercial/catalog", a.commercialSave)
+	protected.HandleFunc("GET /api/v1/commercial/agreements", a.commercialAgreements)
+	protected.HandleFunc("POST /api/v1/commercial/agreements", a.commercialIssue)
+	protected.HandleFunc("PATCH /api/v1/commercial/agreements/{agreement}", a.commercialState)
+	protected.HandleFunc("POST /api/v1/commercial/decision", a.commercialDecision)
+	protected.HandleFunc("POST /api/v1/commercial/trials", a.commercialTrial)
+	protected.HandleFunc("POST /api/v1/commercial/quota", a.commercialQuota)
 	protected.HandleFunc("GET /api/v1/groups", a.groupList)
 	protected.HandleFunc("POST /api/v1/groups/claims", a.groupClaim)
 	protected.HandleFunc("GET /api/v1/groups/{group}", a.groupDetail)
@@ -237,6 +247,11 @@ func handleError(w http.ResponseWriter, e error) {
 	}
 	if errors.Is(e, groupbot.ErrProtected) {
 		fail(w, 403, "GROUP_TARGET_PROTECTED")
+		return
+	}
+	var commercialDenied *commerce.Denied
+	if errors.As(e, &commercialDenied) {
+		respond(w, 403, map[string]any{"error": map[string]string{"code": "forbidden"}, "decision": commercialDenied.Decision})
 		return
 	}
 	var policyDenied *policies.Denied
