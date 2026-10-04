@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/intelligence"
@@ -433,5 +434,175 @@ func TestR3D6Recovered(t *testing.T) {
 	must(t, e)
 	if len(usage) != 1 || usage[0].Input != 10 {
 		t.Fatal("usage restore")
+	}
+}
+func TestR3D6ReadWriteTools(t *testing.T) {
+	f := r3d6Fixture(t)
+	x := f.inbound(t, "tools-ticket", "Support")
+	f.config.Tools = []string{"contact.summary"}
+	var e error
+	f.config, e = f.ai.SaveConfig(ctx, f.u.UserID, f.scope(assistant.ID), f.config, f.config.Revision)
+	must(t, e)
+	f.p.responses = []provider.Response{{Tools: []provider.Tool{{Name: "contact.summary", Arguments: json.RawMessage(`{}`)}}}, {Text: "Read safe summary", InputTokens: 4, OutputTokens: 3}}
+	r, e := f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.Chat{Key: "read", Text: "summary", User: 10001, Name: "Synthetic", Purpose: "CUSTOMER"})
+	must(t, e)
+	if r.State != "SUCCEEDED" || f.p.calls != 2 {
+		t.Fatal(r)
+	}
+	f.config.Tools = []string{"ticket.priority"}
+	f.config.WriteEnabled = true
+	f.config, e = f.ai.SaveConfig(ctx, f.u.UserID, f.scope(assistant.ID), f.config, f.config.Revision)
+	must(t, e)
+	f.p.responses = []provider.Response{{Tools: []provider.Tool{{Name: "ticket.priority", Arguments: json.RawMessage(`{"value":"HIGH"}`)}}}, {Text: "Suggestion only"}}
+	r, e = f.ai.Chat(ctx, f.agent.UserID, f.scope(assistant.ID), intelligence.Chat{Key: "write-confirmed", Text: "Set priority", Ticket: x.Reference, Purpose: "AGENT_ASSIST", ConfirmWrites: true})
+	must(t, e)
+	d, e := f.srv.Detail(ctx, f.agent.UserID, f.scope("ticketing"), x.Reference, "")
+	must(t, e)
+	if d.Ticket.Priority != "HIGH" || f.transport.replies.Load() != 0 {
+		t.Fatal("write authorization", d)
+	}
+	f.p.responses = []provider.Response{{Tools: []provider.Tool{{Name: "ticket.priority", Arguments: json.RawMessage(`{"value":"URGENT"}`)}, {Name: "ticket.priority", Arguments: json.RawMessage(`{"value":"SHELL"}`)}}}}
+	_, e = f.ai.Chat(ctx, f.agent.UserID, f.scope(assistant.ID), intelligence.Chat{Key: "invalid-batch", Text: "Invalid batch", Ticket: x.Reference, Purpose: "AGENT_ASSIST", ConfirmWrites: true})
+	if e == nil {
+		t.Fatal("invalid output accepted")
+	}
+	d, e = f.srv.Detail(ctx, f.agent.UserID, f.scope("ticketing"), x.Reference, "")
+	must(t, e)
+	if d.Ticket.Priority != "HIGH" {
+		t.Fatal("invalid batch mutated")
+	}
+}
+func TestR3D6EntitlementAndRetry(t *testing.T) {
+	f := r3d6Fixture(t)
+	x := f.inbound(t, "retry-ticket", "Support")
+	w := f.wf("manual", workflow.Action{Type: "ai.invoke"})
+	w.MaxAttempts = 2
+	saved := f.save(t, "retry", w)
+	id, e := f.ai.Manual(ctx, f.u.UserID, f.scope(workflow.ID), saved.ID, "retry", x.Reference, "")
+	must(t, e)
+	f.p.err = &provider.Failure{Code: "PROVIDER_RATE_LIMIT", Retryable: true}
+	must(t, f.ai.Run(ctx, f.u.UserID, f.scope(workflow.ID), id))
+	h, e := f.ai.History(ctx, f.u.UserID, f.scope(workflow.ID), "")
+	must(t, e)
+	if h[0].State != "QUEUED" || h[0].Attempt != 2 {
+		t.Fatal("safe retry", h)
+	}
+	f.clock.at = f.clock.at.Add(2 * time.Second)
+	f.p.err = nil
+	must(t, f.ai.Run(ctx, f.u.UserID, f.scope(workflow.ID), id))
+	h, e = f.ai.History(ctx, f.u.UserID, f.scope(workflow.ID), "")
+	must(t, e)
+	if h[0].State != "SUCCEEDED" || f.p.calls != 2 {
+		t.Fatal("retry", h)
+	}
+	c, e := f.s.Catalog(ctx, f.admin.UserID, f.u.WorkspaceID)
+	must(t, e)
+	p, _ := c.Get(commerce.PlanKind, f.plan)
+	p.Definition.Plan.Plugins[assistant.ID] = commerce.PaidAddon
+	f.r3d5FixtureData.save(t, p, p.Version)
+	expiry := f.clock.at.Add(time.Minute)
+	_, e = f.s.Issue(ctx, f.admin.UserID, f.u.WorkspaceID, "r3d6", commerce.Issue{Key: "ai-temp", Kind: commerce.PluginKind, CatalogKey: assistant.ID, Bot: f.bot, AdminGrant: true, ExpiresAt: &expiry, Reason: "synthetic"})
+	must(t, e)
+	_, e = f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.Chat{Key: "active", Text: "Active", Purpose: "PLAYGROUND"})
+	must(t, e)
+	f.clock.at = expiry
+	calls := f.p.calls
+	_, e = f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.Chat{Key: "expired", Text: "Expired", Purpose: "PLAYGROUND"})
+	if e == nil || f.p.calls != calls {
+		t.Fatal("expiry")
+	}
+	if number(t, f.u, "SELECT count(*) FROM ai_configurations WHERE bot_id=$1", f.bot) != 1 || number(t, f.u, "SELECT count(*) FROM ai_requests WHERE bot_id=$1", f.bot) < 1 {
+		t.Fatal("expiry lost history")
+	}
+}
+func TestR3D6TelegramHandoff(t *testing.T) {
+	f := r3d6Fixture(t)
+	makeUpdate := func(id int64, text string) contentplugins.Update {
+		u := contentplugins.Update{ID: id, Message: &contentplugins.Message{Text: text}}
+		u.Message.From.ID = 10001
+		u.Message.From.Name = "Synthetic"
+		u.Message.Chat.ID = 10001
+		u.Message.Chat.Type = "private"
+		return u
+	}
+	must(t, f.ai.HandleSupport(ctx, f.scope(assistant.ID), "r3d6", makeUpdate(800, "question")))
+	must(t, f.ai.HandleSupport(ctx, f.scope(assistant.ID), "r3d6", makeUpdate(800, "question")))
+	if f.p.calls != 1 || f.transport.replies.Load() != 1 {
+		t.Fatal("duplicate inbound")
+	}
+	must(t, f.ai.HandleSupport(ctx, f.scope(assistant.ID), "r3d6", makeUpdate(801, "/human")))
+	must(t, f.ai.HandleSupport(ctx, f.scope(assistant.ID), "r3d6", makeUpdate(802, "Human followup")))
+	if f.p.calls != 1 || number(t, f.u, "SELECT count(*) FROM support_tickets WHERE bot_id=$1", f.bot) != 1 {
+		t.Fatal("handoff continuation")
+	}
+	list, e := f.srv.Tickets(ctx, f.agent.UserID, f.scope("ticketing"), supportplugins.Filter{Limit: 25})
+	must(t, e)
+	d, e := f.srv.Detail(ctx, f.agent.UserID, f.scope("ticketing"), list.Items[0].Reference, "")
+	must(t, e)
+	found := false
+	for _, m := range d.Messages.Items {
+		found = found || m.Body == "Human followup"
+	}
+	if !found {
+		t.Fatal("human message missing")
+	}
+}
+
+type r3d6ConnectionProvider struct {
+	store *database.Store
+	calls int
+}
+
+func (p *r3d6ConnectionProvider) Generate(c context.Context, _ provider.Model, _ provider.Request) (provider.Response, error) {
+	p.calls++
+	bounded, cancel := context.WithTimeout(c, time.Second)
+	defer cancel()
+	var n int
+	e := p.store.Pool.QueryRow(bounded, "SELECT 1").Scan(&n)
+	return provider.Response{Text: "Outside transaction", InputTokens: 1, OutputTokens: 1}, e
+}
+func TestR3D6MemoryAndConnection(t *testing.T) {
+	f := r3d6Fixture(t)
+	cfg := db.Pool.Config()
+	cfg.MaxConns = 1
+	cfg.MinConns = 0
+	pool, e := pgxpool.NewWithConfig(ctx, cfg)
+	must(t, e)
+	defer pool.Close()
+	copyService := *f.ai
+	copyService.DB = &database.Store{Pool: pool}
+	p := &r3d6ConnectionProvider{store: copyService.DB}
+	copyService.Provider = p
+	for _, k := range []string{"one", "two", "three", "four"} {
+		_, e = copyService.Chat(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.Chat{Key: k, Text: k, Purpose: "PLAYGROUND"})
+		must(t, e)
+	}
+	tenant(t, f.u, func(tx pgx.Tx) error {
+		var n int
+		e := tx.QueryRow(ctx, "SELECT jsonb_array_length(context) FROM ai_threads WHERE bot_id=$1", f.bot).Scan(&n)
+		if n > 4 {
+			t.Fatal("unbounded memory")
+		}
+		return e
+	})
+	if p.calls != 4 {
+		t.Fatal(p.calls)
+	}
+	_, e = f.ai.SaveModel(ctx, f.u.UserID, f.u.WorkspaceID, intelligence.ModelChange{Model: provider.Model{ID: "forbidden", Name: "Forbidden", Provider: "synthetic", Identifier: "fixture", Enabled: true, MaxInput: 1000, MaxOutput: 100}})
+	if !errors.Is(e, database.ErrForbidden) {
+		t.Fatal("self approval", e)
+	}
+	c := f.config
+	c.Model = "unapproved"
+	if _, e = f.ai.SaveConfig(ctx, f.u.UserID, f.scope(assistant.ID), c, c.Revision); e == nil {
+		t.Fatal("unapproved model")
+	}
+	if _, e = f.ai.SaveConfig(ctx, f.u.UserID, f.scope(assistant.ID), f.config, 0); !errors.Is(e, database.ErrConflict) {
+		t.Fatal("stale configuration", e)
+	}
+	c = f.config
+	c.Instructions = strings.Repeat("x", 4097)
+	if _, e = f.ai.SaveConfig(ctx, f.u.UserID, f.scope(assistant.ID), c, c.Revision); !errors.Is(e, database.ErrInvalid) {
+		t.Fatal("prompt bound", e)
 	}
 }

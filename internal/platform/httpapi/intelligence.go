@@ -72,7 +72,7 @@ func (a *API) intelligenceRun(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid")
 		return
 	}
-	e := a.IntelligenceService().Run(r.Context(), user(r), contentScope(r, workflow.ID), r.PathValue("execution"))
+	e := (workflow.Plugin{Runtime: a.IntelligenceService().Bind(user(r), contentScope(r, workflow.ID))}).Run(r.Context(), r.PathValue("execution"))
 	supportReply(w, map[string]bool{"completed": e == nil}, e)
 }
 func (a *API) intelligenceHistory(w http.ResponseWriter, r *http.Request) {
@@ -151,5 +151,9 @@ func (a *API) intelligenceReset(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) intelligenceUsage(w http.ResponseWriter, r *http.Request) {
 	v, e := a.IntelligenceService().Usage(r.Context(), user(r), contentScope(r, assistant.ID), r.URL.Query().Get("cursor"))
+	supportReply(w, v, e)
+}
+func (a *API) intelligenceOptions(w http.ResponseWriter, r *http.Request) {
+	v, e := a.IntelligenceService().Options(r.Context(), user(r), contentScope(r, workflow.ID))
 	supportReply(w, v, e)
 }

@@ -298,3 +298,36 @@ func (s *Service) Manual(ctx context.Context, actor string, scope sdk.Scope, id,
 	})
 	return out, e
 }
+
+// Options exposes only integrations currently admitted for this actual caller.
+func (s *Service) Options(ctx context.Context, actor string, scope sdk.Scope) (map[string][]string, error) {
+	scope.PluginID = workflow.ID
+	out := map[string][]string{"triggers": {"manual"}, "actions": {}}
+	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error {
+		for _, a := range workflow.Actions {
+			if s.available(ctx, tx, actor, scope, workflow.Workflow{Actions: []workflow.Action{{Type: a}}}) == nil {
+				out["actions"] = append(out["actions"], a)
+			}
+		}
+		for _, trigger := range workflow.Triggers {
+			target, cap, permission := "", "", ""
+			switch {
+			case strings.HasPrefix(trigger, "crm."):
+				target, cap, permission = "crm", "crm.read", "crm.read"
+			case strings.HasPrefix(trigger, "ticket."):
+				target, cap, permission = "ticketing", "tickets.read", "tickets.read"
+			case strings.HasPrefix(trigger, "file."):
+				target, cap, permission = "file-manager", "files.read", "bots.manage"
+			}
+			if target != "" {
+				sc := scope
+				sc.PluginID = target
+				if s.validate(ctx, tx, actor, sc, permission, cap, false) == nil {
+					out["triggers"] = append(out["triggers"], trigger)
+				}
+			}
+		}
+		return nil
+	})
+	return out, e
+}

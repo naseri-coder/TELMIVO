@@ -25,7 +25,7 @@ func (s *Service) SaveModel(ctx context.Context, actor, account string, in Model
 	}
 	m.Revision = in.Expected + 1
 	e := s.DB.Tenant(ctx, actor, account, true, func(tx pgx.Tx) error {
-		if !database.PlatformPermission(ctx, tx, actor, "platform.commercial.write") {
+		if !database.PlatformPermission(ctx, tx, actor, "platform.commercial.manage") {
 			return database.ErrForbidden
 		}
 		var current int64

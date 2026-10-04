@@ -10,6 +10,7 @@ import (
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
 	assistant "github.com/naseri-coder/TELMIVO/internal/plugins/aiassistant"
+	"github.com/naseri-coder/TELMIVO/internal/plugins/crm"
 	"strings"
 )
 
@@ -27,6 +28,24 @@ func validateTool(config assistant.Config, in Chat, t provider.Tool) (toolArgs, 
 	var a toolArgs
 	if strict(t.Arguments, &a) != nil || len(a.Value) > 1000 || len(a.Field) > 64 || len(a.Reference) > 100 || len(a.Policy) > 100 {
 		return toolArgs{}, &provider.Failure{Code: "INVALID_TOOL_ARGUMENTS"}
+	}
+	switch t.Name {
+	case "contact.add_tag":
+		if !crm.TagsValid([]string{a.Value}) {
+			return toolArgs{}, &provider.Failure{Code: "INVALID_TOOL_ARGUMENTS"}
+		}
+	case "ticket.priority":
+		if !assistant.Contains([]string{"LOW", "NORMAL", "HIGH", "URGENT"}, a.Value) {
+			return toolArgs{}, &provider.Failure{Code: "INVALID_TOOL_ARGUMENTS"}
+		}
+	case "ticket.status":
+		if !assistant.Contains([]string{"OPEN", "PENDING_CUSTOMER", "PENDING_AGENT", "RESOLVED", "CLOSED"}, a.Value) {
+			return toolArgs{}, &provider.Failure{Code: "INVALID_TOOL_ARGUMENTS"}
+		}
+	case "ticket.note":
+		if strings.TrimSpace(a.Value) == "" {
+			return toolArgs{}, &provider.Failure{Code: "INVALID_TOOL_ARGUMENTS"}
+		}
 	}
 	write := assistant.Contains(assistant.WriteTools, t.Name)
 	if write && (!config.WriteEnabled || !in.ConfirmWrites || in.User > 0 || in.Purpose == "CLASSIFY") {

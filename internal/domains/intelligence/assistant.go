@@ -50,6 +50,8 @@ type prepared struct {
 
 func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Chat) (Result, error) {
 	scope.PluginID = assistant.ID
+	ctx, cancelRequest := context.WithTimeout(ctx, 60*time.Second)
+	defer cancelRequest()
 	var out Result
 	if !key(in.Key) || len(in.Text) == 0 || len(in.Text) > 4000 || in.User < 0 {
 		return out, database.ErrInvalid
@@ -136,6 +138,9 @@ func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Ch
 			return sdk.ErrPermission
 		}
 		if e = tx.QueryRow(ctx, "INSERT INTO ai_threads(workspace_id,bot_id,subject,contact_id) VALUES($1,$2,$3,NULLIF($4,'')::uuid) ON CONFLICT(bot_id,subject) DO UPDATE SET revision=ai_threads.revision+1 RETURNING id::text,revision", scope.AccountID, scope.BotID, p.Subject, p.Contact).Scan(&p.Thread, &p.ThreadRevision); e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, `UPDATE ai_requests SET state='UNKNOWN',code='INTERRUPTED_PROVIDER_OUTCOME',result=jsonb_build_object('id',id::text,'thread',thread_id::text,'state','UNKNOWN','code','INTERRUPTED_PROVIDER_OUTCOME'),completed_at=$2 WHERE thread_id=$1 AND state='SENDING' AND created_at<$3`, p.Thread, s.now(), s.now().Add(-2*time.Minute)); e != nil {
 			return e
 		}
 		var pending bool

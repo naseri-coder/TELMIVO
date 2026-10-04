@@ -81,7 +81,14 @@ func (w Workflow) Valid() bool {
 			return false
 		}
 	}
+	aiCalls := 0
 	for _, a := range w.Actions {
+		if a.Type == "ai.invoke" {
+			aiCalls++
+			if aiCalls > 1 {
+				return false
+			}
+		}
 		if !Contains(Actions, a.Type) || len(a.Value) > 4000 || len(a.Field) > 64 {
 			return false
 		}

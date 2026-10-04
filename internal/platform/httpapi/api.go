@@ -67,6 +67,7 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	mux.HandleFunc("POST /api/v1/customer-bot-updates/{account}/{bot}", a.contentWebhook)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/options", a.intelligenceOptions)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflows)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflowSave)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows/{workflow}", a.intelligenceWorkflowSave)
