@@ -280,7 +280,7 @@ func (s *Service) issue(ctx context.Context, tx pgx.Tx, actor, account, correlat
 			}
 		}
 	}
-	return a, database.Audit(ctx, tx, actor, account, "commercial.agreement.issue", "commercial_agreement", a.ID, correlation, nil, a)
+	return a, database.Audit(ctx, tx, actor, account, "commercial.agreement.issue", "commercial_agreement", a.ID, correlation, map[string]any{}, a)
 }
 
 func (s *Service) SetState(ctx context.Context, actor, account, correlation, id string, expected int64, state State, reason string) (Agreement, error) {
