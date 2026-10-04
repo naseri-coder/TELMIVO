@@ -91,6 +91,25 @@ func TestR3D2PricingAndCatalog(t *testing.T) {
 			t.Fatal("plan policy")
 		}
 	})
+
+	t.Run("plan_configuration_and_disable_safety", func(t *testing.T) {
+		v := commerce.Version{Kind: commerce.PlanKind, Key: "UNUSED_" + f.plan, Enabled: true, Definition: commerce.Definition{Plan: &commerce.Plan{Name: "Future plan", Order: 40, Plugins: map[string]commerce.Inclusion{f.p1: commerce.Unavailable}}}}
+		v = f.save(t, v, 0)
+		v.Enabled = false
+		_, err := f.s.SaveCatalog(ctx, f.admin.UserID, f.u.WorkspaceID, "test", commerce.CatalogChange{Version: v, Expected: 1, Reason: "disable unused"})
+		must(t, err)
+		catalog, err := f.s.Catalog(ctx, f.admin.UserID, f.u.WorkspaceID)
+		must(t, err)
+		if _, ok := catalog.Get(commerce.PlanKind, v.Key); ok {
+			t.Fatal("disabled plan available")
+		}
+		used, _ := catalog.Get(commerce.PlanKind, f.plan)
+		used.Enabled = false
+		_, err = f.s.SaveCatalog(ctx, f.admin.UserID, f.u.WorkspaceID, "test", commerce.CatalogChange{Version: used, Expected: 1, Reason: "unsafe disable"})
+		if !errors.Is(err, database.ErrConflict) {
+			t.Fatal("used plan safeguard", err)
+		}
+	})
 	_, e := f.s.Issue(ctx, f.admin.UserID, f.u.WorkspaceID, "invalid-period", commerce.Issue{Key: "weekly", Kind: commerce.PluginKind, CatalogKey: f.p1, Bot: f.bot, Period: "WEEKLY", Reason: "test"})
 	if !errors.Is(e, database.ErrInvalid) {
 		t.Fatal("invalid period accepted", e)
@@ -378,6 +397,19 @@ func TestR3D2CommercialSecurityAPI(t *testing.T) {
 	r := r3aRequest(handler, adminToken, admin.WorkspaceID, "POST", "/api/v1/commercial/catalog", commerce.CatalogChange{Version: commerce.Version{Kind: commerce.PluginKind, Key: "r3d2-api", Enabled: true, Definition: commerce.Definition{Plugin: &commerce.Plugin{Scope: sdk.PerAccount, SaleEnabled: true, Prices: r3d2Prices(1)}}}, Reason: "synthetic API"})
 	if r.Code != 200 {
 		t.Fatal(r.Code, r.Body.String())
+	}
+	for _, tc := range []struct {
+		token    string
+		expected int
+	}{{token, 403}, {adminToken, 200}} {
+		history := r3aRequest(handler, tc.token, u.WorkspaceID, "GET", "/api/v1/commercial/catalog/PLUGIN/r3d2-api/history", nil)
+		if history.Code != tc.expected {
+			t.Fatal("history RBAC", history.Code, history.Body.String())
+		}
+	}
+	badTrial := r3aRequest(handler, token, u.WorkspaceID, "POST", "/api/v1/commercial/trials", map[string]any{"key": "bad-trial", "plugin": "r3d2-api", "duration_seconds": 9999})
+	if badTrial.Code != 400 {
+		t.Fatal("trial override", badTrial.Code)
 	}
 	r = r3aRequest(handler, token, u.WorkspaceID, "POST", "/api/v1/commercial/agreements", commerce.Issue{Key: "api-self-grant", Kind: commerce.PluginKind, CatalogKey: "r3d2-api", AdminGrant: true, Reason: "attempt"})
 	if r.Code != 403 {

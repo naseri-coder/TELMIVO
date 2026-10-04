@@ -44,7 +44,7 @@ platform permission checks, without a parallel RBAC system:
 | POST `/quota` | Read-only member quota evaluation; `amount` is an integer string |
 
 Plan catalog writes also require `platform.plans.manage`, update the established
-plan catalog and retain the existing FREE safeguard. Plan assignment continues
+plan catalog and retain the existing FREE/in-use-plan safeguards. Plan assignment continues
 through the existing subscription API. Plan policy edits are immediate; other
 catalog versions may be scheduled. Versions have monotonically nondecreasing
 effective timestamps and optimistic concurrency. Disabled latest versions never

@@ -16,7 +16,7 @@ type Service struct {
 
 func (s *Service) now() time.Time {
 	if s.Clock == nil {
-		return UTCClock{}.Now()
+		return UTCClock{}.Now().Truncate(time.Microsecond)
 	}
 	return s.Clock.Now().UTC().Truncate(time.Microsecond)
 }
@@ -131,6 +131,15 @@ func (s *Service) SaveCatalog(ctx context.Context, actor, account, correlation s
 				return database.ErrInvalid
 			}
 			// Keep the established plan catalog/RBAC and assignments authoritative.
+			if !v.Enabled {
+				var used bool
+				if e = tx.QueryRow(ctx, "SELECT platform_plan_in_use($1,$2)", actor, v.Key).Scan(&used); e != nil {
+					return e
+				}
+				if used {
+					return database.ErrConflict
+				}
+			}
 			if _, e = tx.Exec(ctx, `INSERT INTO plans(key,name,active) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET name=EXCLUDED.name,active=EXCLUDED.active,version=plans.version+1,updated_at=now()`, v.Key, v.Definition.Plan.Name, v.Enabled); e != nil {
 				return e
 			}

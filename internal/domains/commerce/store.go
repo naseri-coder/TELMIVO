@@ -201,7 +201,10 @@ func (s *Service) issue(ctx context.Context, tx pgx.Tx, actor, account, correlat
 	}
 	if in.AdminGrant && !in.RepeatTrial {
 		a.Source = AdminSource
-		a.EndsAt = in.ExpiresAt
+		if in.ExpiresAt != nil {
+			end := in.ExpiresAt.UTC().Truncate(time.Microsecond)
+			a.EndsAt = &end
+		}
 		a.Terms.GraceSeconds = 0
 	}
 	if !in.AdminGrant {
