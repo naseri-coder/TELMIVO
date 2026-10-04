@@ -395,6 +395,12 @@ func TestR3D3SecurityAndAPI(t *testing.T) {
 	if strings.Contains(r.Body.String(), in.Token) || strings.Contains(captured.String(), in.Token) {
 		t.Fatal("token leaked to API/log")
 	}
+	var created botfactory.Bot
+	must(t, json.Unmarshal(r.Body.Bytes(), &created))
+	r = r3aRequest(api, token, u.WorkspaceID, "POST", "/api/v1/customer-bots/"+created.ID+"/plugins/factory-paid/actions", botfactory.Change{Action: sdk.Install, Configuration: json.RawMessage(`{}`)})
+	if r.Code != 403 || !strings.Contains(r.Body.String(), `"decision"`) || !strings.Contains(r.Body.String(), "PLAN_UNAVAILABLE") {
+		t.Fatal("structured commercial denial lost", r.Code, r.Body.String())
+	}
 	r = r3aRequest(api, token, u.WorkspaceID, "POST", "/api/v1/customer-bots", map[string]any{"name": "invalid", "token": "bad", "idempotency_key": "invalid", "price": 0})
 	if r.Code != 400 {
 		t.Fatal("commercial field accepted")

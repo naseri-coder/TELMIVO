@@ -266,16 +266,6 @@ func handleError(w http.ResponseWriter, e error) {
 		respond(w, 409, map[string]any{"error": map[string]string{"code": "BOT_SELECTION_REJECTED", "message": "انتخاب پلاگین‌ها نیاز به بررسی دارد"}, "review": factoryRejected.Review})
 		return
 	}
-	for _, failure := range []error{sdk.ErrManifest, sdk.ErrDependency, sdk.ErrCycle, sdk.ErrConflict, sdk.ErrVersion, sdk.ErrState, sdk.ErrConfiguration, sdk.ErrPermission} {
-		if errors.Is(e, failure) {
-			status := 409
-			if failure == sdk.ErrPermission {
-				status = 403
-			}
-			respond(w, status, map[string]any{"error": map[string]string{"code": failure.Error(), "message": "عملیات پلاگین مجاز نیست؛ وضعیت و وابستگی‌ها را بررسی کنید"}})
-			return
-		}
-	}
 	var commercialDenied *commerce.Denied
 	if errors.As(e, &commercialDenied) {
 		respond(w, 403, map[string]any{"error": map[string]string{"code": "forbidden"}, "decision": commercialDenied.Decision})
@@ -290,6 +280,16 @@ func handleError(w http.ResponseWriter, e error) {
 	if errors.As(e, &denied) {
 		fail(w, 403, "forbidden")
 		return
+	}
+	for _, failure := range []error{sdk.ErrManifest, sdk.ErrDependency, sdk.ErrCycle, sdk.ErrConflict, sdk.ErrVersion, sdk.ErrState, sdk.ErrConfiguration, sdk.ErrPermission} {
+		if errors.Is(e, failure) {
+			status := 409
+			if failure == sdk.ErrPermission {
+				status = 403
+			}
+			respond(w, status, map[string]any{"error": map[string]string{"code": failure.Error(), "message": "عملیات پلاگین مجاز نیست؛ وضعیت و وابستگی‌ها را بررسی کنید"}})
+			return
+		}
 	}
 	if errors.Is(e, database.ErrConflict) {
 		fail(w, 409, "conflict")
