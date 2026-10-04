@@ -3,6 +3,7 @@ package botfactory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 
 	"github.com/jackc/pgx/v5"
@@ -169,7 +170,28 @@ func (s *Service) preview(ctx context.Context, tx pgx.Tx, account, bot string, i
 		return r, nil
 	}
 	order, e := s.Registry.Resolve(r.Requested)
-	if e != nil {
+	if errors.Is(e, sdk.ErrConflict) {
+		// Resolve intentionally rejects conflicting closures. Reconstruct only for
+		// read-only review so customers see both sides; commit remains rejected.
+		visited := map[string]bool{}
+		var walk func(string)
+		walk = func(id string) {
+			if visited[id] {
+				return
+			}
+			visited[id] = true
+			m, _ := s.Registry.Manifest(id) // Immutable registry validates dependencies.
+			deps := append([]sdk.Dependency(nil), m.Dependencies...)
+			sort.Slice(deps, func(i, j int) bool { return deps[i].PluginID < deps[j].PluginID })
+			for _, d := range deps {
+				walk(d.PluginID)
+			}
+			order = append(order, id)
+		}
+		for _, id := range r.Requested {
+			walk(id)
+		}
+	} else if e != nil {
 		return r, e
 	}
 	r.Order = append(r.Order, order...)

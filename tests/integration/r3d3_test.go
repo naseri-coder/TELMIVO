@@ -267,13 +267,30 @@ func TestR3D3LifecycleIsolationAndAccessLoss(t *testing.T) {
 	if _, e = f.factory.Change(ctx, f.u.UserID, f.u.WorkspaceID, b.ID, "factory-paid", "r3d3", botfactory.Change{Action: sdk.Install, Configuration: json.RawMessage(`{}`)}); !errors.Is(e, sdk.ErrPermission) {
 		t.Fatal("per-bot entitlement leaked", e)
 	}
+	// Fixture-only verification simulates the future connection stage; production creation stays DRAFT.
+	tenant(t, f.u, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, "UPDATE customer_bots SET status='RUNNING' WHERE id=$1", a.ID)
+		return e
+	})
+	coreBefore := &platform.Service{DB: db, Registry: f.registry, Policy: f.s}
+	handlerBefore := &r3dHandler{}
+	_, e = (&platform.Runtime{Service: coreBefore, Handler: handlerBefore}).Bind(f.u.UserID, sdk.Scope{AccountID: f.u.WorkspaceID, BotID: a.ID, PluginID: paid.ID}).Invoke(ctx, "telegram.send", json.RawMessage(`{}`))
+	must(t, e)
+	tenant(t, f.u, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, `UPDATE plugin_installations SET data='{"retained":"expired-trial"}',revision=revision+1 WHERE bot_id=$1 AND plugin_id=$2`, a.ID, paid.ID)
+		return e
+	})
+	paid.Revision++
 	f.clock.at = f.clock.at.Add(time.Hour)
 	core := &platform.Service{DB: db, Registry: f.registry, Policy: f.s}
 	handler := &r3dHandler{}
-	if _, e = (&platform.Runtime{Service: core, Handler: handler}).Bind(f.u.UserID, sdk.Scope{AccountID: f.u.WorkspaceID, BotID: a.ID, PluginID: paid.ID}).Invoke(ctx, "telegram.send", json.RawMessage(`{}`)); e == nil {
-		t.Fatal("unverified bot executed")
+	if _, e = (&platform.Runtime{Service: core, Handler: handler}).Bind(f.u.UserID, sdk.Scope{AccountID: f.u.WorkspaceID, BotID: a.ID, PluginID: paid.ID}).Invoke(ctx, "telegram.send", json.RawMessage(`{}`)); !errors.Is(e, sdk.ErrPermission) {
+		t.Fatal("expired factory trial executed", e)
 	}
 	paid = change(a.ID, paid.ID, sdk.Disable, paid.Revision)
+	if number(t, f.u, "SELECT count(*) FROM plugin_installations WHERE bot_id=$1 AND plugin_id=$2 AND data->>'retained'='expired-trial'", a.ID, paid.ID) != 1 {
+		t.Fatal("expiry/disable deleted retained trial data")
+	}
 	paid = change(a.ID, paid.ID, sdk.RequestUninstall, paid.Revision)
 	if paid.State != sdk.UninstallPending {
 		t.Fatal(paid)
@@ -314,7 +331,7 @@ func TestR3D3SecurityAndAPI(t *testing.T) {
 	}
 	u, token := r3aLogin(t, 98003091, false)
 	api := (&httpapi.API{DB: db, Identity: r3aService(), Factory: f.factory, Config: config.Config{Environment: "test", Synthetic: true, MiniAppURL: "https://mini.test"}}).Handler()
-	r := r3aRequest(api, token, u.WorkspaceID, "GET", "/customer-bots/catalog", nil)
+	r := r3aRequest(api, token, u.WorkspaceID, "GET", "/api/v1/customer-bots/catalog", nil)
 	if r.Code != 200 {
 		t.Fatal(r.Code, r.Body.String())
 	}
@@ -326,14 +343,14 @@ func TestR3D3SecurityAndAPI(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&captured, nil)))
 	defer slog.SetDefault(previous)
 	in := factoryRequest(t, f, nil, "api-secret", false)
-	r = r3aRequest(api, token, u.WorkspaceID, "POST", "/customer-bots", in)
+	r = r3aRequest(api, token, u.WorkspaceID, "POST", "/api/v1/customer-bots", in)
 	if r.Code != 200 {
 		t.Fatal(r.Code, r.Body.String())
 	}
 	if strings.Contains(r.Body.String(), in.Token) || strings.Contains(captured.String(), in.Token) {
 		t.Fatal("token leaked to API/log")
 	}
-	r = r3aRequest(api, token, u.WorkspaceID, "POST", "/customer-bots", map[string]any{"name": "invalid", "token": "bad", "idempotency_key": "invalid", "price": 0})
+	r = r3aRequest(api, token, u.WorkspaceID, "POST", "/api/v1/customer-bots", map[string]any{"name": "invalid", "token": "bad", "idempotency_key": "invalid", "price": 0})
 	if r.Code != 400 {
 		t.Fatal("commercial field accepted")
 	}
