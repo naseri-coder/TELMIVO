@@ -18,7 +18,9 @@ CREATE FUNCTION guard_support_record() RETURNS trigger LANGUAGE plpgsql AS $$ BE
   IF OLD.delivery<>'SENDING' OR NEW.delivery NOT IN('SENT','FAILED','UNKNOWN') OR (to_jsonb(NEW)-'delivery') IS DISTINCT FROM (to_jsonb(OLD)-'delivery') THEN RAISE EXCEPTION 'message or terminal delivery is immutable'; END IF;
  ELSE
   IF NEW.revision<>OLD.revision+1 OR NEW.workspace_id<>OLD.workspace_id OR NEW.bot_id<>OLD.bot_id THEN RAISE EXCEPTION 'support scope or revision invalid'; END IF;
-  IF TG_TABLE_NAME='support_tickets' AND (NEW.reference<>OLD.reference OR NEW.contact_id<>OLD.contact_id OR NEW.created_at<>OLD.created_at) THEN RAISE EXCEPTION 'ticket identity immutable'; END IF;
+  IF TG_TABLE_NAME='support_tickets' THEN
+   IF NEW.reference<>OLD.reference OR NEW.contact_id<>OLD.contact_id OR NEW.created_at<>OLD.created_at THEN RAISE EXCEPTION 'ticket identity immutable'; END IF;
+  END IF;
  END IF;RETURN NEW;END $$;
 DO $$ DECLARE t text;BEGIN FOREACH t IN ARRAY ARRAY['crm_contacts','crm_identities','support_departments','support_tickets','support_messages','support_templates'] LOOP
  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t);EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',t);

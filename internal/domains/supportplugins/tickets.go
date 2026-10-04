@@ -52,6 +52,10 @@ func (s *Service) department(ctx context.Context, tx pgx.Tx, scope sdk.Scope, id
 }
 func (s *Service) receive(ctx context.Context, tx pgx.Tx, p string, scope sdk.Scope, in tickets.Inbound) (tickets.Ticket, error) {
 	var t tickets.Ticket
+	// Both absent and empty attachments represent the same inbound request.
+	if in.Attachments == nil {
+		in.Attachments = []tickets.Attachment{}
+	}
 	fp := fingerprint(in)
 	if in.User <= 0 || len(in.Body) == 0 || len(in.Body) > 4000 || !keyValid(in.Key) || !tickets.AttachmentsValid(in.Attachments) {
 		return t, database.ErrInvalid
