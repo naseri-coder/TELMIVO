@@ -62,7 +62,7 @@ Management uses existing workspace membership and `bots.manage`; platform-admin 
 not bypass ownership. New customer bot creation/credential validation belongs to Bot Factory.
 
 Plugins receive only `sdk.Invoker` from `Runtime.Bind`; actor/scope are privately bound.
-Every call checks membership, bot ownership, ACTIVE state, exact versions, the active graph,
+Every call checks membership, bot ownership, RUNNING bot status, ACTIVE plugin state, exact versions, the active graph,
 manifest declaration, persisted grants and current AdmissionPolicy before a Core handler.
 Representative capabilities are `telegram.send`, `telegram.read_member_status`, `files.read`,
 `files.write`, `tickets.read`, `tickets.write`, `ai.invoke`, `workflow.execute`. Unknown or

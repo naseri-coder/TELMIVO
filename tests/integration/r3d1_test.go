@@ -62,7 +62,7 @@ func r3dBot(t *testing.T, u identity.Result, key string) string {
 	t.Helper()
 	var id string
 	tenant(t, u, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `INSERT INTO customer_bots(workspace_id,name,username,key_id,encrypted_token,status,idempotency_key) VALUES($1,'Synthetic R3D bot',$2,'synthetic',decode('00','hex'),'DRAFT',$3) RETURNING id::text`, u.WorkspaceID, fmt.Sprintf("r3d_%s_%d", key, sequence.Add(1)), key).Scan(&id)
+		return tx.QueryRow(ctx, `INSERT INTO customer_bots(workspace_id,name,username,key_id,encrypted_token,status,idempotency_key) VALUES($1,'Synthetic R3D bot',$2,'synthetic',decode('00','hex'),'RUNNING',$3) RETURNING id::text`, u.WorkspaceID, fmt.Sprintf("r3d_%s_%d", key, sequence.Add(1)), key).Scan(&id)
 	})
 	return id
 }
@@ -117,6 +117,19 @@ func TestR3D1LifecycleAndRuntime(t *testing.T) {
 	if decoded.Scope != dependent {
 		t.Fatal("unbound invocation")
 	}
+	for _, state := range []string{"DRAFT", "VERIFIED", "DISABLED"} {
+		tenant(t, u, func(tx pgx.Tx) error {
+			_, e := tx.Exec(ctx, "UPDATE customer_bots SET status=$1 WHERE id=$2", state, bot)
+			return e
+		})
+		if _, e = bound.Invoke(ctx, "telegram.send", json.RawMessage(`{}`)); !errors.Is(e, sdk.ErrState) {
+			t.Fatal("inactive bot executed", state, e)
+		}
+	}
+	tenant(t, u, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, "UPDATE customer_bots SET status='RUNNING' WHERE id=$1", bot)
+		return e
+	})
 	for _, cap := range []string{"files.write", "database.root"} {
 		if _, e = bound.Invoke(ctx, cap, json.RawMessage(`{}`)); !errors.Is(e, sdk.ErrPermission) {
 			t.Fatal(e)

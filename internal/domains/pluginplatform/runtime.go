@@ -47,6 +47,13 @@ func (bound session) Invoke(ctx context.Context, capability string, payload json
 		if err := lockBot(ctx, tx, bound.actor, bound.scope.AccountID, bound.scope.BotID); err != nil {
 			return err
 		}
+		var botStatus string
+		if err := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", bound.scope.AccountID, bound.scope.BotID).Scan(&botStatus); err != nil {
+			return err
+		}
+		if botStatus != "RUNNING" {
+			return sdk.ErrState
+		}
 		all, err := records(ctx, tx, bound.scope.AccountID, bound.scope.BotID)
 		if err != nil {
 			return err
