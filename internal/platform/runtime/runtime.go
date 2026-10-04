@@ -214,7 +214,11 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errorsCh <- q.Consume(ctx, db, subject, durable, func(ctx context.Context, tx pgx.Tx, e queue.Envelope) error {
+		consume := q.Consume
+		if role == "worker" && !c.Synthetic {
+			consume = q.ConsumeExternal
+		}
+		errorsCh <- consume(ctx, db, subject, durable, func(ctx context.Context, tx pgx.Tx, e queue.Envelope) error {
 			if e.Type == "group.action" {
 				client := telegramclient.New(c.GroupBotToken, !c.Synthetic)
 				s := &groupbot.Service{DB: db, Authority: client, Transport: client}

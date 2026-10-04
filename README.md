@@ -2,13 +2,13 @@
 
 سامانه یکپارچه کسب‌وکار در تلگرام · Persian-first / RTL-first
 
-Private, proprietary foundation. Continue on `feature/platform-bootstrap-v0.1`; Draft PR #1 targets `develop`. No open-source license, automatic merge or production deployment.
+Private, proprietary platform. R3 release-readiness work is stacked on the validated R3D-8 checkpoint; earlier phase PRs remain separate. See [final R3 audit and validation boundaries](docs/operations/r3-final-release-readiness.md). No open-source license, automatic merge or production deployment.
 
 TELMIVO is a Go modular monolith with independently runnable API, Main Bot, Group Bot, Downloader Bot, Customer Bot Runtime, Worker and Media Worker. PostgreSQL owns business state, Redis supplies temporary cache/rate limiting, NATS JetStream processes durable jobs, and the React/TypeScript/Vite Mini App defaults to Persian and RTL. ClickHouse is deferred.
 
-The four foundations are identity/workspaces, configurable access/entitlements/plugins, integer double-entry service-credit ledger/billing interfaces, and transactional outbox/inbox jobs. Eight checksummed migrations include tenant FORCE RLS/composite foreign keys, separate platform permissions, append-only/sealed financial postings and queue leases. Global plan use checks have a narrow privileged boolean path; ordinary runtime connections cannot bypass RLS.
+The four foundations are identity/workspaces, configurable access/entitlements/plugins, integer double-entry service-credit ledger/billing interfaces, and transactional outbox/inbox jobs. Eighteen checksummed migrations (0001–0018) include tenant FORCE RLS/composite foreign keys, separate platform permissions, append-only/sealed financial postings and queue leases. Global plan use checks have a narrow privileged boolean path; ordinary runtime connections cannot bypass RLS.
 
-The current source supports synthetic identity/session registration, persisted ticket create/reply, FREE→PRO→FREE/expiry without resource deletion, synthetic USD/IRR adjustments, and controlled fixture downloads through JetStream. The Mini App has API-connected dashboard/ticket/wallet pages and stable operation retry keys. The policy management area provides versioned access/commercial editors and shared backend Preview. Other product routes explicitly show coming soon. Real integrations are not implied by interface presence.
+The source includes Main/Group/Downloader flows, a trusted Plugin Registry/Runtime, commercial plans/prices/entitlements/quotas, Bot Factory, Access Gate, File Manager, CRM, Ticketing, Automation, AI Assistant, Broadcast, Forms, Commerce, customer Plugin Store and Super Admin controls. The Persian Mini App uses API-backed state and authorized lifecycle previews. Disable preserves records; pricing, entitlement, subscription, installation and activation remain separate. Configured live adapters exist, but isolated tests use synthetic transports; their presence does not establish production readiness.
 
 ## Development
 
@@ -32,11 +32,11 @@ Native tests additionally require explicit isolated `telmivo_test` URLs and Redi
 
 ## Boundaries and limitations
 
-Read [domain/trust/tenant/financial boundaries](docs/architecture/boundaries.md), [limit semantics](docs/architecture/quotas.md), [ADRs](docs/adr) and [security policy](SECURITY.md). Workspace RBAC is distinct from platform administration. Grants and overrides resolve centrally; resource count limits preserve existing resources and restrict creation after downgrade. Capacity/item-size enforcement is explicitly unavailable until implemented.
+Read [domain/trust/tenant/financial boundaries](docs/architecture/boundaries.md), [limit semantics](docs/architecture/quotas.md), [ADRs](docs/adr) and [security policy](SECURITY.md). Workspace RBAC is distinct from platform administration. Grants and overrides resolve centrally; resource count limits preserve existing resources and restrict creation after downgrade. Resource limits are domain-specific: media processing and upload admission have bounded size/concurrency checks; no universal capacity guarantee is implied.
 
-Wallet balances derive from immutable integer ledger entries. IRR uses whole rials, USD cents, USDT on TON six-decimal atomic units, TON nanoton and Stars integer XTR. Internal service credit is separate from external rails. Payment/refund interfaces do not implement providers, verification posting or real financial operations. R1 uses only synthetic internal credits.
+Wallet balances derive from immutable integer ledger entries. IRR uses whole rials, USD cents, USDT on TON six-decimal atomic units, TON nanoton and Stars integer XTR. Internal service credit is separate from external rails. Payment/refund interfaces do not implement providers, verification posting or real financial operations. Validation uses only synthetic internal credits.
 
-Main/Group/Downloader/customer bot live behavior, full Bot Factory/Uploader/Broadcast, real provider extraction, FFmpeg storage ingestion, S3, AI, live notification delivery and complete admin UI remain deferred. Storage/Telegram/AI/payment abstractions isolate vendors; actual adapters are not fabricated. Backup/restore drills and broader load/production security testing are untested.
+Payment-provider settlement, arbitrary third-party executable plugins, public developer marketplace, production S3 provisioning and a complete Uploader product remain deferred. Telegram, bounded media/FFmpeg and operator-configured AI adapters require separate real-environment authorization. Disposable backup/restore and cross-phase native acceptance are CI gates; production restore/capacity/security approval is still required before deployment. No production feature guarantee follows from a passing source checkpoint.
 
 © 2026 NASERI CODER. All TELMIVO source rights reserved; dependencies retain their respective licenses.
 
