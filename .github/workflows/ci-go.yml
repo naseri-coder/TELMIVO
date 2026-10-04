@@ -1,10 +1,10 @@
 name: CI Go
 on:
   push:
-    branches: [feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1, feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    branches: [feature/r3d-7-commerce-broadcast-forms-v0.1, feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1, feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
   pull_request:
-    branches: [feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1,feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    branches: [feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1,feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}

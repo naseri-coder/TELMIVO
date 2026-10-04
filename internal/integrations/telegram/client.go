@@ -41,15 +41,18 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 	}
 	defer resp.Body.Close()
 	var envelope struct {
-		OK        bool            `json:"ok"`
-		Result    json.RawMessage `json:"result"`
-		ErrorCode int             `json:"error_code"`
+		OK         bool            `json:"ok"`
+		Result     json.RawMessage `json:"result"`
+		ErrorCode  int             `json:"error_code"`
+		Parameters struct {
+			RetryAfter int `json:"retry_after"`
+		} `json:"parameters"`
 	}
 	if e = json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 1<<20)).Decode(&envelope); e != nil {
 		return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}
 	if !envelope.OK {
-		return &APIError{Code: envelope.ErrorCode}
+		return &APIError{Code: envelope.ErrorCode, RetryAfter: envelope.Parameters.RetryAfter}
 	}
 	if result != nil {
 		return json.Unmarshal(envelope.Result, result)
