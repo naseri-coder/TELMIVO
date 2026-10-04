@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	provider "github.com/naseri-coder/TELMIVO/internal/platform/ai"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
@@ -17,6 +18,12 @@ type ModelChange struct {
 	Key      string         `json:"api_key"`
 	Expected int64          `json:"expected_revision"`
 }
+
+// Prevent accidental request-format logging from exposing the operator key.
+func (in ModelChange) String() string {
+	return fmt.Sprintf("ModelChange{ID:%s, Expected:%d, Key:[REDACTED]}", in.Model.ID, in.Expected)
+}
+func (in ModelChange) GoString() string { return in.String() }
 
 func (s *Service) SaveModel(ctx context.Context, actor, account string, in ModelChange) (provider.Model, error) {
 	m := in.Model

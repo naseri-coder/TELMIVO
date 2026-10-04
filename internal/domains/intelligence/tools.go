@@ -22,6 +22,9 @@ type toolArgs struct {
 }
 
 func validateTool(config assistant.Config, in Chat, t provider.Tool) (toolArgs, error) {
+	if in.Purpose == "CLASSIFY" {
+		return toolArgs{}, &provider.Failure{Code: "TOOL_DENIED"}
+	}
 	if !assistant.Contains(config.Tools, t.Name) || len(t.Arguments) > 4096 {
 		return toolArgs{}, &provider.Failure{Code: "TOOL_DENIED"}
 	}

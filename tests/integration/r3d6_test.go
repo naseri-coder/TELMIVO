@@ -606,3 +606,42 @@ func TestR3D6MemoryAndConnection(t *testing.T) {
 		t.Fatal("prompt bound", e)
 	}
 }
+
+type r3d6BlockingProvider struct{ entered, release chan struct{} }
+
+func (p r3d6BlockingProvider) Generate(c context.Context, _ provider.Model, _ provider.Request) (provider.Response, error) {
+	close(p.entered)
+	select {
+	case <-p.release:
+		return provider.Response{Text: "Reserved once", InputTokens: 1, OutputTokens: 1}, nil
+	case <-c.Done():
+		return provider.Response{}, c.Err()
+	}
+}
+func TestR3D6Concurrency(t *testing.T) {
+	f := r3d6Fixture(t)
+	p := r3d6BlockingProvider{entered: make(chan struct{}), release: make(chan struct{})}
+	f.ai.Provider = p
+	done := make(chan error, 1)
+	in := intelligence.Chat{Key: "simultaneous", Text: "Bounded", Purpose: "PLAYGROUND"}
+	go func() { _, e := f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), in); done <- e }()
+	select {
+	case <-p.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("provider did not begin")
+	}
+	r, e := f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), in)
+	must(t, e)
+	if r.State != "UNKNOWN" || !r.Replayed {
+		t.Fatal("duplicate reservation", r)
+	}
+	_, e = f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.Chat{Key: "other-pending", Text: "Other", Purpose: "PLAYGROUND"})
+	if !errors.Is(e, database.ErrConflict) {
+		t.Fatal("simultaneous thread", e)
+	}
+	close(p.release)
+	must(t, <-done)
+	if number(t, f.u, "SELECT count(*) FROM ai_requests WHERE bot_id=$1", f.bot) != 1 {
+		t.Fatal("duplicate request")
+	}
+}
