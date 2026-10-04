@@ -46,7 +46,7 @@ func (a *API) content() *contentplugins.Service {
 	if a.Config.ContentTestFixture && a.Config.Environment == "test" && a.Config.Synthetic {
 		provider = testfixtures.ContentProvider{}
 	}
-	return &contentplugins.Service{DB: a.DB, Core: &platform.Service{DB: a.DB, Registry: f.Registry, Policy: f.Commercial, Hooks: f.Hooks}, Commercial: f.Commercial, Provider: provider, DigestKey: key}
+	return &contentplugins.Service{Support: a.support(), DB: a.DB, Core: &platform.Service{DB: a.DB, Registry: f.Registry, Policy: f.Commercial, Hooks: f.Hooks}, Commercial: f.Commercial, Provider: provider, DigestKey: key}
 }
 func contentScope(r *http.Request, id string) sdk.Scope {
 	return sdk.Scope{AccountID: workspace(r), BotID: r.PathValue("bot"), PluginID: id}

@@ -74,7 +74,7 @@ func r3d4Fixture(t *testing.T) r3d4FixtureData {
 	t.Helper()
 	f := r3d2Fixture(t)
 	f.clock.at = time.Now().UTC().Truncate(time.Microsecond)
-	registry, e := contentplugins.Registry()
+	registry, e := platform.NewRegistry("0.3.0", []sdk.Manifest{gate.Manifest(), files.Manifest()})
 	must(t, e)
 	for _, id := range registry.IDs() {
 		m, _ := registry.Manifest(id)

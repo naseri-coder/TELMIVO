@@ -5,6 +5,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
+	tickets "github.com/naseri-coder/TELMIVO/internal/plugins/ticketing"
 	"strings"
 )
 
@@ -24,4 +25,8 @@ func (contentTransport) SendFile(context.Context, int64, string, string, string)
 func (contentTransport) Prompt(context.Context, int64, string, any) error { return nil }
 func (t contentTransport) Connect(context.Context, string, string) (string, error) {
 	return "synthetic_" + strings.ReplaceAll(t.bot, "-", ""), nil
+}
+
+func (contentTransport) SupportReply(context.Context, int64, string, []tickets.Attachment) (int64, string) {
+	return 101, "DELIVERY_ACKNOWLEDGED"
 }
