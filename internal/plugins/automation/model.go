@@ -17,9 +17,9 @@ const MaxDepth = 4
 const MaxAttempts = 2
 const MaxDuration = 60 * time.Second
 
-var Triggers = []string{"manual", "crm.contact.created", "crm.contact.updated", "crm.tag.added", "ticket.created", "ticket.customer_message", "ticket.agent_message", "ticket.status_changed", "ticket.priority_changed", "ticket.assigned", "file.delivery_allowed", "file.delivery_denied"}
+var Triggers = []string{"manual", "crm.contact.created", "crm.contact.updated", "crm.tag.added", "ticket.created", "ticket.customer_message", "ticket.agent_message", "ticket.status_changed", "ticket.priority_changed", "ticket.assigned", "file.delivery_allowed", "file.delivery_denied", "broadcast.started", "broadcast.completed", "broadcast.cancelled", "broadcast.status_changed", "form.submitted", "commerce.order.created", "commerce.order.status_changed"}
 var Actions = []string{"crm.add_tag", "crm.remove_tag", "crm.set_field", "ticket.assign", "ticket.priority", "ticket.status", "ticket.note", "ticket.reply", "telegram.send", "ai.invoke", "ai.store_result"}
-var Fields = []string{"ticket.priority", "ticket.status", "ticket.department", "contact.tags", "file.reference", "ai.priority", "ai.category"}
+var Fields = []string{"ticket.priority", "ticket.status", "ticket.department", "contact.tags", "file.reference", "ai.priority", "ai.category", "form.id", "order.id", "order.status", "campaign.id", "campaign.status"}
 
 func Contains(a []string, s string) bool {
 	for _, v := range a {

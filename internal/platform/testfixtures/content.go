@@ -7,6 +7,7 @@ import (
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	tickets "github.com/naseri-coder/TELMIVO/internal/plugins/ticketing"
 	"strings"
+	"time"
 )
 
 // ContentProvider is injected exclusively in test+synthetic mode. No network or real files.
@@ -29,4 +30,8 @@ func (t contentTransport) Connect(context.Context, string, string) (string, erro
 
 func (contentTransport) SupportReply(context.Context, int64, string, []tickets.Attachment) (int64, string) {
 	return 101, "DELIVERY_ACKNOWLEDGED"
+}
+
+func (contentTransport) BroadcastReply(context.Context, int64, string) (int64, string, time.Duration) {
+	return 101, "DELIVERY_ACKNOWLEDGED", 0
 }

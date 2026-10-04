@@ -8,7 +8,10 @@ import (
 )
 
 // APIError carries an actionable category without Telegram's text or token-bearing URL.
-type APIError struct{ Code int }
+type APIError struct {
+	Code       int
+	RetryAfter int
+}
 
 func (e *APIError) Error() string { return "Telegram request rejected" }
 func (c *Client) Check(ctx context.Context, channel, user int64) (string, string) {

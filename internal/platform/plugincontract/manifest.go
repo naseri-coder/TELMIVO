@@ -5,7 +5,7 @@ import "encoding/json"
 // KnownCapability is an explicit allowlist; callers cannot expand it through manifests.
 func KnownCapability(s string) bool {
 	switch s {
-	case "telegram.send", "telegram.read_member_status", "files.read", "files.write", "tickets.read", "tickets.write", "crm.read", "crm.write", "ai.invoke", "workflow.execute":
+	case "telegram.send", "telegram.read_member_status", "files.read", "files.write", "tickets.read", "tickets.write", "crm.read", "crm.write", "ai.invoke", "workflow.execute", "broadcast.manage", "forms.manage", "forms.submit", "commerce.manage", "commerce.order":
 		return true
 	}
 	return false

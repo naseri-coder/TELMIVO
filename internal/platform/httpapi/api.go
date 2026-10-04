@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
+	"github.com/naseri-coder/TELMIVO/internal/domains/businessplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
@@ -42,6 +43,7 @@ import (
 )
 
 type API struct {
+	Business     *businessplugins.Service
 	Intelligence *intelligence.Service
 	DB           *database.Store
 	Factory      *botfactory.Service
@@ -67,6 +69,17 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	mux.HandleFunc("POST /api/v1/customer-bot-updates/{account}/{bot}", a.contentWebhook)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/{plugin}/definitions", a.businessDefinitions)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/{plugin}/definitions", a.businessSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/{plugin}/definitions/{definition}", a.businessSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/{plugin}/resources/{resource}/actions", a.businessAction)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/broadcast/preview", a.businessPreview)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/broadcast/campaigns/{campaign}", a.businessCampaign)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/broadcast/campaigns/{campaign}/recipients", a.businessRecipients)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/broadcast/campaigns/{campaign}/history", a.businessCampaignHistory)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/forms/submissions/{form}", a.businessSubmissions)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/commerce/orders", a.businessOrders)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/commerce/orders/{order}/history", a.businessOrderHistory)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/options", a.intelligenceOptions)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflows)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflowSave)
