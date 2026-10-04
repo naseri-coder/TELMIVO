@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/base64"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
+	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	platform "github.com/naseri-coder/TELMIVO/internal/domains/pluginplatform"
 	cred "github.com/naseri-coder/TELMIVO/internal/platform/crypto"
 	"net/http"
@@ -12,7 +13,7 @@ func (a *API) factory() *botfactory.Service {
 	if a.Factory != nil {
 		return a.Factory
 	}
-	registry, _ := platform.NewRegistry("0.3.0", nil)
+	registry, _ := contentplugins.Registry()
 	s := &botfactory.Service{DB: a.DB, Registry: registry, Commercial: a.commercial()}
 	if key, e := base64.StdEncoding.DecodeString(a.Config.CredentialKey); e == nil {
 		s.Credentials, _ = cred.NewAESStore("primary-v1", key)

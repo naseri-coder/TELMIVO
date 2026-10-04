@@ -20,7 +20,7 @@ type Client struct {
 }
 
 func New(token string, enabled bool) *Client {
-	return &Client{token: token, Enabled: enabled, http: &http.Client{Timeout: 10 * time.Second}}
+	return &Client{token: token, Enabled: enabled, http: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func (c *Client) call(ctx context.Context, method string, payload any, result any) error {
 	if !c.Enabled || c.token == "" {
@@ -49,7 +49,7 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 		return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}
 	if !envelope.OK {
-		return errors.New("Telegram request rejected")
+		return &APIError{Code: envelope.ErrorCode}
 	}
 	if result != nil {
 		return json.Unmarshal(envelope.Result, result)

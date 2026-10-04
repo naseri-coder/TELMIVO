@@ -9,6 +9,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
+	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
@@ -41,6 +42,7 @@ import (
 type API struct {
 	DB       *database.Store
 	Factory  *botfactory.Service
+	Content  *contentplugins.Service
 	Cache    *cache.Client
 	Queue    *queue.Client
 	Config   config.Config
@@ -59,7 +61,16 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "live"}) })
 	mux.HandleFunc("GET /health/ready", a.ready)
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
+	mux.HandleFunc("POST /api/v1/customer-bot-updates/{account}/{bot}", a.contentWebhook)
 	protected := http.NewServeMux()
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/access-policies/{policy}/check", a.contentPolicyCheck)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/access-policies", a.contentPolicies)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/access-policies", a.contentPolicySave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/access-policies/{policy}", a.contentPolicySave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/managed-files", a.contentFiles)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/managed-files", a.contentFileSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/managed-files/{reference}", a.contentFileSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/connect", a.contentConnect)
 	protected.HandleFunc("GET /api/v1/customer-bots", a.factoryList)
 	protected.HandleFunc("GET /api/v1/customer-bots/catalog", a.factoryCatalog)
 	protected.HandleFunc("POST /api/v1/customer-bots/preview", a.factoryPreview)
@@ -259,6 +270,11 @@ func handleError(w http.ResponseWriter, e error) {
 	}
 	if errors.Is(e, groupbot.ErrProtected) {
 		fail(w, 403, "GROUP_TARGET_PROTECTED")
+		return
+	}
+	var quotaDenied *contentplugins.QuotaDenied
+	if errors.As(e, &quotaDenied) {
+		respond(w, 403, map[string]any{"error": map[string]string{"code": quotaDenied.Error(), "message": "سهمیهٔ عملیات کافی نیست"}, "quota": quotaDenied.Result})
 		return
 	}
 	var factoryRejected *botfactory.Rejected

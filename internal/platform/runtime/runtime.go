@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
@@ -15,6 +16,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/config"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/httpapi"
+	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	telegramtransport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
@@ -72,6 +74,24 @@ func Run(role string) error {
 		registry, err := testfixtures.FactoryRegistry()
 		if err != nil {
 			return err
+		}
+		api.SetFactoryRegistry(registry)
+	}
+	if c.ContentTestFixture && role == "api" {
+		extra := []sdk.Manifest{}
+		if c.BotFactoryTestFixture {
+			fixture, e := testfixtures.FactoryRegistry()
+			if e != nil {
+				return e
+			}
+			for _, id := range fixture.IDs() {
+				m, _ := fixture.Manifest(id)
+				extra = append(extra, m)
+			}
+		}
+		registry, e := contentplugins.Registry(extra...)
+		if e != nil {
+			return e
 		}
 		api.SetFactoryRegistry(registry)
 	}

@@ -71,7 +71,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/check-test-target.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR3D3(PreviewAndCommercialCatalog|AtomicCreationAndReplay|LifecycleIsolationAndAccessLoss|SecurityAndAPI|BrowserFixture|RecoveryPreparation)$|TestR3D2(PricingAndCatalog|EntitlementLicensingAndActivation|Trials|BundlesAddonsAndQuota|CommercialSecurityAPI|RecoveryPreparation)$|TestR3D1(LifecycleAndRuntime|IsolationAndAdmission|HookAndConcurrentConflicts|RecoveryPreparation)$|TestR3CDiagnostics|TestR3CFailurePolicy|TestR3CHistoryPagination|TestR3CBotCallbacks|TestR3CCancelCompletionRace|TestR3CLeaseRenewReclaimFence|TestR3CProcessingCleanup|TestR3CSchema|TestR3CIdentityBot|TestR3CJourney|TestR3CCancelAndDeliveryFailures|TestR3CConcurrency|TestR3CStaleFencing|TestR3CBrowserFixture|TestR3CRecoveryPreparation|TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR3D4(Policies|FilesAndDelivery|IsolationSecurity|QuotaAndFailures|IngestionAndConnection|BrowserFixture|RecoveryPreparation)$|TestR3D3(PreviewAndCommercialCatalog|AtomicCreationAndReplay|LifecycleIsolationAndAccessLoss|SecurityAndAPI|BrowserFixture|RecoveryPreparation)$|TestR3D2(PricingAndCatalog|EntitlementLicensingAndActivation|Trials|BundlesAddonsAndQuota|CommercialSecurityAPI|RecoveryPreparation)$|TestR3D1(LifecycleAndRuntime|IsolationAndAdmission|HookAndConcurrentConflicts|RecoveryPreparation)$|TestR3CDiagnostics|TestR3CFailurePolicy|TestR3CHistoryPagination|TestR3CBotCallbacks|TestR3CCancelCompletionRace|TestR3CLeaseRenewReclaimFence|TestR3CProcessingCleanup|TestR3CSchema|TestR3CIdentityBot|TestR3CJourney|TestR3CCancelAndDeliveryFailures|TestR3CConcurrency|TestR3CStaleFencing|TestR3CBrowserFixture|TestR3CRecoveryPreparation|TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -82,6 +82,7 @@ jobs:
           TEST_GROUP_AUTHORITY_FIXTURE: 'true'
           TEST_DOWNLOADER_FIXTURE: 'true'
           TEST_BOT_FACTORY_FIXTURE: 'true'
+          TEST_CONTENT_PLUGIN_FIXTURE: 'true'
           CREDENTIAL_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
           BOT_TOKEN: synthetic-signing-only
           ADMIN_TELEGRAM_IDS: '94000001'
@@ -102,7 +103,7 @@ jobs:
           # Independent synthetic customers share the runner loopback IP.
           # Give each complete journey its own rate window; never reset inside a journey.
           # The production 120/min limiter and all prior assertions remain unchanged.
-          for spec in native.spec.ts customer.native.spec.ts groups.native.spec.ts downloader.native.spec.ts factory.native.spec.ts; do
+          for spec in native.spec.ts customer.native.spec.ts groups.native.spec.ts downloader.native.spec.ts factory.native.spec.ts content.native.spec.ts; do
             docker exec "${{ job.services.redis.id }}" redis-cli -n 15 DEL telmivo:rate:ip:127.0.0.1
             npx playwright test --config playwright.native.config.ts "/$spec$" --output "test-results/$spec"
           done
@@ -116,7 +117,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/backup-restore.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR2BRecovered|TestR3CRecovered|TestR3D1Recovered|TestR3D2Recovered|TestR3D3Recovered' -count=1 -timeout=2m | tee recovered-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR2BRecovered|TestR3CRecovered|TestR3D1Recovered|TestR3D2Recovered|TestR3D3Recovered|TestR3D4Recovered' -count=1 -timeout=2m | tee recovered-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -44,35 +44,17 @@ func (bound session) Invoke(ctx context.Context, capability string, payload json
 	s := r.Service
 	var result json.RawMessage
 	err := s.DB.Tenant(ctx, bound.actor, bound.scope.AccountID, false, func(tx pgx.Tx) error {
-		if err := lockBot(ctx, tx, bound.actor, bound.scope.AccountID, bound.scope.BotID); err != nil {
+		var err error
+		if h, ok := r.Handler.(TransactionalCapabilityHandler); ok {
+			if err := h.PrepareTx(ctx, tx, bound.scope); err != nil {
+				return err
+			}
+		}
+		if err := s.ValidateExecutionTx(ctx, tx, bound.actor, bound.scope, capability, true); err != nil {
 			return err
 		}
-		var botStatus string
-		if err := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", bound.scope.AccountID, bound.scope.BotID).Scan(&botStatus); err != nil {
-			return err
-		}
-		if botStatus != "RUNNING" {
-			return sdk.ErrState
-		}
-		all, err := records(ctx, tx, bound.scope.AccountID, bound.scope.BotID)
-		if err != nil {
-			return err
-		}
-		i, ok := find(all, bound.scope.PluginID)
-		if !ok || i.State != sdk.Active {
-			return sdk.ErrState
-		}
-		m, err := s.Registry.Manifest(bound.scope.PluginID)
-		if err != nil {
-			return err
-		}
-		if !sdk.Contains(m.Permissions, capability) || !sdk.Contains(i.Capabilities, capability) {
-			return sdk.ErrPermission
-		}
-		if err := s.checkActiveAdmission(ctx, bound.actor, all); err != nil {
-			return err
-		}
-		if _, err := s.admit(ctx, bound.actor, bound.scope, sdk.Execute, capability); err != nil {
+		if h, ok := r.Handler.(TransactionalCapabilityHandler); ok {
+			result, err = h.InvokeTx(ctx, tx, bound.actor, bound.scope, capability, append(json.RawMessage(nil), payload...))
 			return err
 		}
 		result, err = r.Handler.Invoke(ctx, bound.scope, capability, append(json.RawMessage(nil), payload...))
@@ -82,4 +64,47 @@ func (bound session) Invoke(ctx context.Context, capability string, payload json
 		return nil, err
 	}
 	return result, nil
+}
+
+// TransactionalCapabilityHandler is trusted Core composition, never a Plugin SDK handle.
+type TransactionalCapabilityHandler interface {
+	PrepareTx(context.Context, pgx.Tx, sdk.Scope) error
+	InvokeTx(context.Context, pgx.Tx, string, sdk.Scope, string, json.RawMessage) (json.RawMessage, error)
+}
+
+// ValidateExecutionTx retains the runtime's admission checks for trusted composed operations.
+// Management can configure active plugins on DRAFT bots; external effects require RUNNING.
+func (s *Service) ValidateExecutionTx(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, capability string, running bool) error {
+	if err := lockBot(ctx, tx, actor, scope.AccountID, scope.BotID); err != nil {
+		return err
+	}
+	var botStatus string
+	if err := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID).Scan(&botStatus); err != nil {
+		return err
+	}
+	if running && botStatus != "RUNNING" {
+		return sdk.ErrState
+	}
+	all, err := records(ctx, tx, scope.AccountID, scope.BotID)
+	if err != nil {
+		return err
+	}
+	i, ok := find(all, scope.PluginID)
+	if !ok || i.State != sdk.Active {
+		return sdk.ErrState
+	}
+	m, err := s.Registry.Manifest(scope.PluginID)
+	if err != nil {
+		return err
+	}
+	if !sdk.Contains(m.Permissions, capability) || !sdk.Contains(i.Capabilities, capability) {
+		return sdk.ErrPermission
+	}
+	if err := s.checkActiveAdmission(ctx, actor, all); err != nil {
+		return err
+	}
+	if _, err := s.admit(ctx, actor, scope, sdk.Execute, capability); err != nil {
+		return err
+	}
+	return nil
 }
