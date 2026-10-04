@@ -117,3 +117,12 @@ func (a *API) commercialQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, out)
 }
+
+func (a *API) commercialHistory(w http.ResponseWriter, r *http.Request) {
+	out, e := a.commercial().History(r.Context(), user(r), workspace(r), commerce.Kind(r.PathValue("kind")), r.PathValue("key"))
+	if e != nil {
+		handleError(w, e)
+		return
+	}
+	respond(w, 200, out)
+}

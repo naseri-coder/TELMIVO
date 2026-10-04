@@ -34,6 +34,7 @@ platform permission checks, without a parallel RBAC system:
 | Route under `/api/v1/commercial` | Capability |
 | --- | --- |
 | GET `/catalog` | Current effective typed catalog; `platform.commercial.read` |
+| GET `/catalog/{kind}/{key}/history` | Previous, scheduled and disabled versions; commercial.read |
 | POST `/catalog` | Append version; expected_version + reason; `platform.commercial.manage` |
 | GET `/agreements` | Tenant commercial history and computed state; commercial.read |
 | POST `/agreements` | Privileged fulfillment/admin grant; commercial.manage |
@@ -164,8 +165,8 @@ quota/reservation flows remain unchanged.
 
 No checkout/UI, business plugin, deployment or production DB change. Administrative
 catalog management is backend-first. Catalog snapshots are immutable database
-history; agreement history embeds price versions. Catalog reads currently return
-only effective versions. Admission uses the existing read-only R3D-1 boundary;
+history; agreement history embeds price versions. Catalog lists return effective versions; per-key history includes past and
+scheduled versions. Admission uses the existing read-only R3D-1 boundary;
 it is evaluated per operation, not a distributed revocation barrier for already
 in-flight effects. A real external-effect handler still needs the existing outbox
 pattern. Mixed-scope bundles, advanced restricted/read-only grace, automatic

@@ -175,6 +175,19 @@ func (s *Service) issue(ctx context.Context, tx pgx.Tx, actor, account, correlat
 			a.Source = AddonSource
 		}
 	}
+	// Revalidate membership after catalog scope changes; old agreements keep their snapshot.
+	for _, id := range a.Terms.Effects.Plugins {
+		member, ok := c.Get(PluginKind, id)
+		if !ok || member.Definition.Plugin.Scope != a.Scope {
+			return Agreement{}, database.ErrInvalid
+		}
+	}
+	for id := range a.Terms.Effects.Quotas {
+		metric, ok := c.Get(QuotaKind, id)
+		if !ok || metric.Definition.Quota.Scope != a.Scope {
+			return Agreement{}, database.ErrInvalid
+		}
+	}
 	if a.Scope == sdk.PerBot {
 		if in.Bot == "" {
 			return Agreement{}, database.ErrInvalid

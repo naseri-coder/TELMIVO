@@ -37,6 +37,7 @@ func r3d2Prices(n int64) commerce.Prices {
 func (f commercialFixture) save(t *testing.T, v commerce.Version, expected int64) commerce.Version {
 	t.Helper()
 	v.Enabled = true
+	v.EffectiveAt = f.clock.at
 	out, e := f.s.SaveCatalog(ctx, f.admin.UserID, f.u.WorkspaceID, "r3d2", commerce.CatalogChange{Version: v, Expected: expected, Reason: "isolated synthetic policy"})
 	must(t, e)
 	return out
@@ -90,6 +91,10 @@ func TestR3D2PricingAndCatalog(t *testing.T) {
 			t.Fatal("plan policy")
 		}
 	})
+	_, e := f.s.Issue(ctx, f.admin.UserID, f.u.WorkspaceID, "invalid-period", commerce.Issue{Key: "weekly", Kind: commerce.PluginKind, CatalogKey: f.p1, Bot: f.bot, Period: "WEEKLY", Reason: "test"})
+	if !errors.Is(e, database.ErrInvalid) {
+		t.Fatal("invalid period accepted", e)
+	}
 	daily := f.issue(t, commerce.Issue{Key: "daily", Kind: commerce.PluginKind, CatalogKey: f.p1, Bot: f.bot, Period: commerce.Daily})
 	monthly := f.issue(t, commerce.Issue{Key: "monthly", Kind: commerce.PluginKind, CatalogKey: f.p1, Bot: f.bot, Period: commerce.Monthly})
 	if daily.Terms.Price.Amount != 50 || monthly.Terms.Price.Amount != 1000 || daily.EndsAt.Sub(daily.StartsAt) != 24*time.Hour || monthly.EndsAt.Day() != 28 {
@@ -108,6 +113,11 @@ func TestR3D2PricingAndCatalog(t *testing.T) {
 			if a.ID == daily.ID && a.Terms.Price.Amount != 50 {
 				t.Fatal("historical price changed")
 			}
+		}
+		history, err := f.s.History(ctx, f.admin.UserID, f.u.WorkspaceID, commerce.PluginKind, f.p1)
+		must(t, err)
+		if len(history) != 2 || history[0].Definition.Plugin.Prices.Daily.Amount != 50 || history[1].Definition.Plugin.Prices.Daily.Amount != 99 {
+			t.Fatal("price history", history)
 		}
 		if next.Terms.Price.Amount != 99 || next.Terms.Catalog.Version != 2 {
 			t.Fatal(next)
@@ -166,6 +176,14 @@ func TestR3D2EntitlementLicensingAndActivation(t *testing.T) {
 	purchase := f.issue(t, commerce.Issue{Key: "purchase", Kind: commerce.PluginKind, CatalogKey: f.p1, Bot: f.bot, Period: commerce.Daily})
 	if !f.decision(t, f.p1, f.bot).Allowed || f.decision(t, f.p1, f.other).Allowed {
 		t.Fatal("per-bot leakage")
+	}
+	catalog, err := f.s.Catalog(ctx, f.admin.UserID, f.u.WorkspaceID)
+	must(t, err)
+	plan, _ := catalog.Get(commerce.PlanKind, f.plan)
+	plan.Definition.Plan.Plugins[f.p2] = commerce.PaidAddon
+	f.save(t, plan, 1)
+	if f.decision(t, f.p2, f.other).Allowed {
+		t.Fatal("paid add-on granted without agreement")
 	}
 	account := f.issue(t, commerce.Issue{Key: "account", Kind: commerce.PluginKind, CatalogKey: f.p2, Period: commerce.Daily})
 	if account.Scope != sdk.PerAccount || !f.decision(t, f.p2, f.other).Allowed {

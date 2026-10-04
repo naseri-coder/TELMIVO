@@ -150,3 +150,31 @@ func (s *Service) SaveCatalog(ctx context.Context, actor, account, correlation s
 	})
 	return v, e
 }
+
+// History includes scheduled and disabled versions as well as prior prices.
+func (s *Service) History(ctx context.Context, actor, account string, kind Kind, key string) ([]Version, error) {
+	out := []Version{}
+	e := s.DB.Tenant(ctx, actor, account, true, func(tx pgx.Tx) error {
+		if !database.PlatformPermission(ctx, tx, actor, "platform.commercial.read") {
+			return database.ErrForbidden
+		}
+		rs, e := tx.Query(ctx, "SELECT kind,key,version,enabled,effective_at,definition FROM commercial_catalog WHERE kind=$1 AND key=$2 ORDER BY version", kind, key)
+		if e != nil {
+			return e
+		}
+		defer rs.Close()
+		for rs.Next() {
+			var v Version
+			var b []byte
+			if e = rs.Scan(&v.Kind, &v.Key, &v.Version, &v.Enabled, &v.EffectiveAt, &b); e != nil {
+				return e
+			}
+			if e = decodeStrict(b, &v.Definition); e != nil {
+				return e
+			}
+			out = append(out, v)
+		}
+		return rs.Err()
+	})
+	return out, e
+}

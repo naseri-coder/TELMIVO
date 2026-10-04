@@ -58,6 +58,7 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /api/v1/commercial/catalog", a.commercialCatalog)
+	protected.HandleFunc("GET /api/v1/commercial/catalog/{kind}/{key}/history", a.commercialHistory)
 	protected.HandleFunc("POST /api/v1/commercial/catalog", a.commercialSave)
 	protected.HandleFunc("GET /api/v1/commercial/agreements", a.commercialAgreements)
 	protected.HandleFunc("POST /api/v1/commercial/agreements", a.commercialIssue)
