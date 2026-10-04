@@ -1,0 +1,501 @@
+{
+  "repository": "naseri-coder/TELMIVO",
+  "branch": "feature/r3b-group-bot-v0.1",
+  "r3a_parent_sha": "05fc043c53a7a4361b1b99b092c0d253fdf2e881",
+  "validated_source_head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+  "validated_source_tree": "99966c91ab18e52f4645f0e761fd0e84db4fce49",
+  "r3b_commits": [
+    {
+      "sha": "6a5dadfb77bc2aaebfc6be9bd8db5182700b1c91",
+      "title": "feat(r3b): add scoped group moderation and Telegram authority contracts"
+    },
+    {
+      "sha": "c9bec0152e98171c77f3f116c639750d1b1b16ea",
+      "title": "feat(r3b): extend Persian Mini App with group management"
+    },
+    {
+      "sha": "2c11aff40440e8e57195974e9df2c51d2f2a860e",
+      "title": "test(r3b): cover native moderation concurrency and real group journey"
+    },
+    {
+      "sha": "9d9eaab8d1b7054ddd0f459711845d8cd3f26f99",
+      "title": "fix(r3b): separate native browser harness and align acceptance fixtures"
+    },
+    {
+      "sha": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "title": "fix(r3b): protect bot targets and normalize hidden Telegram links"
+    },
+    {
+      "git_revision": "HEAD at this documentation commit",
+      "expected_parent": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "title": "docs(r3b): finalize validated group bot evidence",
+      "kind": "evidence_documentation_only"
+    }
+  ],
+  "r3b_commit_count": 6,
+  "final_delivery_head": {
+    "git_revision": "HEAD at this documentation commit",
+    "expected_parent": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+    "exact_sha_record_location": "Stacked Draft PR and final response; cannot embed commit SHA in its own content"
+  },
+  "first_inspection": {
+    "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+    "tracked_uncommitted_changes": [],
+    "staged_changes": [],
+    "preserved_untracked_docs": [
+      "docs/adr/ADR-019-group-moderation-history.md",
+      "docs/architecture/r3b-group-bot.md"
+    ]
+  },
+  "source_changed_file_count": 28,
+  "final_changed_file_count": 33,
+  "final_documentation_paths": [
+    "docs/adr/ADR-019-group-moderation-history.md",
+    "docs/architecture/r3b-group-bot.md",
+    "docs/operations/r3b-validation.md",
+    "docs/operations/r3b-evidence.json",
+    "docs/operations/r3b-files.json"
+  ],
+  "migration_inventory": [
+    {
+      "path": "db/migrations/0001_core.sql",
+      "sha256": "9151f109a0c4bde03f9f0f1da1fe0a8324c5023110f88c6fb601372af502acc2",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0002_resources.sql",
+      "sha256": "754355b13dfc1086e0429b9f6f74d62f22f20957a9f6c2d8084c13c3012c0d7f",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0003_seed.sql",
+      "sha256": "a64de0b19e53199d48f1d47d9c3f569b371c2b0a924436d4c0c48c3b07827bb5",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0004_r1.sql",
+      "sha256": "eb9205d12738abfec6f445635ec725de485ce2c525a6fd70c652a914b4ab93bd",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0005_financial_sealing.sql",
+      "sha256": "18d0f3ac093a3549a4768334a038b4fde5cf61d56aff4a446e984d64be80a3d3",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0006_native_ledger_trigger.sql",
+      "sha256": "194a8d2ee11a4650a2138aa44ace3e8a37861e774343eec43a62979f04e8e2df",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0007_dynamic_policy.sql",
+      "sha256": "c6e58e2dd9061807cdd34198b5ae08fc9f839a8dbb773135fc7095c7d400c1ef",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0008_catalog_policy_revisions.sql",
+      "sha256": "1350ec244aa892b6f617b789c65aae2c7b47343021ba3746298b3fef049c53b0",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0009_long_job_foundation.sql",
+      "sha256": "0a334e396207d6652c33cadec78fa3d91212f6088144a6df16ed74f1940e26f8",
+      "unchanged_from_r3a": true,
+      "new_in_r3b": false
+    },
+    {
+      "path": "db/migrations/0010_group_moderation.sql",
+      "sha256": "d20377a245c1ccba5bc158d6e4e1b464056ef7f641cc1f8fde5356f21c7ca99b",
+      "unchanged_from_r3a": false,
+      "new_in_r3b": true
+    }
+  ],
+  "new_migrations": [
+    {
+      "path": "db/migrations/0010_group_moderation.sql",
+      "sha256": "d20377a245c1ccba5bc158d6e4e1b464056ef7f641cc1f8fde5356f21c7ca99b",
+      "unchanged_from_r3a": false,
+      "new_in_r3b": true
+    }
+  ],
+  "test_counts": {
+    "go_unit_contract_top_level": 26,
+    "go_count_method": "Static enumeration of 26 Test functions in packages executed by successful non-verbose race command; CI logs prove package success, not individual verbose test counts.",
+    "native_total_top_level_before_restore": 26,
+    "native_total_subtests_including_nested": 65,
+    "r3b_native_top_level": 7,
+    "r3b_native_subtests": 17,
+    "restored_recovery_top_level": 1,
+    "web_unit": 6,
+    "lightweight_browser": 8,
+    "native_browser": 3,
+    "native_browser_group": 1,
+    "native_browser_existing": 2
+  },
+  "gate_results": {
+    "SOURCE_CONTINUITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Local and remote HEAD 6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1; five existing commits descend from exact R3A parent; CI checkout logs match SHA and tree 99966c91ab18e52f4645f0e761fd0e84db4fce49."
+    },
+    "R3A_FREEZE_GATE": {
+      "verdict": "PASS",
+      "evidence": "Remote R3A stays 05fc043c53a7a4361b1b99b092c0d253fdf2e881; 0001–0009 byte-identical; R3A product regressions PASS. Shared API/runtime/navigation and test harness extended on R3B only; frozen parent is not edited."
+    },
+    "BRANCH_ISOLATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "Remote Foundation ab640fbdbafc76354d0f56fc71e4033fff9db711 and main/develop 024b3a3465285f9758ce109551a6574ced087dc7 unchanged; only R3B ref advances."
+    },
+    "GROUP_BOT_ENTRY_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BGroupJourney shared entry and TestR3BPrivateStartAndHiddenLink PASS; Mini App identity matches independent Group Bot start."
+    },
+    "GROUP_CLAIM_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BGroupJourney claim idempotency/nonadmin_claim_denied and TestR3BAPIIsolationAuthority/cross_workspace_conflict_audited PASS."
+    },
+    "GROUP_CLAIM_CONCURRENCY_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BConcurrencyIsolation concurrent competing claims yields one owner with restricted tenant isolation PASS."
+    },
+    "TELEGRAM_AUTHORITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BAPIIsolationAuthority/platform_admin_not_group_admin and application_permission_separate; TestR3BTelegramFixtures PASS with synthetic current membership."
+    },
+    "AUTHORITY_DRIFT_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BGroupJourney/authority_drift_and_unavailable PASS; revoked/unavailable authority denied."
+    },
+    "BOT_PERMISSION_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BGroupJourney/rights_and_protected_targets PASS; separate actor and bot rights fixtures; bot/creator/admin protection."
+    },
+    "GROUP_TRIAL_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BGroupJourney/trial_once_and_readd and expiry_preserves_rules PASS; immutable PER_GROUP enrollment reused."
+    },
+    "GROUP_ACCESS_GATE": {
+      "verdict": "PASS",
+      "evidence": "Resolver-driven TestR3BGroupJourney/expiry_preserves_rules PASS; configuration persists while protected behavior denies expired access."
+    },
+    "RULES_GATE": {
+      "verdict": "PASS",
+      "evidence": "configuration_and_conflict PASS; actual native browser saves two Persian rules and retains them after reload and workspace switch."
+    },
+    "WARNING_GATE": {
+      "verdict": "PASS",
+      "evidence": "duplicate_update_and_warning_escalation and clear_history_and_key_conflict PASS; append-only warnings and ordered clear."
+    },
+    "MODERATION_ACTION_GATE": {
+      "verdict": "PASS",
+      "evidence": "rights_and_protected_targets and transport_results_and_replay PASS; requested/acknowledged/failed/unknown facts distinguished; no live Telegram claim."
+    },
+    "ANTI_FLOOD_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestDeterministicPolicy/flood and threshold_change executed under successful race package; native flood_and_configurable_threshold PASS."
+    },
+    "ANTI_SPAM_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestDeterministicPolicy duplicate/mentions and native duplicate_update_and_warning_escalation PASS; conservative deterministic heuristics only."
+    },
+    "LINK_PROTECTION_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestHiddenAndBareLinks successful race package; native link_allowlist_and_denylist and TestR3BPrivateStartAndHiddenLink PASS; Telegram text_link normalization and visible/bare URLs covered."
+    },
+    "UPDATE_IDEMPOTENCY_GATE": {
+      "verdict": "PASS",
+      "evidence": "duplicate_update_and_warning_escalation, concurrent_update_dedup, transport_results_and_replay and Telegram fixtures PASS."
+    },
+    "WORKSPACE_ISOLATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "TestR3BAPIIsolationAuthority/cross_workspace_reads_and_mutations and real browser foreign PATCH denial/workspace switching PASS; FORCE RLS and composite group FK."
+    },
+    "AUDIT_GATE": {
+      "verdict": "PASS",
+      "evidence": "cross_workspace_conflict_audited, clear_history_and_key_conflict and immutable history/results assertions PASS; correlation-aware mutations."
+    },
+    "GROUP_MINIAPP_GATE": {
+      "verdict": "PASS",
+      "evidence": "groups.native.spec.ts passes actual frontend/API/PostgreSQL group detail, policy/rules persistence, warning history and workspace journey; 390x844 RTL/no overflow."
+    },
+    "NATIVE_BROWSER_E2E_GATE": {
+      "verdict": "PASS",
+      "evidence": "Native job 111232514489 reports 3 passed (8.8s), including existing customer/admin and group journey; no route interception in native group test."
+    },
+    "REGRESSION_GATE": {
+      "verdict": "PASS",
+      "evidence": "26 native top-level/65 nested subtests, restored TestR2BRecovered, 26 statically enumerated Go unit/contract tests in successful race packages, 6 frontend tests, 8 lightweight and 3 native browser scenarios."
+    },
+    "SECURITY_GATE": {
+      "verdict": "PASS",
+      "evidence": "Job 111232513761: scan 210 files zero matches; govulncheck zero called/imported-package vulnerabilities and one module-only advisory; npm audit zero. Restricted role/security denial assertions PASS."
+    },
+    "CI_GATE": {
+      "verdict": "PASS",
+      "evidence": "Four completed successful source workflows; actual five logs reviewed with exact checkout SHA, no test FAIL/panic/runner error; native and restore pipelines explicitly pipefail."
+    },
+    "DOCUMENTATION_GATE": {
+      "verdict": "PASS",
+      "evidence": "Preserved architecture/ADR plus validation, machine evidence and exact inventory; final change set restricted to these five docs; JSON/inventory/migration/log checks complete before publication."
+    }
+  },
+  "final_source_ci_runs": [
+    {
+      "id": 37133275488,
+      "name": "Security Baseline",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "conclusion": "success",
+      "status": "completed",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37133275488"
+    },
+    {
+      "id": 37133275524,
+      "name": "CI Web",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "conclusion": "success",
+      "status": "completed",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37133275524"
+    },
+    {
+      "id": 37133275492,
+      "name": "Build Images",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "conclusion": "success",
+      "status": "completed",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37133275492"
+    },
+    {
+      "id": 37133275626,
+      "name": "CI Go",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "conclusion": "success",
+      "status": "completed",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37133275626"
+    }
+  ],
+  "ci_jobs": {
+    "security": 111232513761,
+    "web": 111232513897,
+    "images": 111232513859,
+    "go": 111232514233,
+    "native": 111232514489
+  },
+  "reviewed_job_log_hashes": [
+    {
+      "job_id": 111232513761,
+      "sha256": "00ff3cfa58b71ece34555d87e8e871e08a9b3eecb4f0da638f868d93d81f90c7",
+      "bytes": 19219
+    },
+    {
+      "job_id": 111232513859,
+      "sha256": "72ecd2815a2ee8f7eee0a2f3fe1b35ae4c3526c9ad6006151d1b140c408dec7f",
+      "bytes": 220832
+    },
+    {
+      "job_id": 111232513897,
+      "sha256": "2e3ef2d9b9bac239bfc2494a0cffbae15b9829cf43146a172954dc7bf39fba60",
+      "bytes": 45972
+    },
+    {
+      "job_id": 111232514233,
+      "sha256": "c5ad2b22c786cc06fd40816d9e383eb6bf78f88e7af17da9e94f728c55638deb",
+      "bytes": 20926
+    },
+    {
+      "job_id": 111232514489,
+      "sha256": "3634996fc7729dc3f7149c8ceab359c81145830d5db164c4f9263065fe4e631b",
+      "bytes": 121520
+    }
+  ],
+  "ci_history": [
+    {
+      "id": 37133275488,
+      "name": "Security Baseline",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37133275524,
+      "name": "CI Web",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37133275492,
+      "name": "Build Images",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37133275626,
+      "name": "CI Go",
+      "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132567111,
+      "name": "Security Baseline",
+      "head": "9d9eaab8d1b7054ddd0f459711845d8cd3f26f99",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132567084,
+      "name": "CI Web",
+      "head": "9d9eaab8d1b7054ddd0f459711845d8cd3f26f99",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132567069,
+      "name": "Build Images",
+      "head": "9d9eaab8d1b7054ddd0f459711845d8cd3f26f99",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132567204,
+      "name": "CI Go",
+      "head": "9d9eaab8d1b7054ddd0f459711845d8cd3f26f99",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132225610,
+      "name": "Security Baseline",
+      "head": "2c11aff40440e8e57195974e9df2c51d2f2a860e",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132225600,
+      "name": "CI Web",
+      "head": "2c11aff40440e8e57195974e9df2c51d2f2a860e",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 37132225632,
+      "name": "Build Images",
+      "head": "2c11aff40440e8e57195974e9df2c51d2f2a860e",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37132225826,
+      "name": "CI Go",
+      "head": "2c11aff40440e8e57195974e9df2c51d2f2a860e",
+      "status": "completed",
+      "conclusion": "failure"
+    }
+  ],
+  "superseded_failures": [
+    {
+      "run_id": 37132225600,
+      "job_id": 111229435838,
+      "cause": "Lightweight harness included groups.native.spec.ts without API backend; connection refused and two group scenarios failed.",
+      "correction": "9d9eaab excludes native group test from lightweight harness, retains native acceptance.",
+      "replacement": 37133275524
+    },
+    {
+      "run_id": 37132225826,
+      "job_id": 111229436555,
+      "cause": "Migration test still expected 9 instead of 10; fixture removed actor rights instead of bot rights; API fixture origin example.test disagreed with request mini.test, yielding 403.",
+      "correction": "9d9eaab aligns count, independent bot-right fixture and origin; final 6c561a8 adds bot-account protection/hidden links.",
+      "replacement": 37133275626
+    }
+  ],
+  "native_artifact": {
+    "id": 11276969320,
+    "run_id": 37133275626,
+    "head": "6c561a8dc9ae43c2d0ed7bdbbb6545402b099bf1",
+    "digest": "sha256:12c65f71f63cc75bbdf74eca50c1b86900e19c727ac68aa7d0547ea7b9f0dc07",
+    "name": "native-results"
+  },
+  "restore": {
+    "canonical_public_tables": 88,
+    "before_after_identical": true,
+    "before_sha256": "9046448b071cb25487646e732a8bc8a9726b11f65d6d15251da55537787600a0",
+    "after_sha256": "9046448b071cb25487646e732a8bc8a9726b11f65d6d15251da55537787600a0",
+    "recovery": "TestR2BRecovered PASS under restricted restored runtime; R3B-specific external action replay demonstrated before restore, not claimed after restore"
+  },
+  "log_review_limits": [
+    "Expected PostgreSQL denial/unique/FK/append-only errors from negative tests and synthetic ACTION_FAILED/job FAILED outcomes are present; no test failure or panic.",
+    "Go race job is non-verbose; exact function count statically enumerated, no invented verbose count."
+  ],
+  "external_blockers": [
+    {
+      "name": "CodeQL",
+      "status": "BLOCKED_EXTERNAL",
+      "reason": "Inherited private-repository/account capability blocker; no new run/retry."
+    },
+    {
+      "name": "Branch Protection",
+      "status": "EXTERNAL_BLOCKER",
+      "reason": "Inherited administration capability blocker; no administrative changes."
+    }
+  ],
+  "deferred": [
+    "R3C Downloader",
+    "Bot Factory/Uploader/customer bot runtime",
+    "Payments/Stars/crypto/refunds",
+    "AI",
+    "Captcha/raid/advanced engagement",
+    "Full channels/content scheduling/analytics/ticketing/broadcasts",
+    "Network S3/external KMS",
+    "Production deployment/load/retention tuning"
+  ],
+  "untested": [
+    "Live Telegram getMe/getChatMember and moderation transport, webhook registration and actual Telegram WebView/device matrix",
+    "Production credentials/data/deployment/load and scheduled recovery/RPO/RTO",
+    "Network S3/external KMS/payment providers",
+    "Comprehensive accessibility certification"
+  ],
+  "known_limitations": [
+    "Synthetic Telegram authority/transport tested with real restricted PostgreSQL; live behavior is untested.",
+    "External send succeeded before transaction commit/crash may duplicate action; exactly-once Telegram execution is not promised; unknown outcome is recorded without blind retry.",
+    "Flood/duplicate window uses PostgreSQL digest history, bounded to 1001 records / 1–3600 seconds; production capacity/retention untested.",
+    "Groups list capped at 100; history keyset pages of 50.",
+    "Default policy disables automatic moderation; detection/escalation default LOG_ONLY; heuristics cannot establish spam intent.",
+    "Bot rights UI is last verified snapshot; sensitive operations revalidate authority.",
+    "Automatic installation chooses existing default workspace; existing immutable claims cannot be silently reassigned.",
+    "Inherited module-only Go advisory remains; govulncheck reports one module vulnerability, zero imported-package/called vulnerabilities."
+  ],
+  "r3a_changes": {
+    "branch_changes": 0,
+    "shared_extensions_on_r3b": [
+      "API/runtime wiring",
+      "Mini App group navigation/locales",
+      "native harness and migration count assertion"
+    ],
+    "r3a_product_source_paths_unchanged": [
+      "internal/domains/mainbot",
+      "internal/domains/identity",
+      "web/miniapp/src/pages/Dashboard.tsx",
+      "web/miniapp/src/pages/Plans.tsx",
+      "web/miniapp/src/pages/Wallet.tsx",
+      "web/miniapp/src/pages/Settings.tsx"
+    ]
+  },
+  "foundation_changes": {
+    "branch_changes": 0,
+    "core_identity_resolver_ledger_trial_queue_contract_changes": 0,
+    "r3b_extensions": [
+      "migration 0010",
+      "runtime grants for moderation table/route projection"
+    ]
+  },
+  "no_production_operations": true,
+  "verdict": "TELMIVO_R3B_GROUP_BOT_VERTICAL_PASS"
+}

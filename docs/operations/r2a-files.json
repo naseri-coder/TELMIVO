@@ -1,0 +1,175 @@
+{
+  "repository": "naseri-coder/TELMIVO",
+  "stage": "R2A",
+  "initial_remote_commit": "1c2541b286467c670688eaf750a6f53e1e75aa4b",
+  "counts": {
+    "M": 24,
+    "A": 17
+  },
+  "files": [
+    {
+      "status": "M",
+      "path": ".github/workflows/build-images.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci-go.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci-web.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/codeql.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/migration-check.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/security.yml"
+    },
+    {
+      "status": "M",
+      "path": "CHANGELOG.md"
+    },
+    {
+      "status": "M",
+      "path": "README.md"
+    },
+    {
+      "status": "A",
+      "path": "db/migrations/0007_dynamic_policy.sql"
+    },
+    {
+      "status": "A",
+      "path": "db/migrations/0008_catalog_policy_revisions.sql"
+    },
+    {
+      "status": "M",
+      "path": "deployments/docker/backend.Dockerfile"
+    },
+    {
+      "status": "A",
+      "path": "docs/adr/ADR-017-dynamic-commercial-policy.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/dynamic-policies.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r2a-evidence.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r2a-files.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r2a-validation.md"
+    },
+    {
+      "status": "M",
+      "path": "infrastructure/postgres/grants.sql"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/downloads/service.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/entitlements/service.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/identity/bot.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/identity/entry.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/identity/service.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/policies/model.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/policies/model_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/policies/reservations.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/policies/resolve.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/policies/store.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/tickets/service.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/config/config.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/entitlement/resolver.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/httpapi/admin.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/httpapi/api.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/httpapi/policies.go"
+    },
+    {
+      "status": "M",
+      "path": "tests/integration/native_test.go"
+    },
+    {
+      "status": "A",
+      "path": "tests/integration/r2a_test.go"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/e2e/smoke.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/app/App.tsx"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/locales/fa/policies.json"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/locales/index.ts"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/pages/Policies.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/styles/app.css"
+    }
+  ]
+}

@@ -1,0 +1,322 @@
+[
+  {
+    "status": "A",
+    "path": ".dockerignore"
+  },
+  {
+    "status": "A",
+    "path": ".env.example"
+  },
+  {
+    "status": "A",
+    "path": ".github/CODEOWNERS"
+  },
+  {
+    "status": "A",
+    "path": ".github/ISSUE_TEMPLATE/architecture.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/ISSUE_TEMPLATE/bug.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/ISSUE_TEMPLATE/feature.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/pull_request_template.md"
+  },
+  {
+    "status": "A",
+    "path": ".github/workflows/build-images.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/workflows/ci-go.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/workflows/ci-web.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/workflows/codeql.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/workflows/migration-check.yml"
+  },
+  {
+    "status": "A",
+    "path": ".github/workflows/security.yml"
+  },
+  {
+    "status": "M",
+    "path": ".gitignore"
+  },
+  {
+    "status": "A",
+    "path": "CHANGELOG.md"
+  },
+  {
+    "status": "A",
+    "path": "CONTRIBUTING.md"
+  },
+  {
+    "status": "A",
+    "path": "Makefile"
+  },
+  {
+    "status": "M",
+    "path": "README.md"
+  },
+  {
+    "status": "A",
+    "path": "SECURITY.md"
+  },
+  {
+    "status": "A",
+    "path": "db/migrations/0004_r1.sql"
+  },
+  {
+    "status": "A",
+    "path": "db/migrations/0005_financial_sealing.sql"
+  },
+  {
+    "status": "A",
+    "path": "db/migrations/0006_native_ledger_trigger.sql"
+  },
+  {
+    "status": "A",
+    "path": "deployments/docker/backend.Dockerfile"
+  },
+  {
+    "status": "A",
+    "path": "deployments/docker/miniapp.Dockerfile"
+  },
+  {
+    "status": "A",
+    "path": "deployments/reverse-proxy/nginx.conf"
+  },
+  {
+    "status": "A",
+    "path": "docker-compose.yml"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-001-modular-monolith.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-002-go-backend.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-003-postgresql-source-of-truth.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-004-redis-temporary-state.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-005-nats-jetstream.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-006-media-worker.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-007-customer-bot-engine.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-008-separate-group-bot.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-009-separate-downloader-bot.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-010-storage-abstraction.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-011-workspace-multitenancy.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-012-entitlement-engine.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-013-plugin-system.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-014-double-entry-ledger.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-015-payment-provider-abstraction.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/adr/ADR-016-persian-first-rtl.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/architecture/quotas.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/operations/development.md"
+  },
+  {
+    "status": "A",
+    "path": "docs/operations/r1-evidence.json"
+  },
+  {
+    "status": "A",
+    "path": "docs/operations/r1-files.json"
+  },
+  {
+    "status": "A",
+    "path": "docs/operations/r1-validation.md"
+  },
+  {
+    "status": "M",
+    "path": "docs/operations/validation.md"
+  },
+  {
+    "status": "A",
+    "path": "infrastructure/postgres/grants.sql"
+  },
+  {
+    "status": "A",
+    "path": "infrastructure/postgres/init.sql"
+  },
+  {
+    "status": "M",
+    "path": "internal/domains/downloads/service.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/domains/entitlements/service.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/domains/identity/service.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/domains/subscriptions/service.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/domains/tickets/service.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/domains/wallets/service.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/cache/redis.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/database/database.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/entitlement/resolver.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/httpapi/admin.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/httpapi/api.go"
+  },
+  {
+    "status": "A",
+    "path": "internal/platform/httpapi/security_test.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/queue/nats.go"
+  },
+  {
+    "status": "M",
+    "path": "internal/platform/runtime/runtime.go"
+  },
+  {
+    "status": "A",
+    "path": "scripts/ci/check-test-target.sh"
+  },
+  {
+    "status": "A",
+    "path": "scripts/dev/guard.sh"
+  },
+  {
+    "status": "A",
+    "path": "scripts/security/scan.py"
+  },
+  {
+    "status": "A",
+    "path": "tests/integration/native_test.go"
+  },
+  {
+    "status": "A",
+    "path": "web/miniapp/e2e/smoke.spec.ts"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/package-lock.json"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/package.json"
+  },
+  {
+    "status": "A",
+    "path": "web/miniapp/playwright.config.ts"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/src/app/App.tsx"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/src/components/ui.tsx"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/src/pages/Tickets.tsx"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/src/pages/Wallet.tsx"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/src/services/api.ts"
+  },
+  {
+    "status": "A",
+    "path": "web/miniapp/src/services/operation.ts"
+  },
+  {
+    "status": "A",
+    "path": "web/miniapp/src/tests/operation.test.ts"
+  },
+  {
+    "status": "M",
+    "path": "web/miniapp/vite.config.ts"
+  }
+]

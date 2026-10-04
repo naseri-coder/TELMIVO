@@ -1,0 +1,311 @@
+{
+  "base": "14b27792936c6d004e7e127f3d5de8f1be91ae79",
+  "validated_source_head": "08352a52edb1dd4403e05e985335e1a4456a31d9",
+  "source_count": 47,
+  "final_count": 51,
+  "paths": [
+    {
+      "path": ".github/workflows/build-images.yml",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "e597ad0c8a0e26c4e917a0d8a0455a64cf24e7718cfd141b1b52bbbcb42c9337"
+    },
+    {
+      "path": ".github/workflows/ci-go.yml",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "e80b29c088e2a3a88342ca12362a1ebbfee473391e2d983c1c71865ff42c4fb9"
+    },
+    {
+      "path": ".github/workflows/ci-web.yml",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "abb4f84c92900ec6770fd62995e49612c39bba8c1f0fb4641af5ee0bc782b7a2"
+    },
+    {
+      "path": ".github/workflows/migration-check.yml",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "61b65a534464431fe4e81386f7f73f7f25a1058c7abea333eb431db7411ebcda"
+    },
+    {
+      "path": ".github/workflows/security.yml",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "33fd6c40a74b15b770cf3ca9fb46cdde7721f8222e75a90be23f662328e8cd71"
+    },
+    {
+      "path": "db/migrations/0011_downloader_lifecycle.sql",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "75e045e2b939766507fdd3b388abd449f2d10b28b8bc36ef1d28fdd68da00c63"
+    },
+    {
+      "path": "deployments/docker/backend.Dockerfile",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "2b687bb87e6d937e36f21a0de40299a9c1e0228f12dafeab978eb7feedcf4612"
+    },
+    {
+      "path": "docs/architecture/r3c-downloader.md",
+      "kind": "documentation",
+      "new": true
+    },
+    {
+      "path": "docs/operations/r3c-evidence.json",
+      "kind": "documentation",
+      "new": true
+    },
+    {
+      "path": "docs/operations/r3c-files.json",
+      "kind": "documentation",
+      "new": true
+    },
+    {
+      "path": "docs/operations/r3c-validation.md",
+      "kind": "documentation",
+      "new": true
+    },
+    {
+      "path": "internal/domains/downloads/bot.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "e06931056d4b394d72b66ee535782d476005b913798900db6bfc451abd3e3727"
+    },
+    {
+      "path": "internal/domains/downloads/cleanup.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "7c9c99cb8cce9fb9e4aa371b267fb825fe93e71ed55e1959b43ce8f43b81e874"
+    },
+    {
+      "path": "internal/domains/downloads/diagnostics.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "3bf22e41d01f0febb1e51a2b1e500725500b3d6c33a3aada5c88fd23a8719d7c"
+    },
+    {
+      "path": "internal/domains/downloads/diagnostics_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "8ba43eb9f64f0288dd54d346beb092a927dd750f88579a2efafe93971bc4e005"
+    },
+    {
+      "path": "internal/domains/downloads/product.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "9373bcc259508e63ce7ec462ec58f806dd9a69349473875537c42358dc33ff1e"
+    },
+    {
+      "path": "internal/domains/downloads/worker.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "2b89afa46931fab1aa98ad877577ea8d9c7e0856a26c021c8f3ea4c96b96493c"
+    },
+    {
+      "path": "internal/domains/jobs/lease.go",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "65095dbfc1cc0de45952cd3e1de58b8b52a63a7865575dc1cb7db93fb7438fee"
+    },
+    {
+      "path": "internal/integrations/media/asset.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "ff0ad35746c62a3342e949eeb0084b99edeacfb4927a4344869769eeebab16a6"
+    },
+    {
+      "path": "internal/integrations/media/provider.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "1e1df347dd9fd92a305a1e56a2996c956ea14087d6174d7ff5d5fbaff00c704e"
+    },
+    {
+      "path": "internal/integrations/media/provider_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "6e9e58f737bd7bf747babce08987eaff7183f168bc59a5ca2075830cc1c7d2c6"
+    },
+    {
+      "path": "internal/integrations/media/remux.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "8c8e0283fb4c772794ebf4b27a86c5e7e5c126949d6bd94c694ab91f45b369a1"
+    },
+    {
+      "path": "internal/integrations/media/remux_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "5cd24f0b4944c04540c437d38324ed2c542bfdd80c3960d52f5fe584e191083e"
+    },
+    {
+      "path": "internal/integrations/telegram/downloader.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "7bee7ef688b110eb8b636be2479fc2b1d77075d33d1f68a81cab676b1ad97b93"
+    },
+    {
+      "path": "internal/integrations/telegram/media.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "17760517ea273a1e5976d0af38f68d7e883121b56c5e99940ee90aa68cd6e789"
+    },
+    {
+      "path": "internal/integrations/telegram/media_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "6e4d50ba310173d73a2209afdf40c89d19c1d89c4041ae65fd211a38161226c7"
+    },
+    {
+      "path": "internal/platform/config/config.go",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "d8e5a344edc9285b9c7a7408d22907481f3516f48ddbef0dacec8ac3cbbc0709"
+    },
+    {
+      "path": "internal/platform/httpapi/api.go",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "4f4730d3478c57aa54e5ce433e3b95d349e155c866b77117a56ad041fb92fcfb"
+    },
+    {
+      "path": "internal/platform/httpapi/downloader.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "d95eb631d65cbd0ea0c2fe736500116fcb5bf01c5e99d84cde01718863c4e743"
+    },
+    {
+      "path": "internal/platform/runtime/runtime.go",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "ff0afa0a88253aadc60414544430f14a06b7dc953e56fab76ce8e204ee10b293"
+    },
+    {
+      "path": "internal/platform/testfixtures/downloader.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "44cf2a439f03b0716c29396f0af3f6bfd89b7aabdbf1ce18a1eebcc77e7bd156"
+    },
+    {
+      "path": "internal/platform/testfixtures/media/compatible.mp4",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "ec5c0984bcf8dbabfb1fafc6fad2304e0536016583cd0fa439be8d47c10eb8d1"
+    },
+    {
+      "path": "internal/platform/testfixtures/media/remux.aac",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "43e5d04492aa9fd7c72122e4238360b4a10667315c6a9c5e844d4372ac720639"
+    },
+    {
+      "path": "scripts/media/extract.py",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "73364f8ec86b372e009e9e3712dde1b9065992a2729c4b74ab4fea22ba30ee9d"
+    },
+    {
+      "path": "scripts/media/requirements.txt",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "0e0bec5be8f24be75e7b2864f5954468e947fd8368a89b8b5ed3016d54d1b9ea"
+    },
+    {
+      "path": "scripts/media/test_extract.py",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "d41b35f5e0e9f61c69a5541d42222459350de6783382e26b02c09234fda0e911"
+    },
+    {
+      "path": "tests/integration/native_test.go",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "4e5161bf57998879349691504b1331f7a45108aef52917a100eed7272b9f747b"
+    },
+    {
+      "path": "tests/integration/r3c_bot_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "79deb6898997fc8650bf58b91d2654f2dc5d6ccff4d6c7a9003b2b6269784965"
+    },
+    {
+      "path": "tests/integration/r3c_diagnostics_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "7a16304439c22799cb3a3a91208fa1ddc9aafd1b71e459ad023401b572317f87"
+    },
+    {
+      "path": "tests/integration/r3c_history_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "edad6277923c487cee2e43f12bfe535d010a039b0b1b9c4f227d1dfc362999b3"
+    },
+    {
+      "path": "tests/integration/r3c_processing_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "5ff3885563bb27572e53b3ea1dcf49f87291564f0e9d1cb688c259db6c29d914"
+    },
+    {
+      "path": "tests/integration/r3c_races_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "f767e8997bec08dfbe3ff134b25689734bf3f18c6a9143573cfe7b04fde985ff"
+    },
+    {
+      "path": "tests/integration/r3c_recovery_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "74f5fbcce803cd7c652d1531155340674b561d639023b6f1aba324292e49e700"
+    },
+    {
+      "path": "tests/integration/r3c_schema_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "655518d16efc2b06762d2b2bc4ffdc54b6fca0b5d2265b737b190bf1a6d37463"
+    },
+    {
+      "path": "tests/integration/r3c_test.go",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "0f9a6f994097bd0670ba54492eb36909a502e92ae800d863ef821edf09f8cdd6"
+    },
+    {
+      "path": "web/miniapp/e2e/downloader.native.spec.ts",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "d6e803bf81a485411d76082ef012b7b0e6ef00c1230448843677719cf92ebf3f"
+    },
+    {
+      "path": "web/miniapp/playwright.config.ts",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "6ffc2b6b8a0100f96255fe78cdedb272d2478c40529f7af10577a709ebda7d73"
+    },
+    {
+      "path": "web/miniapp/playwright.native.config.ts",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "16cc41d0574124fbecbcb565ea70a25880156ecc07154e419b4cb5c2d422b42d"
+    },
+    {
+      "path": "web/miniapp/src/app/App.tsx",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "8ab91b7693af0d79d527191d50ebb706bf100ed2141c16c3065c5ee0bb7666d5"
+    },
+    {
+      "path": "web/miniapp/src/locales/fa/common.json",
+      "kind": "source_config_test",
+      "new": false,
+      "sha256": "b9f702731fe296abf0e45317a06bae5ff137b68f99c741ee844efaa557d9cd56"
+    },
+    {
+      "path": "web/miniapp/src/pages/Downloader.tsx",
+      "kind": "source_config_test",
+      "new": true,
+      "sha256": "5361daf873b1321ed9845910690a48a16ee1f81e581415540394ca53bf310988"
+    }
+  ],
+  "hash_policy": "Source/config/test hashes recorded; documentation paths listed without self-referential hashes"
+}

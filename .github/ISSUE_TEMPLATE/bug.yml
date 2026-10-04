@@ -1,0 +1,16 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence, reproduction or proposed decision
+      description: Never include credentials, customer data or payment secrets.
+    validations:
+      required: true

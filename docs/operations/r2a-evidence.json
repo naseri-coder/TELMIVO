@@ -1,0 +1,183 @@
+{
+  "repository": "naseri-coder/TELMIVO",
+  "visibility": "PRIVATE",
+  "stage": "R2A",
+  "branch": "feature/platform-bootstrap-v0.1",
+  "validated_source_commit": "ac304274124505ff338a7d0ec9af004c5549e0c8",
+  "initial_delivery_commit": "1c2541b286467c670688eaf750a6f53e1e75aa4b",
+  "r1_validated_source": "004bf65ff482ace9f8121f6f0b336d18beb8c1da",
+  "unchanged_bases": {
+    "main": "024b3a3465285f9758ce109551a6574ced087dc7",
+    "develop": "024b3a3465285f9758ce109551a6574ced087dc7"
+  },
+  "source_commits": [
+    "8057f8eec7e5da16dd0e367a3d1d86926b1ac977",
+    "cf507f3766c9e16a4a9b8e944e57d4e7c0df02b3",
+    "7f367fc47f74edfb2806212ec69d2e83e982affa",
+    "ac304274124505ff338a7d0ec9af004c5549e0c8"
+  ],
+  "delivery_commit_location": "Draft PR #1 and final owner response; this evidence is carried by a final documentation-only commit",
+  "migrations_added": [
+    "0007_dynamic_policy.sql",
+    "0008_catalog_policy_revisions.sql"
+  ],
+  "old_migrations_unchanged": "0001–0006",
+  "files": {
+    "added": 17,
+    "modified": 24,
+    "total": 41,
+    "inventory": "r2a-files.json"
+  },
+  "native_infrastructure": {
+    "environment": "GitHub-hosted isolated disposable services",
+    "postgresql": "17.11",
+    "redis": "7.4.11",
+    "nats": "2.11.17",
+    "runtime_role": "NOSUPERUSER NOBYPASSRLS NOINHERIT",
+    "redis_scope": "Service readiness; unrelated Redis-specific R1 test matrix not rerun"
+  },
+  "test_counts": {
+    "policy_unit_new": 4,
+    "retained_contract": 11,
+    "retained_http_security": 2,
+    "go_top_level_total": 17,
+    "native_r2a_top_level": 7,
+    "native_r2a_subtests": 13,
+    "native_affected_r1_top_level": 8,
+    "native_affected_r1_subtests": 11,
+    "native_top_level_total": 15,
+    "native_subtests_total": 24,
+    "web_unit": 4,
+    "browser_total": 8,
+    "browser_new": 2
+  },
+  "native_command": "go test -race -v -tags=integration ./tests/integration -run 'TestR2A|TestMigration|TestIdentityWorkspace|TestWorkspaceIsolation|TestTicketing|TestPlatformPermissionsAndGlobalPlans|TestPlanChange|TestDownloadQueue|TestDownloadCancel' -count=1 -timeout=3m",
+  "ci_runs": [
+    {
+      "id": 37107426384,
+      "name": "CI Go",
+      "result": "success",
+      "head": "ac304274124505ff338a7d0ec9af004c5549e0c8",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37107426384",
+      "jobs": [
+        {
+          "id": 111158595977,
+          "name": "go",
+          "result": "success"
+        },
+        {
+          "id": 111158596113,
+          "name": "native / native",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "id": 37107426293,
+      "name": "CI Web",
+      "result": "success",
+      "head": "ac304274124505ff338a7d0ec9af004c5549e0c8",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37107426293",
+      "jobs": [
+        {
+          "id": 111158594104,
+          "name": "web",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "id": 37107426300,
+      "name": "Security Baseline",
+      "result": "success",
+      "head": "ac304274124505ff338a7d0ec9af004c5549e0c8",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37107426300",
+      "jobs": [
+        {
+          "id": 111158596735,
+          "name": "security",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "id": 37107426392,
+      "name": "Build Images",
+      "result": "success",
+      "head": "ac304274124505ff338a7d0ec9af004c5549e0c8",
+      "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37107426392",
+      "jobs": [
+        {
+          "id": 111158599560,
+          "name": "images",
+          "result": "success"
+        }
+      ]
+    }
+  ],
+  "codeql": {
+    "run_id": 37107426285,
+    "result": "SKIPPED",
+    "status": "BLOCKED_EXTERNAL",
+    "inherited_evidence": "R1 run 37094524662: code scanning is not enabled; integration constraint"
+  },
+  "gates": {
+    "SOURCE_CONTINUITY_GATE": "PASS",
+    "MULTI_ENTRY_IDENTITY_GATE": "PASS",
+    "GLOBAL_TRIAL_GATE": "PASS",
+    "POLICY_VERSIONING_GATE": "PASS",
+    "DYNAMIC_QUOTA_GATE": "PASS",
+    "QUOTA_RESERVATION_GATE": "PASS",
+    "PLUGIN_GOVERNANCE_GATE": "PASS",
+    "PLUGIN_RESOURCE_LIMIT_GATE": "PASS",
+    "SAFETY_CAP_GATE": "PASS",
+    "COMMERCIAL_POLICY_GATE": "PASS",
+    "DYNAMIC_PAYWALL_GATE": "PASS",
+    "GROUP_TRIAL_POLICY_GATE": "PASS",
+    "ADMIN_POLICY_API_GATE": "PASS",
+    "ADMIN_POLICY_UI_GATE": "PASS",
+    "ACCESS_PREVIEW_GATE": "PASS",
+    "AUDIT_GATE": "PASS",
+    "NATIVE_PERSISTENCE_GATE": "PASS",
+    "REGRESSION_GATE": "PASS",
+    "CI_GATE": "PASS"
+  },
+  "external_blockers": {
+    "BRANCH_PROTECTION_GATE": "EXTERNAL_BLOCKER: historical HTTP 403 Resource not accessible by integration; not retried",
+    "CODEQL": "BLOCKED_EXTERNAL; inherited restriction not retried"
+  },
+  "security": {
+    "reachable_go_vulnerabilities": 0,
+    "imported_package_vulnerabilities": 0,
+    "required_module_advisories": 1,
+    "advisory": "GO-2026-5932; unimported/uncalled OpenPGP, inherited from R1",
+    "npm_audit_vulnerabilities": 0,
+    "source_secret_pattern_scan": "PASS; 158 tracked files"
+  },
+  "untested": [
+    "Dedicated PER_WORKSPACE/PER_INSTALLATION trial E2E",
+    "Every capability/dependency permutation",
+    "Live Telegram/credentials/providers and purchases",
+    "Browser-to-native E2E and Telegram WebView",
+    "Sustained load/heavy-media/long-job lease renewal",
+    "Backup/restore/DR",
+    "Comprehensive accessibility/penetration testing"
+  ],
+  "deferred": [
+    "Full Group Bot moderation and live authority adapter",
+    "Downloader extraction/provider adapters",
+    "Uploader ingestion, object storage, FFmpeg product pipeline",
+    "Factory, broadcasts, advanced AI",
+    "Real payment/refund/Stars/crypto operations",
+    "Paid add-on purchase/activation",
+    "Full workspace directory/permission editor/bulk historical policy migration",
+    "Production deployment"
+  ],
+  "pr": {
+    "number": 1,
+    "state": "open",
+    "draft": true,
+    "base": "develop",
+    "url": "https://github.com/naseri-coder/TELMIVO/pull/1"
+  }
+}

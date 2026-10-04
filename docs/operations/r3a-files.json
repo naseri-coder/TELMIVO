@@ -1,0 +1,159 @@
+{
+  "foundation_parent_sha": "ab640fbdbafc76354d0f56fc71e4033fff9db711",
+  "validated_source_sha": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c",
+  "final_delivery_head": {
+    "git_revision": "HEAD at this evidence commit",
+    "expected_parent": "7ff94a95842d5ddfbfe47208a4c140c608c1d26c",
+    "kind": "evidence_documentation_only",
+    "exact_sha_record_location": "R3A stacked Draft PR description and final delivery response",
+    "explanation": "The exact SHA cannot be embedded in the content of its own Git commit. Resolve the delivery revision and verify its parent; the exact SHA is recorded externally after publication."
+  },
+  "generated_from": "git diff --cached --name-status ab640fbdbafc76354d0f56fc71e4033fff9db711 (complete delivery index); verify with git diff --name-status ab640fbdbafc76354d0f56fc71e4033fff9db711 HEAD after publication",
+  "changed_file_count": 36,
+  "files": [
+    {
+      "status": "M",
+      "path": ".github/workflows/build-images.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci-go.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/ci-web.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/migration-check.yml"
+    },
+    {
+      "status": "M",
+      "path": ".github/workflows/security.yml"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/r3a-main-miniapp.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r3a-evidence.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r3a-files.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r3a-validation.md"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/identity/bot.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/mainbot/service.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/mainbot/service_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/integrations/telegram/mainbot.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/integrations/telegram/mainbot_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/httpapi/api.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/httpapi/customer.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/runtime/runtime.go"
+    },
+    {
+      "status": "A",
+      "path": "tests/integration/r3a_test.go"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/e2e/customer.native.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/e2e/native.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/e2e/smoke.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/playwright.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/playwright.native.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/app/App.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/app/context.tsx"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/locales/fa/customer.json"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/locales/index.ts"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/pages/AdminWallet.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/pages/Dashboard.tsx"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/pages/Plans.tsx"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/pages/Settings.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/pages/Wallet.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/services/api.ts"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/services/customer.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/src/styles/app.css"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/src/tests/customer.test.ts"
+    }
+  ]
+}
