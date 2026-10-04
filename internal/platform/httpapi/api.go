@@ -16,6 +16,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
+	"github.com/naseri-coder/TELMIVO/internal/domains/supportplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/tickets"
 	"github.com/naseri-coder/TELMIVO/internal/domains/wallets"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
@@ -42,6 +43,7 @@ import (
 type API struct {
 	DB       *database.Store
 	Factory  *botfactory.Service
+	Support  *supportplugins.Service
 	Content  *contentplugins.Service
 	Cache    *cache.Client
 	Queue    *queue.Client
@@ -63,6 +65,22 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	mux.HandleFunc("POST /api/v1/customer-bot-updates/{account}/{bot}", a.contentWebhook)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/support-bots", a.supportBots)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/crm/contacts", a.supportContacts)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/crm/contacts", a.supportContactCreate)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/crm/contacts/{contact}", a.supportContact)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/crm/contacts/{contact}", a.supportContactSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/support/tickets", a.supportTickets)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/support/tickets/{ticket}", a.supportTicket)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/support/tickets/{ticket}/actions", a.supportAction)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/support/tickets/{ticket}/messages", a.supportMessage)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/support/departments", a.supportDepartments)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/support/departments", a.supportDepartmentSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/support/departments/{department}", a.supportDepartmentSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/support/templates", a.supportTemplates)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/support/templates", a.supportTemplateSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/support/templates/{template}", a.supportTemplateSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/support/agents", a.supportAgents)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/access-policies/{policy}/check", a.contentPolicyCheck)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/access-policies", a.contentPolicies)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/access-policies", a.contentPolicySave)

@@ -16,7 +16,9 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
+	"github.com/naseri-coder/TELMIVO/internal/plugins/crm"
 	files "github.com/naseri-coder/TELMIVO/internal/plugins/filemanager"
+	"github.com/naseri-coder/TELMIVO/internal/plugins/ticketing"
 	"strings"
 )
 
@@ -29,7 +31,11 @@ type Transport interface {
 type Provider interface {
 	ForBot(context.Context, pgx.Tx, sdk.Scope) (Transport, error)
 }
+type SupportHandler interface {
+	HandleSupport(context.Context, sdk.Scope, string, Update) error
+}
 type Service struct {
+	Support    SupportHandler
 	DB         *database.Store
 	Core       *platform.Service
 	Commercial *commerce.Service
@@ -38,7 +44,7 @@ type Service struct {
 }
 
 func Registry(extra ...sdk.Manifest) (*platform.Registry, error) {
-	m := []sdk.Manifest{gate.Manifest(), files.Manifest()}
+	m := []sdk.Manifest{gate.Manifest(), files.Manifest(), crm.Manifest(), ticketing.Manifest()}
 	m = append(m, extra...)
 	return platform.NewRegistry("0.3.0", m)
 }

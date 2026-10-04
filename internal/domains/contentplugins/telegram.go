@@ -59,13 +59,17 @@ type Media struct {
 }
 type Message struct {
 	From struct {
-		ID int64 `json:"id"`
+		ID       int64  `json:"id"`
+		Name     string `json:"first_name"`
+		Username string `json:"username"`
+		Locale   string `json:"language_code"`
 	} `json:"from"`
 	Chat struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
 	} `json:"chat"`
 	Text     string  `json:"text"`
+	Caption  string  `json:"caption"`
 	Document *Media  `json:"document"`
 	Video    *Media  `json:"video"`
 	Audio    *Media  `json:"audio"`
@@ -108,7 +112,7 @@ func (s *Service) HandleUpdate(ctx context.Context, scope sdk.Scope, corr string
 		user = u.Callback.From.ID
 		text = u.Callback.Data
 	}
-	if m == nil || u.ID < 0 || user <= 0 || m.Chat.Type != "private" || m.Chat.ID != user || len(text) > 200 {
+	if m == nil || u.ID < 0 || user <= 0 || m.Chat.Type != "private" || m.Chat.ID != user || len(text) > 4000 {
 		return database.ErrInvalid
 	}
 	actor, e := s.webhookActor(ctx, scope)
@@ -133,6 +137,9 @@ func (s *Service) HandleUpdate(ctx context.Context, scope sdk.Scope, corr string
 			return tx.QueryRow(ctx, `SELECT m.user_id::text FROM telegram_accounts u JOIN workspace_members m ON m.user_id=u.user_id JOIN role_permissions p ON p.role_key=m.role_key AND p.permission_key='bots.manage' WHERE u.telegram_id=$1 AND m.workspace_id=$2`, user, scope.AccountID).Scan(&manager)
 		})
 		if e != nil {
+			if s.Support != nil {
+				return s.Support.HandleSupport(ctx, scope, corr, u)
+			}
 			return database.ErrForbidden
 		}
 		scope.PluginID = files.ID
@@ -142,6 +149,9 @@ func (s *Service) HandleUpdate(ctx context.Context, scope sdk.Scope, corr string
 		}
 		f, e := s.SaveFile(ctx, manager, scope, "", corr, FileChange{File: files.File{FileID: media.FileID, UniqueID: media.UniqueID, Kind: kind, Title: title, Enabled: false}, Key: key})
 		if e != nil {
+			if s.Support != nil && (e == sdk.ErrState) {
+				return s.Support.HandleSupport(ctx, scope, corr, u)
+			}
 			return e
 		}
 		return s.prompt(ctx, actor, scope, user, "فایل ثبت شد و غیرفعال است؛ عنوان و سیاست دسترسی را در پنل تنظیم کنید.\n"+f.Reference, nil)
@@ -153,6 +163,9 @@ func (s *Service) HandleUpdate(ctx context.Context, scope sdk.Scope, corr string
 		ref = strings.TrimPrefix(text, "file:")
 	}
 	if !files.ReferencePattern.MatchString(ref) {
+		if s.Support != nil && u.Message != nil && !strings.HasPrefix(text, "/start file_") {
+			return s.Support.HandleSupport(ctx, scope, corr, u)
+		}
 		return database.ErrInvalid
 	}
 	scope.PluginID = files.ID
