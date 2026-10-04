@@ -19,6 +19,7 @@ type Service struct {
 	Registry    *platform.Registry
 	Commercial  *commerce.Service
 	Credentials cred.CredentialStore
+	Hooks       sdk.LifecycleValidator
 }
 
 func permission(ctx context.Context, tx pgx.Tx, actor, account string) error {

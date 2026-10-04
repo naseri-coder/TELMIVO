@@ -124,6 +124,11 @@ func TestR3D3PreviewAndCommercialCatalog(t *testing.T) {
 		t.Fatal("preview mutated")
 	}
 	// Unavailable and paid-only labels are driven by catalog/plan data.
+	conflict, e := f.factory.Preview(ctx, f.u.UserID, f.u.WorkspaceID, "", botfactory.Selection{Requested: []string{"factory-basic", "factory-conflict"}})
+	must(t, e)
+	if len(conflict.Issues) != 1 || conflict.Issues[0].Code != "PLUGIN_CONFLICT" || conflict.Issues[0].Plugin != "factory-conflict" || conflict.Issues[0].Other != "factory-basic" {
+		t.Fatal("conflict identities missing", conflict)
+	}
 	c, e := f.s.Catalog(ctx, f.admin.UserID, f.u.WorkspaceID)
 	must(t, e)
 	v, _ := c.Get(commerce.PluginKind, "factory-paid")
@@ -133,6 +138,15 @@ func TestR3D3PreviewAndCommercialCatalog(t *testing.T) {
 	must(t, e)
 	for _, p := range items {
 		if p.ID == "factory-paid" && p.Status != "PAID" {
+			t.Fatal(p)
+		}
+	}
+	v.Definition.Plugin.SaleEnabled = false
+	f.save(t, v, v.Version+1)
+	items, e = f.factory.Catalog(ctx, f.u.UserID, f.u.WorkspaceID, "")
+	must(t, e)
+	for _, p := range items {
+		if p.ID == "factory-paid" && p.Status != "SALE_DISABLED" {
 			t.Fatal(p)
 		}
 	}
@@ -203,6 +217,21 @@ func TestR3D3AtomicCreationAndReplay(t *testing.T) {
 	if number(t, f.u, "SELECT count(*) FROM customer_bots WHERE workspace_id=$1", f.u.WorkspaceID) != before {
 		t.Fatal("partial bot persisted")
 	}
+	// A veto after the first dependency is persisted must roll back everything.
+	basic, _ := f.registry.Manifest("factory-basic")
+	dependent, _ := f.registry.Manifest("factory-dependent")
+	dependent.LifecycleHooks = []sdk.Action{sdk.Install}
+	hooked, e := platform.NewRegistry("0.3.0", []sdk.Manifest{basic, dependent})
+	must(t, e)
+	copyService := *f.factory
+	copyService.Registry, copyService.Hooks = hooked, r3dHook{}
+	input := factoryRequest(t, f, []string{"factory-dependent"}, "hook-veto", false)
+	if _, e = copyService.Create(ctx, f.u.UserID, f.u.WorkspaceID, "r3d3", input); e == nil {
+		t.Fatal("hook veto ignored")
+	}
+	if number(t, f.u, "SELECT count(*) FROM customer_bots WHERE workspace_id=$1", f.u.WorkspaceID) != before || number(t, f.u, "SELECT count(*) FROM plugin_installations WHERE workspace_id=$1", f.u.WorkspaceID) != 2 {
+		t.Fatal("partial provisioning survived hook veto")
+	}
 	zero := factoryCreate(t, f, nil, "empty", false)
 	if number(t, f.u, "SELECT count(*) FROM plugin_installations WHERE bot_id=$1", zero.ID) != 0 {
 		t.Fatal("zero plugin creation")
@@ -237,9 +266,25 @@ func TestR3D3LifecycleIsolationAndAccessLoss(t *testing.T) {
 	b := factoryCreate(t, f, []string{"factory-basic"}, "second", false)
 	change := func(bot, id string, action sdk.Action, rev int64) botfactory.Item {
 		t.Helper()
-		item, e := f.factory.Change(ctx, f.u.UserID, f.u.WorkspaceID, bot, id, "r3d3", botfactory.Change{Action: action, Expected: rev})
+		item, e := f.factory.Change(ctx, f.u.UserID, f.u.WorkspaceID, bot, id, "r3d3", botfactory.Change{Action: action, Expected: rev, Configuration: func() json.RawMessage {
+			if action == sdk.Install {
+				return json.RawMessage(`{}`)
+			}
+			return nil
+		}()})
 		must(t, e)
 		return item
+	}
+	accountA := change(a.ID, "factory-account", sdk.Activate, 1)
+	accountB := change(b.ID, "factory-account", sdk.Install, 0)
+	accountB = change(b.ID, accountB.ID, sdk.Activate, accountB.Revision)
+	change(a.ID, accountA.ID, sdk.Disable, accountA.Revision)
+	accountItems, e := f.factory.Catalog(ctx, f.u.UserID, f.u.WorkspaceID, b.ID)
+	must(t, e)
+	for _, item := range accountItems {
+		if item.ID == "factory-account" && (!item.Entitled || item.State != sdk.Active) {
+			t.Fatal("account license changed another bot lifecycle", item)
+		}
 	}
 	p := change(a.ID, "factory-basic", sdk.Activate, 1)
 	p = change(a.ID, "factory-basic", sdk.Disable, p.Revision)

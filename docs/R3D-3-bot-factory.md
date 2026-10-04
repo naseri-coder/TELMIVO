@@ -52,6 +52,8 @@ R3D-1 `Change` retains behavior and delegates to a trusted Core `ChangeTx`; R3D-
 Plugin SDK. Factory composition uses one tenant transaction and a transaction-bound
 AdmissionPolicy, so authorization can see the new uncommitted bot. The same bot
 lock, revision checks, dependency/conflict validation, hooks and audit remain.
+Trusted lifecycle validators pass through unchanged; a veto rolls back all earlier
+installation work. Missing validators fail closed.
 Any failed install/activation rolls back the bot and all installations.
 
 Factory creation/mutation uses R3D-2's existing commercial admin advisory lock and

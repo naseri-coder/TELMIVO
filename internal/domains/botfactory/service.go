@@ -24,7 +24,7 @@ func (p txPolicy) Authorize(ctx context.Context, in sdk.Admission) (sdk.Grant, e
 	return p.s.AuthorizeTx(ctx, p.tx, in)
 }
 func (s *Service) pluginService(tx pgx.Tx) *platform.Service {
-	return &platform.Service{DB: s.DB, Registry: s.Registry, Policy: txPolicy{s.Commercial, tx}}
+	return &platform.Service{DB: s.DB, Registry: s.Registry, Policy: txPolicy{s.Commercial, tx}, Hooks: s.Hooks}
 }
 func (s *Service) List(ctx context.Context, actor, account string) ([]Bot, error) {
 	out := []Bot{}
