@@ -40,6 +40,9 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 		return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 500 {
+		return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
+	}
 	var envelope struct {
 		OK         bool            `json:"ok"`
 		Result     json.RawMessage `json:"result"`
@@ -55,7 +58,10 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 		return &APIError{Code: envelope.ErrorCode, RetryAfter: envelope.Parameters.RetryAfter}
 	}
 	if result != nil {
-		return json.Unmarshal(envelope.Result, result)
+		if json.Unmarshal(envelope.Result, result) != nil {
+			return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
+		}
+		return nil
 	}
 	return nil
 }
@@ -64,6 +70,9 @@ func (c *Client) Send(ctx context.Context, m telegram.Message) (int64, error) {
 		ID int64 `json:"message_id"`
 	}
 	e := c.call(ctx, "sendMessage", map[string]any{"chat_id": m.ChatID, "text": m.Text, "reply_markup": m.Markup}, &out)
+	if e == nil && out.ID <= 0 {
+		e = errors.New("TELEGRAM_DELIVERY_UNKNOWN")
+	}
 	return out.ID, e
 }
 func (c *Client) Copy(ctx context.Context, to, from, id int64) (int64, error) {
@@ -71,6 +80,9 @@ func (c *Client) Copy(ctx context.Context, to, from, id int64) (int64, error) {
 		ID int64 `json:"message_id"`
 	}
 	e := c.call(ctx, "copyMessage", map[string]int64{"chat_id": to, "from_chat_id": from, "message_id": id}, &out)
+	if e == nil && out.ID <= 0 {
+		e = errors.New("TELEGRAM_DELIVERY_UNKNOWN")
+	}
 	return out.ID, e
 }
 func (c *Client) Forward(ctx context.Context, to, from, id int64) (int64, error) {
@@ -78,6 +90,9 @@ func (c *Client) Forward(ctx context.Context, to, from, id int64) (int64, error)
 		ID int64 `json:"message_id"`
 	}
 	e := c.call(ctx, "forwardMessage", map[string]int64{"chat_id": to, "from_chat_id": from, "message_id": id}, &out)
+	if e == nil && out.ID <= 0 {
+		e = errors.New("TELEGRAM_DELIVERY_UNKNOWN")
+	}
 	return out.ID, e
 }
 func (c *Client) Membership(ctx context.Context, chat, user int64) (accessgates.Membership, error) {

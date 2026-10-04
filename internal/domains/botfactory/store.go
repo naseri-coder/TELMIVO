@@ -94,8 +94,12 @@ func (s *Service) StoreDetail(ctx context.Context, actor, account, bot, id strin
 		if !found {
 			return database.ErrForbidden
 		}
+		manifest, e := s.Registry.Manifest(id)
+		if e != nil {
+			return e
+		}
 		for metric := range snap.Catalog[commerce.QuotaKind] {
-			if strings.HasPrefix(metric, id+".") {
+			if metric == manifest.Extensions.QuotaPolicy || strings.HasPrefix(metric, id+".") {
 				q, e := s.Commercial.QuotaTx(ctx, tx, actor, account, bot, metric, 1, false)
 				if e != nil {
 					return e

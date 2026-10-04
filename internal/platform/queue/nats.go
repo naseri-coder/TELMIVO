@@ -117,6 +117,16 @@ type Handler func(context.Context, pgx.Tx, Envelope) error
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durable string, handler Handler) error {
+	return c.consume(ctx, db, subject, durable, handler, false)
+}
+
+// ConsumeExternal fences non-idempotent transport before invoking it. Unlike pure
+// transactional handlers, interrupted external attempts must never be replayed.
+func (c *Client) ConsumeExternal(ctx context.Context, db *database.Store, subject, durable string, handler Handler) error {
+	return c.consume(ctx, db, subject, durable, handler, true)
+}
+
+func (c *Client) consume(ctx context.Context, db *database.Store, subject, durable string, handler Handler, external bool) error {
 	// Explicitly create the durable, then bind: unsubscribe must not delete it.
 	info, err := c.JS.ConsumerInfo("TELMIVO", durable)
 	if errors.Is(err, nats.ErrConsumerNotFound) {
@@ -152,23 +162,7 @@ func (c *Client) Consume(ctx context.Context, db *database.Store, subject, durab
 			if malformed {
 				e = errors.New("invalid envelope")
 			} else {
-				tx, beginErr := db.Pool.Begin(ctx)
-				e = beginErr
-				if e == nil {
-					e = database.Scope(ctx, tx, event.WorkspaceID)
-					if e == nil {
-						tag, insertErr := tx.Exec(ctx, "INSERT INTO inbox_events(consumer,event_id) VALUES($1,$2) ON CONFLICT DO NOTHING", durable, event.ID)
-						e = insertErr
-						if e == nil && tag.RowsAffected() > 0 {
-							e = handler(ctx, tx, event)
-						}
-					}
-					if e == nil {
-						e = tx.Commit(ctx)
-					} else {
-						_ = tx.Rollback(context.Background())
-					}
-				}
+				e = Process(ctx, db, durable, event, external, handler)
 			}
 			if ctx.Err() != nil {
 				return ctx.Err()
