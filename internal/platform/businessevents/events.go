@@ -3,6 +3,7 @@ package businessevents
 
 import (
 	"context"
+	"crypto/rand"
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
@@ -10,15 +11,16 @@ import (
 )
 
 type Event struct {
-	Bot       string              `json:"bot"`
-	Actor     string              `json:"actor"`
-	Ticket    string              `json:"ticket,omitempty"`
-	Contact   string              `json:"contact,omitempty"`
-	User      int64               `json:"user,omitempty"`
-	Fields    map[string][]string `json:"fields"`
-	Depth     int                 `json:"depth"`
-	Workflows []string            `json:"workflows"`
-	Causation string              `json:"causation"`
+	Bot         string              `json:"bot"`
+	Actor       string              `json:"actor"`
+	Ticket      string              `json:"ticket,omitempty"`
+	Contact     string              `json:"contact,omitempty"`
+	User        int64               `json:"user,omitempty"`
+	Fields      map[string][]string `json:"fields"`
+	Depth       int                 `json:"depth"`
+	Workflows   []string            `json:"workflows"`
+	Causation   string              `json:"causation"`
+	Correlation string              `json:"correlation"`
 }
 type key struct{}
 
@@ -28,12 +30,15 @@ func Emit(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, kind, e
 	e.Bot = scope.BotID
 	e.Actor = actor
 	e.Fields = fields
+	if e.Correlation == "" {
+		e.Correlation = "business:" + rand.Text()
+	}
 	if strings.HasPrefix(kind, "crm.") {
 		e.Contact = entity
 	} else if strings.HasPrefix(kind, "ticket.") {
 		e.Ticket = entity
 	}
-	return database.Event(ctx, tx, scope.AccountID, "telmivo.events.business", kind, e.Causation, e)
+	return database.Event(ctx, tx, scope.AccountID, "telmivo.events.business", kind, e.Correlation, e)
 }
 
 func WithUser(ctx context.Context, user int64) context.Context {

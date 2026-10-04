@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	provider "github.com/naseri-coder/TELMIVO/internal/platform/ai"
 	"github.com/naseri-coder/TELMIVO/internal/platform/businessevents"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
@@ -146,6 +147,9 @@ func (s *Service) SaveWorkflow(ctx context.Context, actor string, scope sdk.Scop
 			if e = tx.QueryRow(ctx, "SELECT count(*) FROM automation_workflows WHERE workspace_id=$1 AND bot_id=$2", scope.AccountID, scope.BotID).Scan(&count); e != nil {
 				return e
 			}
+			if count >= workflow.MaxWorkflows {
+				return &provider.Failure{Code: "WORKFLOW_LIMIT"}
+			}
 			if e = s.quota(ctx, tx, scope, "automation.workflows.count", count+1, false); e != nil {
 				return e
 			}
@@ -182,6 +186,12 @@ func (s *Service) DispatchTx(ctx context.Context, tx pgx.Tx, envelope queue.Enve
 		return database.ErrInvalid
 	}
 	scope := sdk.Scope{AccountID: envelope.WorkspaceID, BotID: event.Bot, PluginID: workflow.ID}
+	if event.Correlation == "" {
+		event.Correlation = envelope.CorrelationID
+		if event.Correlation == "" {
+			event.Correlation = envelope.ID
+		}
+	}
 	if e := s.lock(ctx, tx, scope); e != nil {
 		return e
 	}
@@ -249,8 +259,18 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, scope sdk.Scope, id, e
 		return "", e
 	}
 	var existing string
-	e = tx.QueryRow(ctx, "SELECT id::text FROM automation_executions WHERE workflow_id=$1 AND event_id=$2", id, eventID).Scan(&existing)
+	var original []byte
+	e = tx.QueryRow(ctx, "SELECT id::text,event FROM automation_executions WHERE workflow_id=$1 AND event_id=$2", id, eventID).Scan(&existing, &original)
 	if e == nil {
+		if strings.HasPrefix(eventID, "manual:") {
+			var previous businessevents.Event
+			if json.Unmarshal(original, &previous) != nil {
+				return "", database.ErrInvalid
+			}
+			if previous.Actor != event.Actor || previous.Ticket != event.Ticket || previous.Contact != event.Contact {
+				return "", database.ErrConflict
+			}
+		}
 		return existing, nil
 	}
 	if !errors.Is(e, pgx.ErrNoRows) {
@@ -289,7 +309,7 @@ func (s *Service) Manual(ctx context.Context, actor string, scope sdk.Scope, id,
 		if w.Trigger != "manual" {
 			return database.ErrInvalid
 		}
-		event := businessevents.Event{Bot: scope.BotID, Actor: actor, Ticket: ticket, Contact: contact, Fields: map[string][]string{}, Workflows: []string{}}
+		event := businessevents.Event{Bot: scope.BotID, Actor: actor, Ticket: ticket, Contact: contact, Fields: map[string][]string{}, Workflows: []string{}, Correlation: "manual:" + hash([]string{id, k})[:32]}
 		if e = s.hydrate(ctx, tx, scope, &event); e != nil {
 			return e
 		}

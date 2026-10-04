@@ -12,6 +12,7 @@ import (
 const ID = "automation"
 const MaxActions = 8
 const MaxConditions = 16
+const MaxWorkflows = 100
 const MaxDepth = 4
 const MaxAttempts = 2
 const MaxDuration = 60 * time.Second

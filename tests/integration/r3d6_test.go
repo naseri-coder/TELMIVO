@@ -125,6 +125,16 @@ func TestR3D6AutomationJourney(t *testing.T) {
 	if number(t, f.u, "SELECT count(*) FROM audit_logs WHERE workspace_id=$1 AND action='automation.execution.queued'", f.u.WorkspaceID) != 1 {
 		t.Fatal("audit")
 	}
+	tenant(t, f.u, func(tx pgx.Tx) error {
+		var root, cause string
+		if e := tx.QueryRow(ctx, "SELECT correlation_id,payload->>'causation' FROM outbox_events WHERE workspace_id=$1 AND event_type='ticket.priority_changed' ORDER BY created_at DESC LIMIT 1", f.u.WorkspaceID).Scan(&root, &cause); e != nil {
+			return e
+		}
+		if root == "" || root != e.CorrelationID || cause != history[0].ID {
+			t.Fatal("causation/correlation", root, cause)
+		}
+		return nil
+	})
 }
 func TestR3D6WorkflowSafety(t *testing.T) {
 	f := r3d6Fixture(t)
@@ -150,6 +160,12 @@ func TestR3D6WorkflowSafety(t *testing.T) {
 	must(t, e)
 	if id != sameID {
 		t.Fatal("duplicate")
+	}
+	otherTicket, e := f.srv.Inbound(ctx, f.scope(tickets.ID), structInbound(10002, "Other customer", "Other support", "manual-other-ticket"))
+	must(t, e)
+	_, e = f.ai.Manual(ctx, f.u.UserID, f.scope(workflow.ID), saved.ID, "once", otherTicket.Reference, "")
+	if !errors.Is(e, database.ErrConflict) {
+		t.Fatal("operation identity changed resource", e)
 	}
 	must(t, f.ai.Run(ctx, f.u.UserID, f.scope(workflow.ID), id))
 	other := fixture(t, false)
@@ -186,6 +202,17 @@ func TestR3D6WorkflowSafety(t *testing.T) {
 	must(t, db.Tenant(ctx, f.u.UserID, f.u.WorkspaceID, false, func(tx pgx.Tx) error {
 		return f.ai.DispatchTx(ctx, tx, queue.Envelope{ID: "chain-event", WorkspaceID: f.u.WorkspaceID, Type: "ticket.status_changed", Payload: payload})
 	}))
+	definition, e := json.Marshal(w)
+	must(t, e)
+	tenant(t, f.u, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx, `INSERT INTO automation_workflows(workspace_id,bot_id,actor_id,definition,operation_key,fingerprint,created_at,updated_at) SELECT $1,$2,$3,$4,'bounded-'||n,'fixture',$5,$5 FROM generate_series(1,$6-(SELECT count(*) FROM automation_workflows WHERE bot_id=$2)) n`, f.u.WorkspaceID, f.bot, f.u.UserID, definition, f.clock.at, int64(workflow.MaxWorkflows))
+		return e
+	})
+	_, e = f.ai.SaveWorkflow(ctx, f.u.UserID, f.scope(workflow.ID), "", intelligence.WorkflowChange{Workflow: w, Key: "over-platform-limit"})
+	var limit *provider.Failure
+	if !errors.As(e, &limit) || limit.Code != "WORKFLOW_LIMIT" {
+		t.Fatal("workflow dispatch ceiling", e)
+	}
 }
 func TestR3D6AISupportAndPrivacy(t *testing.T) {
 	f := r3d6Fixture(t)
