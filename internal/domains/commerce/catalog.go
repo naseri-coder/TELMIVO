@@ -73,7 +73,7 @@ func (s *Service) SaveCatalog(ctx context.Context, actor, account, correlation s
 		v.EffectiveAt = now
 	}
 	v.EffectiveAt = v.EffectiveAt.UTC().Truncate(time.Microsecond)
-	if !v.Validate() || in.Expected < 0 || in.Reason == "" || v.EffectiveAt.Before(now) {
+	if !v.Validate() || in.Expected < 0 || in.Reason == "" || len(in.Reason) > 500 || v.EffectiveAt.Before(now) {
 		return Version{}, database.ErrInvalid
 	}
 	e := s.admin(ctx, actor, account, func(tx pgx.Tx) error {
@@ -167,7 +167,7 @@ func (s *Service) History(ctx context.Context, actor, account string, kind Kind,
 		if !database.PlatformPermission(ctx, tx, actor, "platform.commercial.read") {
 			return database.ErrForbidden
 		}
-		rs, e := tx.Query(ctx, "SELECT kind,key,version,enabled,effective_at,definition FROM commercial_catalog WHERE kind=$1 AND key=$2 ORDER BY version", kind, key)
+		rs, e := tx.Query(ctx, "SELECT kind,key,version,enabled,effective_at,definition FROM (SELECT * FROM commercial_catalog WHERE kind=$1 AND key=$2 ORDER BY version DESC LIMIT 100) recent ORDER BY version", kind, key)
 		if e != nil {
 			return e
 		}

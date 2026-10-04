@@ -1,5 +1,5 @@
 import {operationKey,completeOperation} from './operation';
-export interface User{user_id:string;name:string;is_admin:boolean;synthetic_mode:boolean;can_adjust_wallet:boolean;can_admin_policies:boolean;}
+export interface User{user_id:string;name:string;is_admin:boolean;synthetic_mode:boolean;can_adjust_wallet:boolean;can_admin_policies:boolean;can_admin_commercial?:boolean;}
 export interface Workspace{id:string;name:string;role_key:string;}
 export interface Decision{allowed:boolean;reason:string;limit?:number;usage:number;}
 export type Row=Record<string,string|number|boolean|null>;

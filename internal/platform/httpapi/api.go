@@ -69,6 +69,10 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	mux.HandleFunc("POST /api/v1/customer-bot-updates/{account}/{bot}", a.contentWebhook)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/store", a.storeList)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/store/{plugin}", a.storeDetail)
+	protected.HandleFunc("POST /api/v1/commercial/effective", a.storeEffective)
+	protected.HandleFunc("GET /api/v1/commercial/audit", a.commercialAudit)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/{plugin}/definitions", a.businessDefinitions)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/{plugin}/definitions", a.businessSave)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/{plugin}/definitions/{definition}", a.businessSave)
@@ -423,7 +427,7 @@ func rows(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]map[stri
 func (a *API) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if a.DB.Pool.Ping(ctx) != nil || a.Cache.Redis.Ping(ctx).Err() != nil || !a.Queue.Conn.IsConnected() {
+	if a.DB == nil || a.DB.Pool == nil || a.Cache == nil || a.Cache.Redis == nil || a.Queue == nil || a.Queue.Conn == nil || a.DB.Pool.Ping(ctx) != nil || a.Cache.Redis.Ping(ctx).Err() != nil || !a.Queue.Conn.IsConnected() {
 		fail(w, 503, "unavailable")
 		return
 	}
@@ -485,7 +489,7 @@ func (a *API) me(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	respond(w, 200, map[string]any{"user_id": user(r), "name": name, "is_admin": a.DB.IsAdmin(r.Context(), user(r)), "synthetic_mode": a.Config.Synthetic, "can_admin_policies": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.access_policies.read"), "can_adjust_wallet": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.wallets.adjust")})
+	respond(w, 200, map[string]any{"user_id": user(r), "name": name, "is_admin": a.DB.IsAdmin(r.Context(), user(r)), "synthetic_mode": a.Config.Synthetic, "can_admin_policies": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.access_policies.read"), "can_admin_commercial": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.commercial.read"), "can_adjust_wallet": a.DB.HasPlatformPermission(r.Context(), user(r), "platform.wallets.adjust")})
 }
 func (a *API) workspaces(w http.ResponseWriter, r *http.Request) {
 	tx, e := a.DB.Pool.Begin(r.Context())

@@ -123,6 +123,22 @@ func (s *Service) catalog(ctx context.Context, tx pgx.Tx, account, bot string, s
 				}
 			}
 		}
+		item.Store = commerce.ProjectPolicy(snap, account, bot, id)
+		if item.Store.Metadata.Operational != "OPERATIONAL" {
+			item.Installable = false
+			item.Reason = "OPERATIONAL_UNAVAILABLE"
+		}
+		for _, dep := range item.Dependencies {
+			st, ok := states[dep]
+			if !ok || st.state != sdk.Active {
+				item.DependencyBlocked = true
+			}
+		}
+		for _, other := range item.Conflicts {
+			if states[other].state == sdk.Active {
+				item.ConflictBlocked = true
+			}
+		}
 		out = append(out, item)
 	}
 	return out, nil
