@@ -208,7 +208,7 @@ func (v Version) Validate() bool {
 			n++
 		}
 	}
-	if n != 1 {
+	if n != 1 || !validMetadata(d) {
 		return false
 	}
 	switch v.Kind {

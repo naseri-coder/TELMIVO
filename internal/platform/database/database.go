@@ -11,6 +11,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/db/migrations"
 	"sort"
 	"strings"
+	"time"
 )
 
 var ErrForbidden = errors.New("permission denied")
@@ -20,7 +21,11 @@ var ErrInvalid = errors.New("invalid input")
 type Store struct{ Pool *pgxpool.Pool }
 
 func Open(ctx context.Context, dsn string, requireRestricted bool) (*Store, error) {
-	p, e := pgxpool.New(ctx, dsn)
+	cfg, e := PoolConfig(dsn)
+	if e != nil {
+		return nil, e
+	}
+	p, e := pgxpool.NewWithConfig(ctx, cfg)
 	if e != nil {
 		return nil, errors.New("database configuration invalid")
 	}
@@ -151,4 +156,24 @@ func (s *Store) HasPlatformPermission(ctx context.Context, user, permission stri
 	var yes bool
 	e := s.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM platform_admin_permissions WHERE user_id=$1 AND permission_key=$2)", user, permission).Scan(&yes)
 	return e == nil && yes
+}
+
+// PoolConfig rejects unbounded inherited DSN overrides before opening any connection.
+func PoolConfig(dsn string) (*pgxpool.Config, error) {
+	c, e := pgxpool.ParseConfig(dsn)
+	if e != nil {
+		return nil, errors.New("database configuration invalid")
+	}
+	if !strings.Contains(dsn, "pool_max_conns=") {
+		c.MaxConns = 4
+	}
+	if c.MaxConns < 1 || c.MaxConns > 32 || c.MinConns > c.MaxConns {
+		return nil, errors.New("database pool exceeds safety bounds")
+	}
+	if c.ConnConfig.ConnectTimeout == 0 || c.ConnConfig.ConnectTimeout > 10*time.Second {
+		c.ConnConfig.ConnectTimeout = 10 * time.Second
+	}
+	c.MaxConnLifetime = 30 * time.Minute
+	c.MaxConnIdleTime = 5 * time.Minute
+	return c, nil
 }

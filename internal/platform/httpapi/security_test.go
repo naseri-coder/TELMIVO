@@ -37,3 +37,12 @@ func TestOriginTrust(t *testing.T) {
 		}
 	}
 }
+
+func TestReadinessFailsClosedWithoutDependencies(t *testing.T) {
+	a := API{}
+	w := httptest.NewRecorder()
+	a.ready(w, httptest.NewRequest("GET", "/health/ready", nil))
+	if w.Code != 503 {
+		t.Fatal(w.Code)
+	}
+}

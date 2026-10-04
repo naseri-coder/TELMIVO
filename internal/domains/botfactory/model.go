@@ -18,27 +18,30 @@ type Bot struct {
 	Status string `json:"status"`
 }
 type Item struct {
-	ID             string             `json:"id"`
-	Name           string             `json:"name"`
-	Description    string             `json:"description"`
-	Version        string             `json:"version"`
-	Scope          sdk.LicenseScope   `json:"scope"`
-	Status         string             `json:"commercial_status"`
-	Entitled       bool               `json:"entitled"`
-	Reason         string             `json:"reason"`
-	Included       bool               `json:"included"`
-	Plan           string             `json:"plan"`
-	Prices         *commerce.Prices   `json:"prices,omitempty"`
-	TrialEligible  bool               `json:"trial_eligible"`
-	TrialSeconds   int64              `json:"trial_seconds"`
-	Dependencies   []string           `json:"dependencies"`
-	Conflicts      []string           `json:"conflicts"`
-	State          sdk.State          `json:"state"`
-	Revision       int64              `json:"revision"`
-	Settings       sdk.SettingsSchema `json:"settings"`
-	Configuration  json.RawMessage    `json:"configuration,omitempty"`
-	Installable    bool               `json:"installable"`
-	PolicyRevision string             `json:"policy_revision"`
+	Store             commerce.EffectivePolicy `json:"store"`
+	DependencyBlocked bool                     `json:"dependency_blocked"`
+	ConflictBlocked   bool                     `json:"conflict_blocked"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Description       string                   `json:"description"`
+	Version           string                   `json:"version"`
+	Scope             sdk.LicenseScope         `json:"scope"`
+	Status            string                   `json:"commercial_status"`
+	Entitled          bool                     `json:"entitled"`
+	Reason            string                   `json:"reason"`
+	Included          bool                     `json:"included"`
+	Plan              string                   `json:"plan"`
+	Prices            *commerce.Prices         `json:"prices,omitempty"`
+	TrialEligible     bool                     `json:"trial_eligible"`
+	TrialSeconds      int64                    `json:"trial_seconds"`
+	Dependencies      []string                 `json:"dependencies"`
+	Conflicts         []string                 `json:"conflicts"`
+	State             sdk.State                `json:"state"`
+	Revision          int64                    `json:"revision"`
+	Settings          sdk.SettingsSchema       `json:"settings"`
+	Configuration     json.RawMessage          `json:"configuration,omitempty"`
+	Installable       bool                     `json:"installable"`
+	PolicyRevision    string                   `json:"policy_revision"`
 }
 type Selection struct {
 	Requested      []string                   `json:"requested"`

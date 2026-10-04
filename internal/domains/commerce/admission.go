@@ -76,6 +76,16 @@ func (s *Service) AuthorizeTx(ctx context.Context, tx pgx.Tx, in sdk.Admission) 
 		return grant, &Denied{Decision: d}
 	}
 	v, _ := c.Get(PluginKind, in.Scope.PluginID)
+	if (in.Action != sdk.Execute || in.Capability != "") && Metadata(v.Definition).Operational != "OPERATIONAL" {
+		return grant, sdk.ErrPermission
+	}
+	if in.Action != sdk.Execute || in.Capability != "" {
+		for _, dep := range in.Manifest.Dependencies {
+			if policy, ok := c.Get(PluginKind, dep.PluginID); !ok || Metadata(policy.Definition).Operational != "OPERATIONAL" {
+				return grant, sdk.ErrDependency
+			}
+		}
+	}
 	for _, cap := range in.Manifest.Permissions {
 		if !sdk.KnownCapability(cap) || !contains(v.Definition.Plugin.Capabilities, cap) {
 			return grant, sdk.ErrPermission

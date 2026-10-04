@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/url"
 	"os"
@@ -99,12 +100,17 @@ func Load(get func(string) string) (Config, error) {
 		}
 		c.MediaConcurrency = n
 	}
+	if c.CredentialKey != "" {
+		if key, e := base64.StdEncoding.DecodeString(c.CredentialKey); e != nil || len(key) != 32 {
+			return c, errors.New("invalid credential key")
+		}
+	}
 	if c.Environment == "production" {
 		if c.Synthetic {
 			return c, errors.New("synthetic mode forbidden in production")
 		}
 		u, e := url.Parse(c.MiniAppURL)
-		if e != nil || u.Scheme != "https" || u.Host == "" || c.WebhookSecret == "" || c.CredentialKey == "" {
+		if e != nil || u.Scheme != "https" || u.Host == "" || len(c.WebhookSecret) < 32 || c.CredentialKey == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 			return c, errors.New("production secrets and HTTPS required")
 		}
 	}
