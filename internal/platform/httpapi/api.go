@@ -14,6 +14,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
+	"github.com/naseri-coder/TELMIVO/internal/domains/intelligence"
 	"github.com/naseri-coder/TELMIVO/internal/domains/policies"
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
 	"github.com/naseri-coder/TELMIVO/internal/domains/supportplugins"
@@ -41,17 +42,18 @@ import (
 )
 
 type API struct {
-	DB       *database.Store
-	Factory  *botfactory.Service
-	Support  *supportplugins.Service
-	Content  *contentplugins.Service
-	Cache    *cache.Client
-	Queue    *queue.Client
-	Config   config.Config
-	Identity *identity.Service
-	Requests atomic.Uint64
-	Groups   *groupbot.Service
-	Storage  *storage.Scoped
+	Intelligence *intelligence.Service
+	DB           *database.Store
+	Factory      *botfactory.Service
+	Support      *supportplugins.Service
+	Content      *contentplugins.Service
+	Cache        *cache.Client
+	Queue        *queue.Client
+	Config       config.Config
+	Identity     *identity.Service
+	Requests     atomic.Uint64
+	Groups       *groupbot.Service
+	Storage      *storage.Scoped
 }
 type ctxKey string
 
@@ -65,6 +67,23 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	mux.HandleFunc("POST /api/v1/customer-bot-updates/{account}/{bot}", a.contentWebhook)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflows)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflowSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows/{workflow}", a.intelligenceWorkflowSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/preview", a.intelligencePreview)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows/{workflow}/run", a.intelligenceManual)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/executions/{execution}/run", a.intelligenceRun)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/history", a.intelligenceHistory)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant", a.intelligenceConfig)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant", a.intelligenceConfigSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/models", a.intelligenceModels)
+	protected.HandleFunc("POST /api/v1/platform/ai-models", a.intelligenceModelSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/knowledge", a.intelligenceKnowledge)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/knowledge", a.intelligenceKnowledgeSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/chat", a.intelligenceChat)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/threads/{thread}/reset", a.intelligenceReset)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/usage", a.intelligenceUsage)
+
 	protected.HandleFunc("GET /api/v1/support-bots", a.supportBots)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/crm/contacts", a.supportContacts)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/crm/contacts", a.supportContactCreate)

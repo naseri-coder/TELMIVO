@@ -1,0 +1,29 @@
+# R3D-6 Automation and AI Assistant
+
+The independent first-party `automation` and `ai-assistant` manifests enter the existing Plugin Registry, Bot Factory and commercial catalog. Sale is disabled by default; no access is auto-granted. Pricing, entitlement and activation remain separate. Optional CRM, Ticketing, File Manager and Access Gate integrations validate those plugins and existing domain permissions before use.
+
+## Automation
+
+Minimal scoped business events are emitted transactionally into the existing outbox. The existing JetStream inbox consumer dispatches only allowlisted events and durably enqueues matching workflow snapshots. It does not execute external actions inside the inbox transaction. The worker follows existing polling infrastructure and respects `available_at` for bounded delay (up to one day). Cron and automatic SLA escalation are deferred.
+
+Workflow definitions contain an allowlisted trigger, ALL/ANY declarative conditions and ordered allowlisted actions. No code, expression evaluator, arbitrary SQL, regex or user HTTP action exists. Platform ceilings: 16 conditions, 8 actions, chain depth 4, 60-second execution, 2 attempts. Causation and workflow ancestry flow through authoritative domain services; same-workflow reentry and excessive depth are SKIPPED. Preview is read-only. Manual execution requires explicit intent and authorized scoped resource references.
+
+Each `(workflow,event identity)` is unique. Every action is durably reserved before invoking a domain service or external transport; ordered completion and structured failure are recorded. Only proven retryable failures without uncertain side effects can retry. Interrupted reserved execution becomes FAILED/UNKNOWN instead of replaying an action. Earlier completed actions remain committed; workflows are explicit sequences, not cross-domain atomic transactions. Definitions use optimistic revisions and operation fingerprints. History is paginated at 50 and contains safe metadata, not message bodies.
+
+## AI boundary
+
+The provider-neutral interface lives in platform code. Only privileged `platform.commercial.write` administration can approve models, HTTPS endpoints and encrypted credentials. Normal tenant configuration selects an approved model identifier and has no endpoint or key fields. The optional OpenAI-compatible adapter disables redirects/proxies, pins DNS resolution to public addresses, bounds timeout and response bytes, and uses the existing scoped CredentialStore. CI uses synthetic providers only. No live provider is seeded or contacted by tests.
+
+Assistant configuration is per bot with instructions <=4096 bytes, approved model, READ tool allowlist, explicit WRITE enablement, output <=2048 tokens, recent context <=12 messages and explicit knowledge/file references. Model calls are bounded to 3, tool rounds to 2 and total tool calls to 8. Retrieval uses scoped PostgreSQL full-text search over explicitly included bounded text; semantic retrieval can replace this boundary without new infrastructure now. File metadata tools require an approved reference and existing File Manager/Access Gate authorization; they do not download or ingest binaries.
+
+Model tool requests are untrusted. Server validation checks the configured allowlist, argument schema, actual caller permissions, plugin state, entitlement, dependencies and fixed bot/contact/ticket context independently of prompt text. WRITE tools additionally require explicit request confirmation and are denied for customer-facing or classification contexts. No deletion, arbitrary URL, generic SQL or credential tool exists. Untrusted knowledge/tool data cannot grant capabilities.
+
+Conversation identities include workspace, bot and verified Telegram user or authenticated actor/ticket. Recent context is bounded; thread reset is explicit and revision-checked. Ticket context includes CUSTOMER/AGENT messages only; internal notes are excluded even from Agent Assist in this foundation. Agent suggestions return to the dashboard without delivery; copying to a reply draft still requires the agent's normal explicit send operation. `/human` or a provider handoff request reuses Ticketing's active ticket policy. Follow-up messages for an active handed-off ticket go to human Ticketing.
+
+AI preparation reserves generic request/input/output quotas and commits before provider calls. Input/output quota reservations conservatively use platform call ceilings and are not refunded on uncertainty; actual validated provider usage is recorded separately for later reconciliation. Tool calls consume the generic tool quota. Request fingerprints prevent duplicate provider calls. Telegram response delivery uses a separate durable SENDING ledger and never automatically retries an uncertain send. A crash may require operator reconciliation; no success or safe resend is fabricated.
+
+## Persistence, retention and operation
+
+Additive migration `0017_automation_ai.sql` supplies scoped workflow/execution, assistant/thread/request/knowledge, approved operator model and delivery-ledger storage. Tenant tables use FORCE RLS and composite bot/workspace foreign keys. No earlier migration changes. Disable, entitlement loss and ticket close preserve definitions, context and records; permanent purge is deferred. No transaction spans an AI provider call. Existing RBAC is extended with `automation.manage`, `ai.manage` and `ai.invoke`; support agents receive only AI invocation, not workflow/model administration.
+
+Known foundation limits: no cron, SLA trigger, vector store, embeddings, unrestricted agent, checkout or external connector; bot-scoped memory, bounded text/metadata retrieval, conservative quota reservation and manual uncertain-outcome reconciliation. Deployment and production changes are outside this stage.
