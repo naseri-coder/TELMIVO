@@ -168,6 +168,14 @@ func TestR3D6WorkflowSafety(t *testing.T) {
 		t.Fatal("operation identity changed resource", e)
 	}
 	must(t, f.ai.Run(ctx, f.u.UserID, f.scope(workflow.ID), id))
+	otherScope := sdk.Scope{AccountID: f.u.WorkspaceID, BotID: f.other, PluginID: workflow.ID}
+	installed, e := f.core.Change(ctx, f.u.UserID, otherScope, sdk.Install, 0, json.RawMessage(`{}`), "cross-bot")
+	must(t, e)
+	_, e = f.core.Change(ctx, f.u.UserID, otherScope, sdk.Activate, installed.Revision, nil, "cross-bot")
+	must(t, e)
+	if e = f.ai.Run(ctx, f.u.UserID, otherScope, id); e == nil {
+		t.Fatal("cross-bot execution")
+	}
 	other := fixture(t, false)
 	_, e = f.ai.Workflows(ctx, other.UserID, f.scope(workflow.ID), "")
 	if !errors.Is(e, database.ErrForbidden) {
@@ -248,6 +256,30 @@ func TestR3D6AISupportAndPrivacy(t *testing.T) {
 		if strings.Contains(m.Content, "question") {
 			t.Fatal("memory leak")
 		}
+	}
+	otherScope := sdk.Scope{AccountID: f.u.WorkspaceID, BotID: f.other}
+	for _, plugin := range []string{"crm", assistant.ID} {
+		otherScope.PluginID = plugin
+		installed, err := f.core.Change(ctx, f.u.UserID, otherScope, sdk.Install, 0, json.RawMessage(`{}`), "memory-isolation")
+		must(t, err)
+		_, err = f.core.Change(ctx, f.u.UserID, otherScope, sdk.Activate, installed.Revision, nil, "memory-isolation")
+		must(t, err)
+	}
+	config := f.config
+	config.Revision, config.Knowledge = 0, []string{}
+	_, e = f.ai.SaveConfig(ctx, f.u.UserID, otherScope, config, 0)
+	must(t, e)
+	_, e = f.ai.Chat(ctx, f.u.UserID, otherScope, intelligence.Chat{Key: "other-bot", Text: "Separate bot", User: 10001, Name: "Synthetic", Purpose: "CUSTOMER"})
+	must(t, e)
+	for _, message := range f.p.requests[2].Context {
+		if strings.Contains(message.Content, "question") || strings.Contains(message.Content, "other") {
+			t.Fatal("cross-bot memory")
+		}
+	}
+	outsider := fixture(t, false)
+	_, e = f.ai.Chat(ctx, outsider.UserID, scope, intelligence.Chat{Key: "cross-tenant", Text: "Unauthorized"})
+	if !errors.Is(e, database.ErrForbidden) {
+		t.Fatal("cross-tenant AI", e)
 	}
 	r, e = f.ai.Chat(ctx, f.u.UserID, scope, intelligence.Chat{Key: "human", Text: "/human", User: 10001, Name: "Synthetic", Purpose: "CUSTOMER"})
 	must(t, e)
@@ -353,6 +385,17 @@ func TestR3D6QuotasRetentionAndRecovery(t *testing.T) {
 	must(t, f.ai.Run(ctx, f.u.UserID, f.scope(workflow.ID), id))
 	if f.transport.replies.Load() != 0 {
 		t.Fatal("recovery resend")
+	}
+	f.transport.outcome = "DELIVERY_OUTCOME_UNKNOWN"
+	for attempt := 0; attempt < 2; attempt++ {
+		e = f.ai.Send(ctx, f.u.UserID, f.scope(assistant.ID), 10001, "Synthetic uncertain send", "uncertain-send")
+		var uncertain *provider.Failure
+		if !errors.As(e, &uncertain) || !uncertain.Unknown {
+			t.Fatal("uncertain delivery", e)
+		}
+	}
+	if f.transport.replies.Load() != 1 {
+		t.Fatal("uncertain external side effect retried")
 	}
 	for _, plugin := range []string{workflow.ID, assistant.ID} {
 		i, e := f.core.View(ctx, f.u.UserID, f.scope(plugin))
