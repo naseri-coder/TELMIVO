@@ -71,7 +71,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/check-test-target.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR3CDiagnostics|TestR3CFailurePolicy|TestR3CHistoryPagination|TestR3CBotCallbacks|TestR3CCancelCompletionRace|TestR3CLeaseRenewReclaimFence|TestR3CProcessingCleanup|TestR3CSchema|TestR3CIdentityBot|TestR3CJourney|TestR3CCancelAndDeliveryFailures|TestR3CConcurrency|TestR3CStaleFencing|TestR3CBrowserFixture|TestR3CRecoveryPreparation|TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR3D1(LifecycleAndRuntime|IsolationAndAdmission|HookAndConcurrentConflicts|RecoveryPreparation)$|TestR3CDiagnostics|TestR3CFailurePolicy|TestR3CHistoryPagination|TestR3CBotCallbacks|TestR3CCancelCompletionRace|TestR3CLeaseRenewReclaimFence|TestR3CProcessingCleanup|TestR3CSchema|TestR3CIdentityBot|TestR3CJourney|TestR3CCancelAndDeliveryFailures|TestR3CConcurrency|TestR3CStaleFencing|TestR3CBrowserFixture|TestR3CRecoveryPreparation|TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -114,7 +114,7 @@ jobs:
         run: |
           set -o pipefail
           sh scripts/ci/backup-restore.sh
-          go test -race -v -tags=integration ./tests/integration -run 'TestR2BRecovered|TestR3CRecovered' -count=1 -timeout=2m | tee recovered-results.txt
+          go test -race -v -tags=integration ./tests/integration -run 'TestR2BRecovered|TestR3CRecovered|TestR3D1Recovered' -count=1 -timeout=2m | tee recovered-results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
