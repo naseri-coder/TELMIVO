@@ -131,6 +131,9 @@ func (s *Service) receive(ctx context.Context, tx pgx.Tx, p string, scope sdk.Sc
 	if e != nil {
 		return t, e
 	}
+	if e = audit(ctx, tx, p, scope, "ticket.customer_message", ref, map[string]any{}); e != nil {
+		return t, e
+	}
 	_, e = tx.Exec(ctx, "UPDATE support_tickets SET status='PENDING_AGENT',revision=revision+1,updated_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND reference=$3", scope.AccountID, scope.BotID, ref, now)
 	if e != nil {
 		return t, e

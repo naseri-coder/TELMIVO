@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	platform "github.com/naseri-coder/TELMIVO/internal/domains/pluginplatform"
+	"github.com/naseri-coder/TELMIVO/internal/platform/businessevents"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
@@ -120,6 +121,13 @@ func (s *Service) InvokeTx(ctx context.Context, tx pgx.Tx, actor string, scope s
 		}
 	}
 	_, e = tx.Exec(ctx, `UPDATE content_delivery_events SET state=$4,result=$5,completed_at=now() WHERE workspace_id=$1 AND bot_id=$2 AND request_key=$3 AND state='SENDING'`, scope.AccountID, scope.BotID, req.Key, next, jsonBody(result))
+	if e == nil && (next == "SENT" || next == "DENIED") {
+		kind := "file.delivery_denied"
+		if next == "SENT" {
+			kind = "file.delivery_allowed"
+		}
+		e = businessevents.Emit(businessevents.WithUser(ctx, req.User), tx, actor, scope, kind, f.Reference, map[string][]string{"file.reference": {f.Reference}})
+	}
 	slog.InfoContext(ctx, "file_delivery_result", "code", result.Code, "state", next)
 	return jsonBody(result), e
 }

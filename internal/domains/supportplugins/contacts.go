@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
+	"github.com/naseri-coder/TELMIVO/internal/platform/businessevents"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/crm"
@@ -108,6 +109,18 @@ func (s *Service) SaveContact(ctx context.Context, actor string, scope sdk.Scope
 	}
 	d := crm.Contact{Name: c.Name, Username: c.Username, Locale: c.Locale, Status: c.Status, Tags: c.Tags, Notes: c.Notes, Fields: c.Fields}
 	e := s.tenant(ctx, actor, scope, "crm.manage", "crm.write", func(tx pgx.Tx, p string) error {
+		old, err := s.contact(ctx, tx, scope, id)
+		if err != nil {
+			return err
+		}
+		added := false
+		for _, tag := range c.Tags {
+			found := false
+			for _, previous := range old.Tags {
+				found = found || tag == previous
+			}
+			added = added || !found
+		}
 		tag, e := tx.Exec(ctx, "UPDATE crm_contacts SET definition=$4,revision=revision+1 WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3 AND revision=$5", scope.AccountID, scope.BotID, id, body(d), expected)
 		if e != nil {
 			return e
@@ -117,6 +130,11 @@ func (s *Service) SaveContact(ctx context.Context, actor string, scope sdk.Scope
 		}
 		if e = audit(ctx, tx, actor, scope, "crm.contact.updated", id, map[string]any{"revision": expected + 1, "tag_count": len(c.Tags), "note_count": len(c.Notes)}); e != nil {
 			return e
+		}
+		if added {
+			if e = businessevents.Emit(ctx, tx, actor, scope, "crm.tag.added", id, map[string][]string{"contact.tags": c.Tags}); e != nil {
+				return e
+			}
 		}
 		out, e = s.contact(ctx, tx, scope, id)
 		return e

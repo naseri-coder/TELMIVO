@@ -177,8 +177,15 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 	ctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	defer func() { cancel(); wg.Wait() }()
-	errorsCh := make(chan error, 2)
+	errorsCh := make(chan error, 4)
 	if role == "worker" {
+		service := (&httpapi.API{DB: db, Config: c}).IntelligenceService()
+		wg.Add(2)
+		go func() { defer wg.Done(); errorsCh <- service.Poll(ctx) }()
+		go func() {
+			defer wg.Done()
+			errorsCh <- q.Consume(ctx, db, "telmivo.events.business", "automation-events-v1", service.DispatchTx)
+		}()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

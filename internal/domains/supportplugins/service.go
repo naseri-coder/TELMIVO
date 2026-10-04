@@ -13,6 +13,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	platform "github.com/naseri-coder/TELMIVO/internal/domains/pluginplatform"
+	"github.com/naseri-coder/TELMIVO/internal/platform/businessevents"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/crm"
@@ -102,7 +103,14 @@ func (s *Service) occupancy(ctx context.Context, tx pgx.Tx, p string, scope sdk.
 }
 func audit(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, action, id string, summary any) error {
 	slog.InfoContext(ctx, action, "resource", id)
-	return database.Audit(ctx, tx, actor, scope.AccountID, action, "support_plugin", id, "support-plugin-operation", map[string]any{}, summary)
+	if e := database.Audit(ctx, tx, actor, scope.AccountID, action, "support_plugin", id, "support-plugin-operation", map[string]any{}, summary); e != nil {
+		return e
+	}
+	kind := map[string]string{"crm.contact.created": "crm.contact.created", "crm.contact.updated": "crm.contact.updated", "ticket.created": "ticket.created", "ticket.customer_message": "ticket.customer_message", "ticket.message.AGENT": "ticket.agent_message", "ticket.status": "ticket.status_changed", "ticket.priority": "ticket.priority_changed", "ticket.assign": "ticket.assigned"}[action]
+	if kind != "" {
+		return businessevents.Emit(ctx, tx, actor, scope, kind, id, map[string][]string{})
+	}
+	return nil
 }
 func (s *Service) Invoke(context.Context, sdk.Scope, string, json.RawMessage) (json.RawMessage, error) {
 	return nil, sdk.ErrPermission

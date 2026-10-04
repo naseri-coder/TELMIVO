@@ -16,6 +16,8 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
+	assistant "github.com/naseri-coder/TELMIVO/internal/plugins/aiassistant"
+	"github.com/naseri-coder/TELMIVO/internal/plugins/automation"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/crm"
 	files "github.com/naseri-coder/TELMIVO/internal/plugins/filemanager"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/ticketing"
@@ -44,7 +46,7 @@ type Service struct {
 }
 
 func Registry(extra ...sdk.Manifest) (*platform.Registry, error) {
-	m := []sdk.Manifest{gate.Manifest(), files.Manifest(), crm.Manifest(), ticketing.Manifest()}
+	m := []sdk.Manifest{gate.Manifest(), files.Manifest(), crm.Manifest(), ticketing.Manifest(), automation.Manifest(), assistant.Manifest()}
 	m = append(m, extra...)
 	return platform.NewRegistry("0.3.0", m)
 }
