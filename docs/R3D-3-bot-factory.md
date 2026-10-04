@@ -27,7 +27,9 @@ conflicts, lifecycle/revision, price unit/scale/atomic amounts, inclusion, trial
 eligibility and current access. It excludes raw manifests, capabilities, migration
 metadata, other bot agreements, credentials and retained plugin data. Prices use
 R3D-2's exact denomination/scale; browser formatting uses BigInt, never floating
-point or inferred currency conversion.
+point or inferred currency conversion. Included/already-entitled cards emphasize
+access and plan inclusion; purchase prices and trial offers appear when access is
+needed, avoiding an implied extra charge for included plugins.
 
 Preview `selection` contains `requested`, `configurations`, `activate`. It resolves
 required closure deterministically; optional dependencies are not implied.
