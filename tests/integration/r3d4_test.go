@@ -283,7 +283,7 @@ func TestR3D4IsolationSecurity(t *testing.T) {
 	v, _ := c.Get(commerce.PlanKind, f.plan)
 	v.Definition.Plan.Plugins[files.ID] = commerce.PaidAddon
 	f.save(t, v, v.Version)
-	_, e = f.s.Issue(ctx, f.admin.UserID, f.u.WorkspaceID, "r3d4", commerce.Issue{Key: "temporary", Kind: commerce.PluginKind, CatalogKey: files.ID, Bot: f.bot, Period: commerce.Daily, Reason: "synthetic", AdminGrant: true, ExpiresAt: func() *time.Time { at := f.clock.at.Add(time.Hour); return &at }()})
+	_, e = f.s.Issue(ctx, f.admin.UserID, f.u.WorkspaceID, "r3d4", commerce.Issue{Key: "temporary", Kind: commerce.PluginKind, CatalogKey: files.ID, Bot: f.bot, Reason: "synthetic", AdminGrant: true, ExpiresAt: func() *time.Time { at := f.clock.at.Add(time.Hour); return &at }()})
 	must(t, e)
 	if !f.deliver(t, p.Reference, "before-expiry").Allowed {
 		t.Fatal("grant not active before expiry")
