@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
@@ -23,6 +24,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/entitlement"
 	"github.com/naseri-coder/TELMIVO/internal/platform/localization"
+	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	"io"
@@ -38,6 +40,7 @@ import (
 
 type API struct {
 	DB       *database.Store
+	Factory  *botfactory.Service
 	Cache    *cache.Client
 	Queue    *queue.Client
 	Config   config.Config
@@ -57,6 +60,15 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /health/ready", a.ready)
 	mux.HandleFunc("POST /api/v1/auth/telegram", a.login)
 	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/v1/customer-bots", a.factoryList)
+	protected.HandleFunc("GET /api/v1/customer-bots/catalog", a.factoryCatalog)
+	protected.HandleFunc("POST /api/v1/customer-bots/preview", a.factoryPreview)
+	protected.HandleFunc("POST /api/v1/customer-bots", a.factoryCreate)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/plugins", a.factoryCatalog)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/preview", a.factoryPreview)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/plugins/{plugin}/impact", a.factoryImpact)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/plugins/{plugin}/actions", a.factoryChange)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/plugins/{plugin}/trial", a.factoryTrial)
 	protected.HandleFunc("GET /api/v1/commercial/catalog", a.commercialCatalog)
 	protected.HandleFunc("GET /api/v1/commercial/catalog/{kind}/{key}/history", a.commercialHistory)
 	protected.HandleFunc("POST /api/v1/commercial/catalog", a.commercialSave)
@@ -249,6 +261,11 @@ func handleError(w http.ResponseWriter, e error) {
 		fail(w, 403, "GROUP_TARGET_PROTECTED")
 		return
 	}
+	var factoryRejected *botfactory.Rejected
+	if errors.As(e, &factoryRejected) {
+		respond(w, 409, map[string]any{"error": map[string]string{"code": "BOT_SELECTION_REJECTED", "message": "انتخاب پلاگین‌ها نیاز به بررسی دارد"}, "review": factoryRejected.Review})
+		return
+	}
 	var commercialDenied *commerce.Denied
 	if errors.As(e, &commercialDenied) {
 		respond(w, 403, map[string]any{"error": map[string]string{"code": "forbidden"}, "decision": commercialDenied.Decision})
@@ -263,6 +280,16 @@ func handleError(w http.ResponseWriter, e error) {
 	if errors.As(e, &denied) {
 		fail(w, 403, "forbidden")
 		return
+	}
+	for _, failure := range []error{sdk.ErrManifest, sdk.ErrDependency, sdk.ErrCycle, sdk.ErrConflict, sdk.ErrVersion, sdk.ErrState, sdk.ErrConfiguration, sdk.ErrPermission} {
+		if errors.Is(e, failure) {
+			status := 409
+			if failure == sdk.ErrPermission {
+				status = 403
+			}
+			respond(w, status, map[string]any{"error": map[string]string{"code": failure.Error(), "message": "عملیات پلاگین مجاز نیست؛ وضعیت و وابستگی‌ها را بررسی کنید"}})
+			return
+		}
 	}
 	if errors.Is(e, database.ErrConflict) {
 		fail(w, 409, "conflict")

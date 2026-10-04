@@ -68,6 +68,13 @@ func Run(role string) error {
 		groups.Authority = testfixtures.GroupAuthority{}
 	}
 	api := &httpapi.API{DB: db, Cache: redis, Queue: q, Config: c, Identity: ident, Groups: groups}
+	if c.BotFactoryTestFixture && role == "api" {
+		registry, err := testfixtures.FactoryRegistry()
+		if err != nil {
+			return err
+		}
+		api.SetFactoryRegistry(registry)
+	}
 	if c.DownloaderTestFixture && role == "api" {
 		local, err := storage.NewLocal("/tmp/telmivo-r3c-fixture-storage", c.MaxMediaBytes)
 		if err != nil {
