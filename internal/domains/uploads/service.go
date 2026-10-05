@@ -334,6 +334,9 @@ func (s *Service) Create(ctx context.Context, actor, workspace, correlation stri
 		if e != nil {
 			return e
 		}
+		if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "quota:"+workspace); e != nil {
+			return e
+		}
 		if limit := d.Resources["uploader.max_file_bytes"].Limit; limit <= 0 || in.SizeBytes > min64(limit, wf.MaxBytes) {
 			return &policies.Denied{Decision: deniedDecision(d, "QUOTA_EXCEEDED")}
 		}
@@ -552,6 +555,7 @@ func (s *Service) PutContent(ctx context.Context, actor, workspace, id, correlat
 	})
 	if e != nil {
 		_ = s.Storage.Delete(ctx, workspace, key)
+		s.failUpload(ctx, actor, workspace, id, "PERSISTENCE_FAILED")
 		return Upload{}, e
 	}
 	return out, nil
@@ -640,6 +644,9 @@ func (s *Service) Action(ctx context.Context, actor, workspace, id, correlation 
 		}
 		return database.Audit(ctx, tx, actor, workspace, "uploader."+strings.ToLower(in.Action), "upload", id, correlation, map[string]any{"state": "PROCESSING"}, map[string]any{"state": terminal})
 	})
+	if e != nil {
+		s.failUpload(ctx, actor, workspace, id, "TERMINAL_PERSISTENCE_FAILED")
+	}
 	return current, e
 }
 
