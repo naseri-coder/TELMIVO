@@ -100,7 +100,7 @@ func lexicalScore(query, body string) float64 {
 
 func (s *Service) retrieveHybrid(ctx context.Context, tx pgx.Tx, scope sdk.Scope, c assistant.Config, query string) ([]string, error) {
 	out := []string{}
-	if len(c.Knowledge) == 0 && len(c.Files) == 0 {
+	if len(c.Knowledge) == 0 && len(c.Sources) == 0 {
 		return out, nil
 	}
 	if len(query) > 500 {
@@ -110,8 +110,8 @@ func (s *Service) retrieveHybrid(ctx context.Context, tx pgx.Tx, scope sdk.Scope
 		FROM ai_knowledge_chunks ch
 		JOIN ai_knowledge k ON k.id=ch.knowledge_id AND k.workspace_id=ch.workspace_id AND k.bot_id=ch.bot_id
 		WHERE ch.workspace_id=$1 AND ch.bot_id=$2 AND k.enabled
-		AND (k.id::text=ANY($3::text[]) OR (k.source_ref<>'' AND k.source_ref=ANY($4::text[])))
-		ORDER BY k.id,ch.ordinal LIMIT 256`, scope.AccountID, scope.BotID, c.Knowledge, c.Files)
+		AND (k.id::text=ANY($3::text[]) OR (k.source_ref<>'' AND (k.source_kind||':'||k.source_ref)=ANY($4::text[])))
+		ORDER BY k.id,ch.ordinal LIMIT 256`, scope.AccountID, scope.BotID, c.Knowledge, c.Sources)
 	if err != nil {
 		return out, err
 	}
