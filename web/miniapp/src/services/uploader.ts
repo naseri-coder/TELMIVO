@@ -14,4 +14,5 @@ export const createUpload=(file:File,workflow_id:string,customer_bot_id='')=>mut
 });
 export const putUpload=(upload:string,file:File)=>uploadBinary<Upload>('/uploader/uploads/'+upload+'/content',file);
 export const uploadAction=(upload:string,action:string,expected_revision:number)=>api<Upload>('/uploader/uploads/'+upload+'/actions','POST',{action,expected_revision});
+export const handoffUpload=(upload:string,bot_id:string,title:string)=>mutation('/uploader/uploads/'+upload+'/file-manager',{bot_id,title});
 export async function saveDownloaded(upload:string,name:string){const blob=await downloadBinary('/uploader/uploads/'+upload+'/content');const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),0);}
