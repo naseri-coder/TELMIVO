@@ -140,7 +140,7 @@ func (s *Service) Config(ctx context.Context, actor string, scope sdk.Scope) (as
 		var e error
 		out, e = s.config(ctx, tx, scope)
 		if errors.Is(e, pgx.ErrNoRows) {
-			out = assistant.Config{Name: "دستیار", Mode: "AI_WITH_HANDOFF", Tools: []string{}, Knowledge: []string{}, Files: []string{}, Recent: 6, Memory: true, OutputTokens: 512, RetrievalMode: "HYBRID", MaxKnowledgeChunks: 4}
+			out = assistant.Config{Name: "دستیار", Mode: "AI_WITH_HANDOFF", Tools: []string{}, Knowledge: []string{}, Sources: []string{}, Files: []string{}, Recent: 6, Memory: true, OutputTokens: 512, RetrievalMode: "HYBRID", MaxKnowledgeChunks: 4}
 			return nil
 		}
 		return e
@@ -178,9 +178,9 @@ func (s *Service) SaveConfig(ctx context.Context, actor string, scope sdk.Scope,
 				return database.ErrInvalid
 			}
 		}
-		for _, ref := range c.Files {
+		for _, selector := range c.Sources {
 			var yes bool
-			if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND source_ref=$3 AND source_kind IN('FILE_MANAGER','UPLOADER') AND enabled)", scope.AccountID, scope.BotID, ref).Scan(&yes); e != nil {
+			if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND source_kind||':'||source_ref=$3 AND source_kind IN('FILE_MANAGER','UPLOADER') AND enabled)", scope.AccountID, scope.BotID, selector).Scan(&yes); e != nil {
 				return e
 			}
 			if !yes {
