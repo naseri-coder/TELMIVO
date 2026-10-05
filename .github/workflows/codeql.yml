@@ -1,0 +1,32 @@
+name: CodeQL
+on:
+  push:
+    branches: [feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
+  pull_request:
+    branches: [develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  analyze:
+    # Private repo code scanning is externally disabled at R1. Owner enables capability first.
+    if: vars.CODEQL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: go,javascript-typescript
+      - run: go build ./cmd/...
+      - uses: github/codeql-action/analyze@v3

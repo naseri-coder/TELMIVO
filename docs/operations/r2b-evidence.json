@@ -1,0 +1,749 @@
+{
+  "schema_version": 1,
+  "stage": "R2B",
+  "repository": "naseri-coder/TELMIVO",
+  "visibility": "PRIVATE",
+  "branch": "feature/platform-bootstrap-v0.1",
+  "starting_r2b_base": "7effd35a6287e095ed98440e2ec4fd20e63f75f8",
+  "starting_tree": "2abcef33cd3e279ed35fb5476829e10f115df9f0",
+  "validated_source_head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+  "validated_source_tree": "a5c6e73c9b47f4ed7dfa3eb3abf9dadb5b83547f",
+  "previous_blocked_delivery_head": "de5295df0a8ce2bbd23ca472172318821f2196be",
+  "commit_4_sha": "90a0d83f5853d527fde654c98783ae0879ac063c",
+  "commit_5": {
+    "git_revision": "HEAD",
+    "parent_sha": "90a0d83f5853d527fde654c98783ae0879ac063c",
+    "kind": "documentation-only fifth R2B commit",
+    "exact_sha_record_location": "https://github.com/naseri-coder/TELMIVO/pull/1 (R2B delivery section) and final owner response"
+  },
+  "final_delivery_head": {
+    "git_revision": "HEAD",
+    "parent_sha": "90a0d83f5853d527fde654c98783ae0879ac063c",
+    "kind": "documentation-only fifth R2B commit",
+    "exact_sha_record_location": "https://github.com/naseri-coder/TELMIVO/pull/1 (R2B delivery section) and final owner response"
+  },
+  "commits": [
+    {
+      "sha": "49c0d1d854a7a44b7bd67da28c46ddffbdd20d82",
+      "type": "source",
+      "message": "feat(infra): close R2B lease, rotation, storage and recovery foundations"
+    },
+    {
+      "sha": "fc608417f3fc33adbb599d9d4730263c348c877c",
+      "type": "correctness",
+      "message": "fix(ci): isolate native browser signing and complete entitlement coverage"
+    },
+    {
+      "sha": "de5295df0a8ce2bbd23ca472172318821f2196be",
+      "type": "correctness",
+      "message": "fix(recovery): pin restore clients and bind reservation ownership"
+    },
+    {
+      "sha": "90a0d83f5853d527fde654c98783ae0879ac063c",
+      "type": "correctness",
+      "message": "fix(r2b): close restored recovery validation and fail CI correctly"
+    },
+    {
+      "git_revision": "HEAD",
+      "parent_sha": "90a0d83f5853d527fde654c98783ae0879ac063c",
+      "type": "evidence/documentation",
+      "sha_record_location": "Draft PR #1 description and final owner response"
+    }
+  ],
+  "r2b_commit_count": 5,
+  "unchanged_bases": {
+    "main": "024b3a3465285f9758ce109551a6574ced087dc7",
+    "develop": "024b3a3465285f9758ce109551a6574ced087dc7"
+  },
+  "migrations_added": [
+    "db/migrations/0009_long_job_foundation.sql"
+  ],
+  "migrations_0001_through_0008": "byte-for-byte unchanged",
+  "files": {
+    "total": 32,
+    "added": 21,
+    "modified": 11,
+    "inventory": "r2b-files.json"
+  },
+  "gates": {
+    "SOURCE_CONTINUITY_GATE": {
+      "result": "PASS",
+      "evidence": "Clean reconciled checkout, Git/API identity and preserved ancestry plus one controlled recovery correction; frozen bases and old migration blobs verified."
+    },
+    "FOUNDATION_GAP_LEDGER_GATE": {
+      "result": "PASS",
+      "evidence": "R1/R2A reports and ADRs read; architecture ledger A implemented, B deferred, C preserved."
+    },
+    "NATIVE_BROWSER_E2E_GATE": {
+      "result": "PASS",
+      "evidence": "One Playwright native test: signed synthetic login, UI/API workspace and permission resolution, policy read/mutation, Preview, runtime and denied non-admin mutation; no API interception or external browser request."
+    },
+    "WORKSPACE_TRIAL_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BTrialScopes/PER_WORKSPACE: eight concurrent entries, deterministic subject, snapshot v1, expiry/fallback, cross-entry once behavior and RLS isolation."
+    },
+    "INSTALLATION_TRIAL_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BTrialScopes/PER_INSTALLATION: synthetic owned installation, deterministic subject, concurrency, version/expiry/once behavior and foreign ownership denial."
+    },
+    "PLUGIN_CONTRACT_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BPluginContracts: nine representative subtests plus four nested merge strategies; independent plan/trial/add-on/temporary entitlement, permission/capability/dependency denial, override/conflict and safety cap."
+    },
+    "JOB_LEASE_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BJobLease: two competing workers, one holder, renewal, expiry/reclaim and idempotent terminal transition; PostgreSQL bounded lease/deadline contract."
+    },
+    "LEASE_FENCING_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BJobLease and TestR2BRecovered reject stale renew/finish after reclaim; substituted reservation handle rejected."
+    },
+    "QUOTA_LEASE_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BJobLease preserves retry identity, extends beyond original TTL and charges once; failure/cancel release; TestR2BRecoveryPreparation records count-failure; TestR2BCalendarBoundary denies cross-window double allocation."
+    },
+    "STORAGE_FOUNDATION_GATE": {
+      "result": "PASS",
+      "evidence": "TestWorkspaceStorageLifecycle executes deterministic scoped Put/Open/metadata/Delete through cleanup, size/content type/expiry; TestR2BStorageAPI allows owner and denies foreign workspace. S3 is a private provider contract."
+    },
+    "CREDENTIAL_ROTATION_GATE": {
+      "result": "PASS",
+      "evidence": "TestRotation and TestR2BCredentialRotation demonstrate retained decryption, active writes, idempotent audited re-encryption and unknown/context rejection."
+    },
+    "BACKUP_RESTORE_GATE": {
+      "result": "PASS",
+      "evidence": "PostgreSQL 17 client/container dump restored into a fresh independent 17 service; identical canonical manifests, balanced ledger, migration validation and restricted runtime grants. TestR2BRecovered also passes restricted-runtime restored snapshots, ledger, isolation and replay assertions."
+    },
+    "RECOVERY_REPLAY_GATE": {
+      "result": "PASS",
+      "evidence": "TestR2BRecovered: restored inbox dedup, committed outbox relay, one recovery wakeup/generation, reclaim/fencing, one terminal event and quota posting. TestJetStreamRecovery proves bounded malformed/permanent retry/DLQ."
+    },
+    "WORKSPACE_ISOLATION_GATE": {
+      "result": "PASS",
+      "evidence": "Native trial/installation/job/storage tests and restored DB tenant probe; FORCE RLS and restricted runtime checks in TestMigration."
+    },
+    "ACCESS_PREVIEW_EQUIVALENCE_GATE": {
+      "result": "PASS",
+      "evidence": "Native browser asserts exact runtime/Preview response equality and the rendered Admin Preview result."
+    },
+    "OBSERVABILITY_GATE": {
+      "result": "PASS",
+      "evidence": "Native/API logs show request outcomes and correlation IDs, job/lease/reclaim, quota, denial, storage and DLQ signals; protected operations counts are bounded. Existing headers/readiness redaction preserved."
+    },
+    "SECURITY_REGRESSION_GATE": {
+      "result": "PASS",
+      "evidence": "gofmt, vet, race tests, source pattern scan, govulncheck, npm audit and restricted role/origin/trust/credential tests pass; inherited unreachable advisory remains disclosed."
+    },
+    "NATIVE_PERSISTENCE_GATE": {
+      "result": "PASS",
+      "evidence": "Fresh migrations through 0009, native scoped transactions, concurrency, restore and replay executed on isolated PostgreSQL; Redis/JetStream are actual disposable services."
+    },
+    "CI_GATE": {
+      "result": "PASS",
+      "evidence": "All required final-source Go/native, Web, Security and Images workflow families success; CodeQL externally skipped. Actual logs inspected: no hidden test FAIL/panic; both relevant tee test pipelines have pipefail and a local failing-pipeline probe returned nonzero."
+    },
+    "DOCUMENTATION_GATE": {
+      "result": "PASS",
+      "evidence": "ADR-018, architecture gap/recovery contracts, validation report, machine evidence and Git-generated file inventory delivered."
+    }
+  },
+  "test_counts": {
+    "go_top_level": 19,
+    "go_contract": 11,
+    "go_policy": 4,
+    "go_http_security": 2,
+    "go_rotation": 1,
+    "go_storage": 1,
+    "native_r2b_top_level": 8,
+    "native_retained_affected_top_level": 5,
+    "native_total_top_level": 13,
+    "native_r2b_subtests": 15,
+    "native_retained_subtests": 3,
+    "native_total_subtests": 18,
+    "web_unit": 4,
+    "intercepted_browser": 8,
+    "native_browser": 1
+  },
+  "execution": {
+    "required_ci_success": true,
+    "restore_success": true,
+    "native_run_id": 37114808374,
+    "native_job_id": 111179457612,
+    "actual_recovery_test_result": "PASS",
+    "logs_inspected": true,
+    "hidden_test_failures": 0,
+    "pipeline_audit": {
+      "relevant_test_tee_commands": 2,
+      "pipefail_blocks": 2,
+      "local_false_pipe_tee_exit_nonzero": true
+    },
+    "validated_source_head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+    "checkout_merge": "0daca06710930cdff5ad7c0be52b52b60bd8e034",
+    "checkout_tree": "a5c6e73c9b47f4ed7dfa3eb3abf9dadb5b83547f",
+    "ci_runs": [
+      {
+        "id": 37114808210,
+        "name": "CodeQL",
+        "result": "SKIPPED_EXTERNAL",
+        "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37114808210",
+        "head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+        "jobs": []
+      },
+      {
+        "id": 37114808232,
+        "name": "Security Baseline",
+        "result": "SUCCESS",
+        "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37114808232",
+        "head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+        "jobs": [
+          {
+            "id": 111179455161,
+            "name": "security",
+            "result": "success"
+          }
+        ]
+      },
+      {
+        "id": 37114808213,
+        "name": "CI Web",
+        "result": "SUCCESS",
+        "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37114808213",
+        "head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+        "jobs": [
+          {
+            "id": 111179456832,
+            "name": "web",
+            "result": "success"
+          }
+        ]
+      },
+      {
+        "id": 37114808258,
+        "name": "Build Images",
+        "result": "SUCCESS",
+        "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37114808258",
+        "head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+        "jobs": [
+          {
+            "id": 111179488470,
+            "name": "images",
+            "result": "success"
+          }
+        ]
+      },
+      {
+        "id": 37114808374,
+        "name": "CI Go",
+        "result": "SUCCESS",
+        "url": "https://github.com/naseri-coder/TELMIVO/actions/runs/37114808374",
+        "head": "90a0d83f5853d527fde654c98783ae0879ac063c",
+        "jobs": [
+          {
+            "id": 111179457406,
+            "name": "go",
+            "result": "success"
+          },
+          {
+            "id": 111179457612,
+            "name": "native / native",
+            "result": "success"
+          }
+        ]
+      }
+    ],
+    "artifact": {
+      "id": 11271298480,
+      "digest": "sha256:9ef38d210f858326fb47a741296e52f1ce0f6e7161f1d05b0bd8c7782662ef7b",
+      "name": "native-results",
+      "run_id": 37114808374
+    },
+    "native_infrastructure": {
+      "postgresql": "17.11",
+      "pg_dump": "17.11",
+      "redis": "7.4.11",
+      "nats_image": "nats:2.11-alpine",
+      "nats_patch_version": "not explicitly measured",
+      "runtime_role": "NOSUPERUSER NOBYPASSRLS NOINHERIT",
+      "source_port": 5432,
+      "fresh_restore_port": 5433
+    },
+    "restored_behavior": [
+      "immutable trial v1 snapshot persists beside policy v2",
+      "representative balanced ledger",
+      "inbox dedup survives restore",
+      "one recovery wakeup per abandoned generation",
+      "expired worker reclaimed",
+      "stale completion rejected",
+      "cross-workspace lease visibility denied",
+      "committed outbox relay",
+      "zero terminal-replay handler calls",
+      "one terminal event",
+      "usage equals2: one recorded failure plus one success",
+      "two stable committed reservation snapshots"
+    ],
+    "canonical_restore": {
+      "tables": {
+        "access_gate_channels": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "access_gates": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "access_gate_verifications": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ai_usage": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "analytics_aggregates": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "analytics_events": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "audit_logs": {
+          "rows": 22,
+          "digest": "7b1cb49a92d0e40d741e2853945913f6"
+        },
+        "auth_replays": {
+          "rows": 2,
+          "digest": "cfb131786dc6f7271ca43804dd1980c0"
+        },
+        "broadcast_audiences": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "broadcast_deliveries": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "broadcast_recipients": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "broadcasts": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "channels": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "channel_settings": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "customer_bot_modules": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "customer_bots": {
+          "rows": 3,
+          "digest": "bcff54438dd7b77231e382dc7e00959b"
+        },
+        "customer_bot_settings": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "dead_letter_events": {
+          "rows": 2,
+          "digest": "af7d95b7a488bfba4cbeb1158a28368c"
+        },
+        "download_assets": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "download_jobs": {
+          "rows": 2,
+          "digest": "406291cade3f6aa3f34689e814e7c242"
+        },
+        "feature_flags": {
+          "rows": 13,
+          "digest": "bb15f3e0b66c742ff412c717119bf1da"
+        },
+        "features": {
+          "rows": 13,
+          "digest": "1165b71ddaca856e796ec1e4e2d551e4"
+        },
+        "financial_adjustments": {
+          "rows": 1,
+          "digest": "fbaff2c88c91528448ecb9092b2c5155"
+        },
+        "group_claims": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "groups": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "group_settings": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "identity_entries": {
+          "rows": 2,
+          "digest": "ec85bf115c1b1d6c24b203c29540ee8a"
+        },
+        "inbox_events": {
+          "rows": 3,
+          "digest": "07d43980ef918488335bce033cadd62b"
+        },
+        "infrastructure_safety_caps": {
+          "rows": 3,
+          "digest": "ef333a02883f236cc4f8568165a3b9e2"
+        },
+        "invoices": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "job_leases": {
+          "rows": 6,
+          "digest": "a17601b9b27a1f3176acfc06d22a3ca3"
+        },
+        "job_recovery_events": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ledger_entries": {
+          "rows": 2,
+          "digest": "8651145b2851dc6831a38bcb1acd2e18"
+        },
+        "ledger_transactions": {
+          "rows": 1,
+          "digest": "ab78d94a8fc946dc143c2b19a80089c7"
+        },
+        "media_assets": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "media_jobs": {
+          "rows": 6,
+          "digest": "1ea3757f96a65842b233a28e1b87c10f"
+        },
+        "notifications": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "outbox_events": {
+          "rows": 16,
+          "digest": "7e7f4174d6ad86999fec352167e70a78"
+        },
+        "payment_attempts": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "payment_intents": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "payment_transactions": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "permissions": {
+          "rows": 35,
+          "digest": "d062459af3b869cb6e9725c99aa7fdd0"
+        },
+        "plan_entitlements": {
+          "rows": 39,
+          "digest": "df082886af0db420e8ae09e6f746445f"
+        },
+        "plan_plugin_entitlements": {
+          "rows": 24,
+          "digest": "478d34a10469a1b3d0321a8f623be561"
+        },
+        "plans": {
+          "rows": 3,
+          "digest": "0963e796e2511e1ad162867c1bd4eb52"
+        },
+        "platform_admin_permissions": {
+          "rows": 180,
+          "digest": "0d9ff899c2c174d026c41a6f5e749449"
+        },
+        "platform_admins": {
+          "rows": 10,
+          "digest": "1d89ca9c2df36f6799f0619e30de8dbb"
+        },
+        "platform_permissions": {
+          "rows": 18,
+          "digest": "f3a2ec97b5ce88a3d9fb56403ce529ab"
+        },
+        "plugin_capabilities": {
+          "rows": 7,
+          "digest": "16537e9bbbfcedbbde63d80672f340d4"
+        },
+        "plugin_dependencies": {
+          "rows": 1,
+          "digest": "e6d4d20d16222c887b7ec52c674674b3"
+        },
+        "plugins": {
+          "rows": 8,
+          "digest": "b87f2c7b4a495bb137eeb40c8610eabf"
+        },
+        "policy_versions": {
+          "rows": 51,
+          "digest": "8270bc4d163473e219572c07c6dd88fe"
+        },
+        "quota_lease_allocations": {
+          "rows": 6,
+          "digest": "471c3bc3829a0a206b4f6e57fc73c8fd"
+        },
+        "quota_reservations": {
+          "rows": 8,
+          "digest": "b407821560ecd52ce471a43a9fd526c0"
+        },
+        "quota_usage": {
+          "rows": 3,
+          "digest": "2bbcb620de06f6316f6db7331e9547fd"
+        },
+        "refunds": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "role_permissions": {
+          "rows": 93,
+          "digest": "8b28caaa5e97d2dc57881bee8c7ec276"
+        },
+        "roles": {
+          "rows": 8,
+          "digest": "923e929d9f183850eb8431bfb50970a0"
+        },
+        "schema_migrations": {
+          "rows": 9,
+          "digest": "f81697721c756f8143f73914e565e8aa"
+        },
+        "sessions": {
+          "rows": 4,
+          "digest": "a229680543b6ce48ff2b490fb0ff490c"
+        },
+        "subscription_events": {
+          "rows": 2,
+          "digest": "55f3e297e038ef07d63cf97f9697062c"
+        },
+        "subscription_operations": {
+          "rows": 2,
+          "digest": "db27d7be89142c54f29a3d5b56fd77ea"
+        },
+        "subscriptions": {
+          "rows": 18,
+          "digest": "21ab93e368d13f95963ea0a9b758b836"
+        },
+        "telegram_accounts": {
+          "rows": 18,
+          "digest": "a86fcb4f955a56d5853835a6de6c329d"
+        },
+        "telegram_updates": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "temporary_grants": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_assignments": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_events": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_internal_notes": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_messages": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_participants": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "tickets": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_sla_records": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "ticket_tags": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "trial_enrollments": {
+          "rows": 5,
+          "digest": "b0ad00bad286e1a31963b003c645bfed"
+        },
+        "upload_files": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "uploads": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "upload_workflows": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "usage_counters": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "users": {
+          "rows": 18,
+          "digest": "dd2b1b4d21f3c66b1a8b8bed241b5e89"
+        },
+        "wallet_accounts": {
+          "rows": 72,
+          "digest": "2292d372048f1d981d4b8df8de6ae1a2"
+        },
+        "workspace_entitlement_overrides": {
+          "rows": 0,
+          "digest": "d41d8cd98f00b204e9800998ecf8427e"
+        },
+        "workspace_members": {
+          "rows": 18,
+          "digest": "9545bf9478e80e6d1c0122b380b5c5f5"
+        },
+        "workspaces": {
+          "rows": 18,
+          "digest": "6af8c3abf13c7acde27be42a9ed250af"
+        }
+      },
+      "table_count": 84,
+      "manifests_identical": true,
+      "manifest_sha256": "f8376550b94520c736db317adec52d9fe431ccd9dca92dfef4b7bdfb58aa570e",
+      "ledger_balance": "PASS",
+      "migration_validation": "PASS"
+    },
+    "actual_counts": {
+      "native_pre_restore_top_level_pass": 12,
+      "native_subtests_pass": 18,
+      "recovered_top_level_pass": 1
+    }
+  },
+  "superseded_false_green": {
+    "run_id": 37113096968,
+    "valid_closure_evidence": false,
+    "displayed_result": "success",
+    "actual_result": "TestR2BRecovered FAIL: no rows in result set; masked by tee",
+    "root_cause": "Restricted-runtime unscoped fixture query plus missing pipefail",
+    "replacement_run": 37114808374
+  },
+  "security": {
+    "reachable_go_vulnerabilities": 0,
+    "imported_package_vulnerabilities": 0,
+    "required_module_advisories": 1,
+    "inherited_unreachable_advisory": "GO-2026-5932, unimported/uncalled OpenPGP; dependency graph is NOT advisory-free",
+    "npm_audit_vulnerabilities": 0,
+    "source_pattern_scan_files": 176,
+    "final_evidence_pattern_scan_files": 179,
+    "final_evidence_pattern_scan_result": "PASS"
+  },
+  "gap_ledger": {
+    "A": "Implemented demonstrated foundation gaps; docs/architecture/r2b-foundation.md",
+    "B": [
+      "Real YouTube/Instagram/Facebook extraction and private/DRM/paywall bypass",
+      "Full Downloader UX and media processing/FFmpeg product pipeline",
+      "Group moderation, anti-spam, anti-flood, captcha, raid protection and live Telegram authority",
+      "Full Uploader, Bot Factory and customer bot runtime",
+      "Payment rails, Stars purchasing, crypto execution and refunds",
+      "Broadcasts and AI products",
+      "Production deployment, secrets and database operations; all R3 work"
+    ],
+    "C": "Preserved validated R1/R2A contracts, migrations and infrastructure"
+  },
+  "external_blockers": {
+    "CodeQL": "BLOCKED_EXTERNAL; inherited disabled scanning/integration capability; skipped, no retry",
+    "Branch Protection": "EXTERNAL_BLOCKER; inherited HTTP403 integration access; no administration change/retry"
+  },
+  "deferred": [
+    "Real YouTube/Instagram/Facebook extraction and private/DRM/paywall bypass",
+    "Full Downloader UX and media processing/FFmpeg product pipeline",
+    "Group moderation, anti-spam, anti-flood, captcha, raid protection and live Telegram authority",
+    "Full Uploader, Bot Factory and customer bot runtime",
+    "Payment rails, Stars purchasing, crypto execution and refunds",
+    "Broadcasts and AI products",
+    "Production deployment, secrets and database operations; all R3 work"
+  ],
+  "untested": [
+    "Live Telegram/WebView, media/customer credentials and real payment operations",
+    "Network S3/MinIO or external KMS integration",
+    "Production backup scheduling/restore/RPO/RTO and disaster recovery load",
+    "Sustained heavy-media load and comprehensive penetration/accessibility testing"
+  ],
+  "known_limitations": [
+    "S3-compatible delivery is a private adapter contract, not a network adapter; only local storage is executed.",
+    "HTTP storage provider is injected; default runtime is unconfigured. Temporary cleanup needs an explicit scheduled caller.",
+    "Five-minute maximum heartbeat lease, immutable 24-hour job horizon. Reclaim requires an unexpired allocation; exhaustion needs explicit operator recovery.",
+    "Calendar quota boundary renewal is denied. Automatic migration/reallocation across windows is deferred.",
+    "Only representative plugin contract classes are tested, not every theoretical permutation.",
+    "Evidence commit identifies itself by Git revision/parent; exact final delivery SHA is recorded externally in Draft PR #1 and the final owner response, avoiding an impossible self-referential commit hash."
+  ],
+  "pr": {
+    "number": 1,
+    "state": "OPEN",
+    "draft": true,
+    "merged": false,
+    "base": "develop"
+  },
+  "production_operations": false,
+  "verdict": "TELMIVO_R2B_FOUNDATION_CLOSURE_PASS",
+  "migration_inventory": [
+    {
+      "path": "db/migrations/0001_core.sql",
+      "sha256": "9151f109a0c4bde03f9f0f1da1fe0a8324c5023110f88c6fb601372af502acc2",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0002_resources.sql",
+      "sha256": "754355b13dfc1086e0429b9f6f74d62f22f20957a9f6c2d8084c13c3012c0d7f",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0003_seed.sql",
+      "sha256": "a64de0b19e53199d48f1d47d9c3f569b371c2b0a924436d4c0c48c3b07827bb5",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0004_r1.sql",
+      "sha256": "eb9205d12738abfec6f445635ec725de485ce2c525a6fd70c652a914b4ab93bd",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0005_financial_sealing.sql",
+      "sha256": "18d0f3ac093a3549a4768334a038b4fde5cf61d56aff4a446e984d64be80a3d3",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0006_native_ledger_trigger.sql",
+      "sha256": "194a8d2ee11a4650a2138aa44ace3e8a37861e774343eec43a62979f04e8e2df",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0007_dynamic_policy.sql",
+      "sha256": "c6e58e2dd9061807cdd34198b5ae08fc9f839a8dbb773135fc7095c7d400c1ef",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0008_catalog_policy_revisions.sql",
+      "sha256": "1350ec244aa892b6f617b789c65aae2c7b47343021ba3746298b3fef049c53b0",
+      "unchanged_from_start": true
+    },
+    {
+      "path": "db/migrations/0009_long_job_foundation.sql",
+      "sha256": "0a334e396207d6652c33cadec78fa3d91212f6088144a6df16ed74f1940e26f8",
+      "unchanged_from_start": false
+    }
+  ]
+}

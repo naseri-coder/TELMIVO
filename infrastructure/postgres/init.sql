@@ -1,0 +1,5 @@
+CREATE ROLE telmivo_migration LOGIN NOSUPERUSER BYPASSRLS NOINHERIT PASSWORD 'dev-migration-only';
+CREATE ROLE telmivo_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT PASSWORD 'dev-runtime-only';
+ALTER DATABASE telmivo_dev OWNER TO telmivo_migration;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT ALL ON SCHEMA public TO telmivo_migration;

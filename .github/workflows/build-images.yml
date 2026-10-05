@@ -1,0 +1,44 @@
+name: Build Images
+on:
+  push:
+    branches: [feature/r3-final-release-readiness-v0.1, feature/r3d-8-plugin-store-admin-hardening-v0.1, feature/r3d-7-commerce-broadcast-forms-v0.1, feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1, feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
+  pull_request:
+    branches: [feature/r3d-8-plugin-store-admin-hardening-v0.1, feature/r3d-7-commerce-broadcast-forms-v0.1, feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1,feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f deployments/docker/backend.Dockerfile -t telmivo-backend:test .
+      - run: docker build -f deployments/docker/miniapp.Dockerfile -t telmivo-miniapp:test .
+      - run: docker run --rm --entrypoint ffmpeg telmivo-backend:test -version
+      - run: docker run --rm --entrypoint ffprobe telmivo-backend:test -version
+      - run: docker run --rm --entrypoint /opt/extractor/bin/python telmivo-backend:test -m yt_dlp --version
+      - run: test "$(docker run --rm --entrypoint id telmivo-backend:test -u)" = 10001
+      - name: Packaged IANA policy calendar data
+        run: docker run --rm --entrypoint sh telmivo-backend:test -c 'test -r "$ZONEINFO" && test -s "$ZONEINFO"'
+      - run: cp .env.example .env && docker compose config --quiet
+      - name: Synthetic Compose startup
+        run: |
+          docker compose up --build -d
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/health/ready; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8080/health/ready
+          curl --retry 10 --retry-all-errors --retry-delay 1 -fsS http://127.0.0.1:5173/ | grep 'dir="rtl"'
+          for app in main-bot group-bot downloader-bot customer-bot-runtime; do
+            docker run --rm --network telmivo-dev_default curlimages/curl:8.12.1 -fsS http://$app:8080/health/ready
+          done
+          test "$(docker compose ps --status running -q | wc -l)" -eq 11
+      - name: Stop isolated Compose
+        if: always()
+        run: docker compose down

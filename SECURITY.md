@@ -1,0 +1,13 @@
+# Security
+
+TELMIVO is private, proprietary software. Report vulnerabilities privately to the repository owner through GitHub private vulnerability reporting if enabled, or an agreed private owner channel. Do not post secrets or customer information in issues.
+
+Runtime database credentials use NOSUPERUSER/NOBYPASSRLS and cannot inherit the migration role. API membership checks select tenant context before FORCE RLS queries. These credentials are trusted server credentials, not credentials given to customers: possession of a runtime connection can set tenant context and is a server compromise. RLS supplements application authorization; it does not authenticate end users.
+
+The migration role has BYPASSRLS for migrations and the narrowly scoped SECURITY DEFINER `platform_plan_in_use` function. The function checks `platform.plans.manage`, returns only a boolean and cannot return subscription rows. Public execution is revoked. Runtime role must never own it or receive migration role membership. No shared privileged connection is used for tenant queries.
+
+Opaque session tokens are hashed in PostgreSQL. Telegram initData is verified server-side and replay rejected. Mutation Origin must match the configured Mini App scheme and host. Missing Origin with a session cookie is denied. Use HTTPS and production Secure cookies for live sessions.
+
+Customer credential encryption uses AES-256-GCM with tenant/bot context as authenticated data. Production encryption keys must come from a secret manager/KMS with key IDs and rotation; the local AES adapter is an interface foundation, not a managed credential service. Never log authorization headers, bot tokens, infrastructure URLs, payment secrets or credential ciphertext/plaintext. Errors log fixed classifications instead of raw SQL/transport errors.
+
+CI scans source secret patterns, Go vulnerabilities and npm high/critical advisories; CodeQL depends on private-repository capabilities. The R1 run reported code scanning disabled; the prepared job requires the CODEQL_ENABLED repository variable after the owner enables that capability. Pattern scanning is supplementary, not exhaustive security assurance. Synthetic mode disables live bot webhooks, notifications, media and payments. No production deployment exists.

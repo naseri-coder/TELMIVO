@@ -1,0 +1,144 @@
+{
+  "base_commit": "7effd35a6287e095ed98440e2ec4fd20e63f75f8",
+  "validated_source_commit": "90a0d83f5853d527fde654c98783ae0879ac063c",
+  "final_delivery_head": {
+    "git_revision": "HEAD",
+    "parent_sha": "90a0d83f5853d527fde654c98783ae0879ac063c",
+    "kind": "documentation-only fifth R2B commit",
+    "exact_sha_record_location": "https://github.com/naseri-coder/TELMIVO/pull/1 (R2B delivery section) and final owner response"
+  },
+  "total": 32,
+  "added": 21,
+  "modified": 11,
+  "files": [
+    {
+      "status": "M",
+      "path": ".github/workflows/migration-check.yml"
+    },
+    {
+      "status": "A",
+      "path": "db/migrations/0009_long_job_foundation.sql"
+    },
+    {
+      "status": "A",
+      "path": "docs/adr/ADR-018-leased-work-recovery.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/r2b-foundation.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r2b-evidence.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r2b-files.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/operations/r2b-validation.md"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/identity/rotation.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/jobs/lease.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/jobs/recovery.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/domains/policies/lease.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/policies/reservations.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/policies/resolve.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/domains/policies/store.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/crypto/keyring.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/crypto/keyring_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/httpapi/api.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/httpapi/policies.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/httpapi/storage.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/queue/nats.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/storage/local.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/platform/storage/local_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/platform/storage/provider.go"
+    },
+    {
+      "status": "A",
+      "path": "scripts/ci/backup-restore.sh"
+    },
+    {
+      "status": "A",
+      "path": "scripts/ci/restore-manifest.sql"
+    },
+    {
+      "status": "M",
+      "path": "tests/integration/native_test.go"
+    },
+    {
+      "status": "A",
+      "path": "tests/integration/r2b_recovery_test.go"
+    },
+    {
+      "status": "A",
+      "path": "tests/integration/r2b_test.go"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/e2e/native.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/playwright.config.ts"
+    },
+    {
+      "status": "A",
+      "path": "web/miniapp/playwright.native.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/miniapp/vite.config.ts"
+    }
+  ],
+  "inventory_generation": "git diff --cached --name-status starting_base after staging final documentation; final commit inventory verified after publication"
+}

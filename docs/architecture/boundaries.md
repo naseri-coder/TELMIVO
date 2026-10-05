@@ -1,0 +1,25 @@
+# Architecture review before implementation
+
+The repository name remains TELMIVO by the owner's explicit selection. Product: TELMIVO / تلمیو. Closed source; private repository; no open-source license.
+
+## Domain and tenant boundaries
+Identity maps verified Telegram identities to platform users. Membership permits selecting a workspace; it never grants platform administrator privileges. All workspace resources carry workspace_id; composite foreign keys prohibit cross-tenant references. PostgreSQL FORCE RLS is defense in depth; app processes refuse superuser/BYPASSRLS database roles. Migrations use a separate owner role. Non-members receive no resource data. Global plan configuration requires platform_admins membership; workspace OWNER does not imply platform administrator.
+
+RBAC determines action permission. Entitlement resolution independently evaluates global flag, plan, active grant, active override, permission, plugin dependencies, and quota. Scheduled plan changes and expirations are resolved from current database time on every request; a delayed worker never extends access. Administrative preview calls the same resolver. Usage consumption must be atomically locked in a transaction; a preview is never a quota reservation.
+
+## Financial boundaries
+Per-asset integer atomic units; ledger debits and credits balance in a single asset and tenant. Accounts are locked before posting. Immutable transaction, entry, adjustment and audit records; no balance mutation API. PostgreSQL deferred constraints reject unbalanced transactions and negative service-credit wallets. Payment provider confirmation is trusted only after adapter verification of recipient/amount/asset/status/expiry/quote. A globally unique provider/reference prevents duplicate credits. Bootstrap permits synthetic adjustments only; production rails, real refunds and transfers are disabled. Telegram digital services must use Stars inside Telegram (https://core.telegram.org/bots/payments-stars); other rails are extension interfaces for separately eligible contexts, never a bypass.
+
+## Trust and high-risk boundaries
+Mini App initData HMAC verified on the server, age bounded, duplicate fields rejected, replay digest consumed. Opaque random sessions are stored hashed; HttpOnly cookies and same-origin checks protect browser mutations. Customer secrets use AES-GCM with workspace/bot associated data; key material is external to Git and PostgreSQL. Production KMS integration and key rotation are deployment prerequisites. Admin configuration, plan changes, wallet adjustments, roles and broadcast actions require authorization and audit.
+
+## Events and volume
+Business writes and outbox insertion share one SQL transaction. JetStream acknowledged publication uses the SQL event ID as Nats-Msg-Id. Durable pull consumers use explicit acknowledgements, bounded retries, backoff and durable dead letters. Pure database handlers commit SQL inbox deduplication with domain mutations before ack. Non-idempotent live notification handlers first commit an inbox attempt fence and scrubbed uncertainty evidence; only then may transport run. Interrupted attempts remain fenced and require reconciliation, even if the result transaction fails. Broker deduplication alone is not an exactly-once business guarantee. Ticket responses enqueue notifications; requests never perform mass sends or FFmpeg work.
+
+Telegram Send/Copy/Forward are distinct operations. Telegram has no general idempotency key for outgoing messages. If a call might have succeeded before connectivity was lost, mark delivery UNKNOWN and stop automatic retry. No honest implementation can promise both unconditional retry and zero duplicated external messages. Broadcast, File Manager, Ticketing and Intelligence reserve delivery before transport and retain uncertain outcomes without automatic resend. Legacy live notification delivery uses the same no-blind-replay principle through the queue attempt fence. These controls do not promise exactly-once external delivery.
+
+## Resource and scaling boundaries
+Media provider adapters only resolve allowlisted public HTTPS URLs. No arbitrary worker network fetches, private/DRM/paywall/auth bypass. Synthetic provider fixtures are local; the live extractor is bounded to approved public providers and is not exercised against real services during release validation. Worker concurrency, process timeout, file-size and temporary-disk limits precede live processing. Object storage is scoped by workspace keys. Redis is temporary cache/rate limiting only; PostgreSQL remains authoritative. NATS queues absorb bursts. ClickHouse is deferred. Independently runnable processes share modules; extraction into services is deferred until operational evidence warrants it.
+
+## V0.1 delivery meaning
+Implemented slices and infrastructure are validated individually. Navigation may exist for future product capabilities, but unimplemented controls are disabled with Persian reasons. Process existence and interface definitions do not establish production feature completeness. See docs/operations/validation.md for evidence and unresolved gates.

@@ -1,0 +1,40 @@
+name: CI Web
+on:
+  push:
+    branches: [feature/r3-final-release-readiness-v0.1, feature/r3d-8-plugin-store-admin-hardening-v0.1, feature/r3d-7-commerce-broadcast-forms-v0.1, feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1, feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
+  pull_request:
+    branches: [feature/r3d-8-plugin-store-admin-hardening-v0.1, feature/r3d-7-commerce-broadcast-forms-v0.1, feature/r3d-6-automation-ai-v0.1, feature/r3d-5-ticketing-crm-v0.1, feature/r3d-4-access-file-manager-v0.1, feature/r3d-3-bot-factory-v0.1, feature/r3d-2-monetization-core-v0.1, feature/r3d-1-plugin-platform-v0.1, feature/r3c-downloader-bot-v0.1, feature/r3b-group-bot-v0.1,feature/r3a-main-miniapp-v0.1, feature/platform-bootstrap-v0.1, develop, main]
+    paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web/miniapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/miniapp/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test-browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rtl-smoke
+          path: web/miniapp/test-results/
+

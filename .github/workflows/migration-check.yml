@@ -1,0 +1,131 @@
+name: Native Infrastructure
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: telmivo_test
+          POSTGRES_PASSWORD: dev-admin-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d telmivo_test"
+          --health-interval 2s --health-retries 30
+      restore:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: telmivo_test
+          POSTGRES_PASSWORD: dev-admin-only
+        ports: [5433:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d telmivo_test"
+          --health-interval 2s --health-retries 30
+      redis:
+        image: redis:7.4-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5432/telmivo_test?sslmode=disable
+      TEST_MIGRATION_DATABASE_URL: postgres://telmivo_migration:dev-migration-only@127.0.0.1:5432/telmivo_test?sslmode=disable
+      TEST_RESTORE_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5433/telmivo_test?sslmode=disable
+      TEST_RESTORE_MIGRATION_DATABASE_URL: postgres://telmivo_migration:dev-migration-only@127.0.0.1:5433/telmivo_test?sslmode=disable
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      TEST_NATS_URL: nats://127.0.0.1:4222
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start isolated JetStream
+        run: docker run -d --name telmivo-test-nats -p 127.0.0.1:4222:4222 nats:2.11-alpine -js -sd /data
+      - name: Create restricted runtime and dedicated migration roles
+        env:
+          PGPASSWORD: dev-admin-only
+        run: |
+          sed 's/telmivo_dev/telmivo_test/g' infrastructure/postgres/init.sql | psql -h 127.0.0.1 -U postgres -d telmivo_test -v ON_ERROR_STOP=1
+          sed 's/telmivo_dev/telmivo_test/g' infrastructure/postgres/init.sql | psql -h 127.0.0.1 -p 5433 -U postgres -d telmivo_test -v ON_ERROR_STOP=1
+      - name: Apply fresh migrations
+        env:
+          MIGRATION_DATABASE_URL: ${{ env.TEST_MIGRATION_DATABASE_URL }}
+        run: go run ./cmd/migrate
+      - name: Grant runtime privileges
+        env:
+          PGPASSWORD: dev-migration-only
+        run: psql -h 127.0.0.1 -U telmivo_migration -d telmivo_test -v ON_ERROR_STOP=1 -f infrastructure/postgres/grants.sql
+      - name: Install bounded media tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python3 -m venv /tmp/r3c-extractor
+          /tmp/r3c-extractor/bin/pip install --require-hashes --no-deps -r scripts/media/requirements.txt
+          /tmp/r3c-extractor/bin/python scripts/media/test_extract.py
+      - name: Native customer journey and affected foundation regressions
+        run: |
+          set -o pipefail
+          sh scripts/ci/check-test-target.sh
+          go test -race -v -tags=integration ./tests/integration -run 'TestR3Final|TestR3D8|TestR3D7|TestR3D6(Concurrency|MemoryAndConnection|ReadWriteTools|EntitlementAndRetry|TelegramHandoff|AutomationJourney|WorkflowSafety|AISupportAndPrivacy|ToolsAndFailures|QuotasRetentionAndRecovery|BrowserFixture|RecoveryPreparation)$|TestR3D5(SingleConnectionRuntime|AgentPrivacyAndExpiry|OccupancyAndReplyQuotas|CRM|Journey|FailuresAndSecurity|QuotaAndRetention|ConfigurationAndAttachments|BrowserFixture|RecoveryPreparation)$|TestR3D4(Policies|FilesAndDelivery|IsolationSecurity|QuotaAndFailures|IngestionAndConnection|BrowserFixture|RecoveryPreparation)$|TestR3D3(PreviewAndCommercialCatalog|AtomicCreationAndReplay|LifecycleIsolationAndAccessLoss|SecurityAndAPI|BrowserFixture|RecoveryPreparation)$|TestR3D2(PricingAndCatalog|EntitlementLicensingAndActivation|Trials|BundlesAddonsAndQuota|CommercialSecurityAPI|RecoveryPreparation)$|TestR3D1(LifecycleAndRuntime|IsolationAndAdmission|HookAndConcurrentConflicts|RecoveryPreparation)$|TestR3CDiagnostics|TestR3CFailurePolicy|TestR3CHistoryPagination|TestR3CBotCallbacks|TestR3CCancelCompletionRace|TestR3CLeaseRenewReclaimFence|TestR3CProcessingCleanup|TestR3CSchema|TestR3CIdentityBot|TestR3CJourney|TestR3CCancelAndDeliveryFailures|TestR3CConcurrency|TestR3CStaleFencing|TestR3CBrowserFixture|TestR3CRecoveryPreparation|TestR3B|TestR3A|TestIdentityWorkspace|TestWorkspaceIsolation|TestWallet|TestR2BTrialScopes|TestR2BJobLease|TestR2BCredentialRotation|TestR2BPluginContracts|TestR2BRecoveryPreparation|TestR2BStorageAPI|TestR2BCalendarBoundary|TestMigration|TestDownloadQueue|TestDownloadCancel|TestJetStreamRecovery|TestOutboxLease' -count=1 -timeout=3m | tee native-results.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Native browser acceptance
+        env:
+          TELMIVO_ENV: test
+          SYNTHETIC_MODE: 'true'
+          TEST_GROUP_AUTHORITY_FIXTURE: 'true'
+          TEST_DOWNLOADER_FIXTURE: 'true'
+          TEST_BOT_FACTORY_FIXTURE: 'true'
+          TEST_CONTENT_PLUGIN_FIXTURE: 'true'
+          CREDENTIAL_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+          BOT_TOKEN: synthetic-signing-only
+          ADMIN_TELEGRAM_IDS: '94000001'
+          HTTP_ADDR: 127.0.0.1:8080
+          MINIAPP_URL: http://127.0.0.1:5173
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          REDIS_URL: ${{ env.TEST_REDIS_URL }}
+          NATS_URL: ${{ env.TEST_NATS_URL }}
+        run: |
+          go build -o /tmp/telmivo-r2b-api ./cmd/api
+          /tmp/telmivo-r2b-api > native-api.log 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          for n in $(seq 1 40); do curl -fsS http://127.0.0.1:8080/health/ready && break; sleep 1; done
+          cd web/miniapp
+          npm ci
+          npx playwright install --with-deps chromium
+          # Independent synthetic customers share the runner loopback IP.
+          # Give each complete journey its own rate window; never reset inside a journey.
+          # The production 120/min limiter and all prior assertions remain unchanged.
+          for spec in native.spec.ts customer.native.spec.ts groups.native.spec.ts downloader.native.spec.ts factory.native.spec.ts content.native.spec.ts support.native.spec.ts intelligence.native.spec.ts store.native.spec.ts; do
+            docker exec "${{ job.services.redis.id }}" redis-cli -n 15 DEL telmivo:rate:ip:127.0.0.1
+            npx playwright test --config playwright.native.config.ts "/$spec$" --output "test-results/$spec"
+          done
+      - name: Fresh backup/restore and recovery replay
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: telmivo_test
+          PGUSER: telmivo_migration
+          PGPASSWORD: dev-migration-only
+        run: |
+          set -o pipefail
+          sh scripts/ci/backup-restore.sh
+          go test -race -v -tags=integration ./tests/integration -run 'TestR2BRecovered|TestR3CRecovered|TestR3D1Recovered|TestR3D2Recovered|TestR3D3Recovered|TestR3D4Recovered|TestR3D5Recovered|TestR3D6Recovered' -count=1 -timeout=2m | tee recovered-results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-results
+          path: |
+            native-api.log
+            native-results.txt
+            recovered-results.txt
+            before-restore.txt
+            after-restore.txt
+            web/miniapp/test-results/**
