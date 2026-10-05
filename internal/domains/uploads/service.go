@@ -95,7 +95,7 @@ func (s *Service) now() time.Time {
 }
 
 func operationKey(v string) bool {
-	return len(v) >= 8 && len(v) <= 200 && strings.TrimSpace(v) == v
+	return len(v) >= 8 && len(v) <= 190 && strings.TrimSpace(v) == v
 }
 
 func digest(v any) string {
