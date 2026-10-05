@@ -245,11 +245,14 @@ func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Sco
 				return database.ErrConflict
 			}
 			var fp string
-			err := tx.QueryRow(ctx, "SELECT id::text,revision,fingerprint FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, keyValue).Scan(&k.ID, &k.Revision, &fp)
+			var current Knowledge
+			err := tx.QueryRow(ctx, "SELECT id::text,name,body,enabled,source_kind,source_ref,revision,fingerprint FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, keyValue).
+				Scan(&current.ID, &current.Name, &current.Body, &current.Enabled, &current.SourceKind, &current.SourceRef, &current.Revision, &fp)
 			if err == nil {
 				if fp != hash([]any{k.SourceKind, k.SourceRef, k.Name, k.Body, k.Enabled}) {
 					return database.ErrConflict
 				}
+				k = current
 				return s.reindexKnowledge(ctx, tx, scope, k)
 			}
 			if !errors.Is(err, pgx.ErrNoRows) {
