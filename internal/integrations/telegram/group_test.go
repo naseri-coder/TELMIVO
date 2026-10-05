@@ -49,7 +49,7 @@ func TestGroupTelegramBoundary(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	if len(methods) != 7 {
+	if len(methods) != 8 {
 		t.Fatal(methods)
 	}
 	c.http.Transport = groupRoundTrip(func(*http.Request) (*http.Response, error) {
