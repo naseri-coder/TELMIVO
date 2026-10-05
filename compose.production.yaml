@@ -102,6 +102,7 @@ services:
       - /tmp:rw,noexec,nosuid,size=16m
       - /var/cache/nginx:rw,noexec,nosuid,size=16m
       - /var/run:rw,noexec,nosuid,size=4m
+      - /etc/nginx/conf.d:rw,noexec,nosuid,size=1m
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
