@@ -57,6 +57,11 @@ jobs:
           MAX_MEDIA_BYTES=51380224
           MEDIA_STORAGE_ROOT=/var/lib/telmivo/media
           MEDIA_WORK_ROOT=/var/lib/telmivo/work
+          OBJECT_STORAGE_ENDPOINT=https://objects.example
+          OBJECT_STORAGE_BUCKET=telmivo-private
+          OBJECT_STORAGE_REGION=eu-test-1
+          OBJECT_STORAGE_ACCESS_KEY=synthetic-access-key
+          OBJECT_STORAGE_SECRET_KEY=synthetic-secret-key
           TELMIVO_BACKEND_IMAGE=registry.example/telmivo/backend@$DUMMY_DIGEST
           TELMIVO_MINIAPP_IMAGE=registry.example/telmivo/miniapp@$DUMMY_DIGEST
           TELMIVO_PROXY_IMAGE=registry.example/nginx@$DUMMY_DIGEST
