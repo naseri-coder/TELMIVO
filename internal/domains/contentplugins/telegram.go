@@ -156,24 +156,24 @@ type Message struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
 	} `json:"chat"`
-	Text     string  `json:"text"`
-	Caption  string  `json:"caption"`
-	Document *Media  `json:"document"`
-	Video    *Media  `json:"video"`
-	Audio    *Media  `json:"audio"`
-	Photos   []Media `json:"photo"`
+	Text              string             `json:"text"`
+	Caption           string             `json:"caption"`
+	Document          *Media             `json:"document"`
+	Video             *Media             `json:"video"`
+	Audio             *Media             `json:"audio"`
+	Photos            []Media            `json:"photo"`
 	SuccessfulPayment *SuccessfulPayment `json:"successful_payment"`
 }
 type Update struct {
-	ID       int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	ID          int64    `json:"update_id"`
+	Message     *Message `json:"message"`
 	PreCheckout *struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
 		From struct {
 			ID int64 `json:"id"`
 		} `json:"from"`
-		Currency string `json:"currency"`
-		TotalAmount int64 `json:"total_amount"`
+		Currency       string `json:"currency"`
+		TotalAmount    int64  `json:"total_amount"`
 		InvoicePayload string `json:"invoice_payload"`
 	} `json:"pre_checkout_query"`
 	Callback *struct {
@@ -198,6 +198,7 @@ func (s *Service) webhookActor(ctx context.Context, scope sdk.Scope) (string, er
 	e = tx.QueryRow(ctx, `SELECT m.user_id::text FROM workspace_members m JOIN role_permissions p ON p.role_key=m.role_key AND p.permission_key='bots.manage' WHERE m.workspace_id=$1 AND m.role_key='OWNER' ORDER BY m.user_id LIMIT 1`, scope.AccountID).Scan(&actor)
 	return actor, e
 }
+
 type PaymentHandler interface {
 	HandlePayment(context.Context, sdk.Scope, string, Update) (bool, error)
 }
