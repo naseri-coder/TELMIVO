@@ -17,15 +17,15 @@ type Config struct {
 	WebhookDigestKey, StorageEndpoint, StorageBucket                  string
 	GroupBotToken, DownloaderBotToken                                 string
 	MediaStorageRoot, MediaWorkRoot                                   string
-	CredentialKeys                                                     map[string][]byte
-	AdminIDs                                                           []int64
-	Synthetic                                                          bool
-	GroupTestAuthority                                                 bool
-	DownloaderTestFixture                                              bool
-	BotFactoryTestFixture                                              bool
-	ContentTestFixture                                                 bool
-	SessionTTL, JobTimeout                                             time.Duration
-	MediaConcurrency, MaxMediaBytes                                    int64
+	CredentialKeys                                                    map[string][]byte
+	AdminIDs                                                          []int64
+	Synthetic                                                         bool
+	GroupTestAuthority                                                bool
+	DownloaderTestFixture                                             bool
+	BotFactoryTestFixture                                             bool
+	ContentTestFixture                                                bool
+	SessionTTL, JobTimeout                                            time.Duration
+	MediaConcurrency, MaxMediaBytes                                   int64
 }
 
 func validKeyID(id string) bool {
