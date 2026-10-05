@@ -16,12 +16,12 @@ func (c *Client) CreateStarsInvoice(ctx context.Context, title, description, pay
 	}
 	var link string
 	e := c.call(ctx, "createInvoiceLink", map[string]any{
-		"title": title,
-		"description": description,
-		"payload": payload,
+		"title":          title,
+		"description":    description,
+		"payload":        payload,
 		"provider_token": "",
-		"currency": "XTR",
-		"prices": []map[string]any{{"label": title, "amount": amount}},
+		"currency":       "XTR",
+		"prices":         []map[string]any{{"label": title, "amount": amount}},
 	}, &link)
 	if e != nil {
 		if deterministicTelegramError(e) {
