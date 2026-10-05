@@ -29,3 +29,31 @@ CREATE FUNCTION guard_automation_schedule_state() RETURNS trigger LANGUAGE plpgs
 END $$;
 CREATE TRIGGER automation_schedule_state_guard BEFORE UPDATE OR DELETE ON automation_schedule_state
  FOR EACH ROW EXECUTE FUNCTION guard_automation_schedule_state();
+
+-- Core-owned upgrade for Automation 1.0 installations.
+-- The plugin-installation trigger intentionally makes version/data immutable at runtime,
+-- so the migration role performs this exact upgrade while the guard is temporarily disabled.
+DO $$
+BEGIN
+ IF EXISTS (
+  SELECT 1
+  FROM plugin_installations
+  WHERE plugin_id='automation'
+    AND NOT (
+      (plugin_version='1.0.0' AND data_version=1)
+      OR (plugin_version='1.1.0' AND data_version=2)
+    )
+ ) THEN
+  RAISE EXCEPTION 'unsupported automation plugin version for R4E upgrade';
+ END IF;
+END $$;
+
+ALTER TABLE plugin_installations DISABLE TRIGGER plugin_installation_guard;
+UPDATE plugin_installations
+SET plugin_version='1.1.0',
+    data_version=2,
+    revision=revision+1
+WHERE plugin_id='automation'
+  AND plugin_version='1.0.0'
+  AND data_version=1;
+ALTER TABLE plugin_installations ENABLE TRIGGER plugin_installation_guard;
