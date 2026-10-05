@@ -16,6 +16,7 @@ import (
 
 func TestR4ACanonicalRuntimeLifecycle(t *testing.T) {
 	f := r3d4Fixture(t)
+	f.transport.username = "r4a_" + strings.ReplaceAll(f.bot, "-", "")
 	scope := f.scope(files.ID)
 	_, e := owner.Pool.Exec(ctx, "UPDATE customer_bots SET status='DRAFT' WHERE id=$1", f.bot)
 	must(t, e)
