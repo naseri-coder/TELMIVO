@@ -36,7 +36,8 @@ func parseCronField(raw string, min, max int, weekday bool) (cronField, error) {
 			return f, errors.New("invalid cron field")
 		}
 		base, step := part, 1
-		if strings.Contains(part, "/") {
+		hasStep := strings.Contains(part, "/")
+		if hasStep {
 			pieces := strings.Split(part, "/")
 			if len(pieces) != 2 {
 				return f, errors.New("invalid cron step")
@@ -77,8 +78,14 @@ func parseCronField(raw string, min, max int, weekday bool) (cronField, error) {
 			if err != nil {
 				return f, err
 			}
-			f.allowed[n] = true
-			continue
+			if !hasStep {
+				f.allowed[n] = true
+				continue
+			}
+			start = n
+			if weekday && n == 0 && base == "7" {
+				start = 7
+			}
 		}
 		for n := start; n <= end; n += step {
 			v := n
