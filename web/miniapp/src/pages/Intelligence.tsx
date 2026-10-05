@@ -63,7 +63,7 @@ export function Automation(){
     {history.data?.length===50&&<Button onClick={()=>setCursor(history.data!.at(-1)!.id)}>صفحه بعد</Button>}{cursor&&<Button onClick={()=>setCursor('')}>صفحه اول</Button>}
   </>;
 }
-interface Config{name:string;model:string;instructions:string;language:string;mode:string;tools:string[];write_enabled:boolean;memory:boolean;recent:number;output_tokens:number;retrieval_mode:string;max_knowledge_chunks:number;max_cost_microunits:number;knowledge:string[];files:string[];revision:number}
+interface Config{name:string;model:string;instructions:string;language:string;mode:string;tools:string[];write_enabled:boolean;memory:boolean;recent:number;output_tokens:number;retrieval_mode:string;max_knowledge_chunks:number;max_cost_microunits:number;knowledge:string[];sources:string[];files:string[];revision:number}
 interface Model{id:string;name:string;provider:string;tools:boolean;structured:boolean;max_input:number;max_output:number;input_microunits_per_million:number;output_microunits_per_million:number}
 interface Knowledge{id:string;name:string;body:string;enabled:boolean;source_kind:string;source_ref:string;revision:number}
 interface Usage{id:string;state:string;code:string;model:string;input_tokens:number;output_tokens:number;tool_calls:number;cost_microunits:number;retrieved_chunks:number;latency_ms:number}
@@ -74,7 +74,7 @@ export function Assistant(){
   const data=useCustomer<Config>(base);const models=useCustomer<Model[]>(base+'/models');const sources=useCustomer<Knowledge[]>(base+'/knowledge');const usage=useCustomer<Usage[]>(base+'/usage');
   const [edit,setEdit]=useState<Config>();const [source,setSource]=useState({name:'',body:''});const [ingest,setIngest]=useState({source_kind:'FILE_MANAGER',reference:'',name:''});const busy=useMutation();
   if(data.error)return <ErrorState error={data.error} retry={data.retry}/>;if(!data.data)return <Loading/>;
-  const c={retrieval_mode:'HYBRID',max_knowledge_chunks:4,max_cost_microunits:0,...(edit??data.data)};
+  const c={retrieval_mode:'HYBRID',max_knowledge_chunks:4,max_cost_microunits:0,sources:[],...(edit??data.data)};
   const set=(v:Partial<Config>)=>setEdit({...c,...v});
   const selected=models.data?.find(m=>m.id===c.model);
   const manual=sources.data?.filter(k=>k.source_kind==='MANUAL')??[];
@@ -99,7 +99,8 @@ export function Assistant(){
       <p>فعال‌کردن این گزینه به‌تنهایی اجازه اجرای write نمی‌دهد؛ هر write همچنان نیازمند authorization صریح درخواست است.</p>
       {write.map(v=><Field key={v} label={v}><input type="checkbox" disabled={!c.write_enabled} checked={c.tools.includes(v)} onChange={e=>set({tools:e.target.checked?[...c.tools,v]:c.tools.filter(x=>x!==v)})}/></Field>)}
       <h2>دانش دستی مجاز</h2>{manual.map(k=><Field key={k.id} label={k.name}><input type="checkbox" checked={c.knowledge.includes(k.id)} onChange={e=>set({knowledge:e.target.checked?[...c.knowledge,k.id]:c.knowledge.filter(v=>v!==k.id)})}/></Field>)}
-      <h2>منابع واردشده مجاز</h2>{imported.map(k=><Field key={k.id} label={`${k.name} · ${k.source_kind} · ${k.source_ref}`}><input type="checkbox" checked={c.files.includes(k.source_ref)} onChange={e=>set({files:e.target.checked?[...c.files,k.source_ref]:c.files.filter(v=>v!==k.source_ref)})}/></Field>)}
+      <h2>منابع واردشده مجاز</h2>{imported.map(k=>{const selector=`${k.source_kind}:${k.source_ref}`;return <Field key={k.id} label={`${k.name} · ${k.source_kind} · ${k.source_ref}`}><input type="checkbox" checked={c.sources.includes(selector)} onChange={e=>set({sources:e.target.checked?[...c.sources,selector]:c.sources.filter(v=>v!==selector)})}/></Field>})}
+      <Field label="مراجع مجاز برای ابزار file.metadata (هر خط یک reference)"><textarea value={c.files.join('\n')} onChange={e=>set({files:e.target.value.split('\n').map(v=>v.trim()).filter(Boolean)})}/></Field>
       <Button loading={busy.loading}>ذخیره دستیار</Button>
     </form></Card>
     <Card><form onSubmit={async e=>{e.preventDefault();if(await busy.run(()=>mutation(base+'/knowledge',{knowledge:{...source,id:'',enabled:true,source_kind:'MANUAL',source_ref:'',revision:0},expected_revision:0}))){setSource({name:'',body:''});sources.retry()}}}>
