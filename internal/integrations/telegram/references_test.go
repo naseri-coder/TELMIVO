@@ -19,6 +19,8 @@ func TestReferenceTransport(t *testing.T) {
 		body := `{"ok":true,"result":{"message_id":101}}`
 		if method == "getMe" {
 			body = `{"ok":true,"result":{"id":999,"is_bot":true,"username":"synthetic"}}`
+		} else if method == "deleteWebhook" {
+			body = `{"ok":true,"result":true}`
 		} else if method == "getChatMember" {
 			body = `{"ok":true,"result":{"status":"` + state + `","is_member":true}}`
 			if len(methods)%3 == 2 {
