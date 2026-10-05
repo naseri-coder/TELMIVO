@@ -188,6 +188,9 @@ func (s *Service) CreateOperation(ctx context.Context, actor, workspace, correla
 	}
 	fp := fingerprint(in)
 	err := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, capability, 0); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,7500240))", workspace+":"+in.Key); err != nil {
 			return err
 		}
