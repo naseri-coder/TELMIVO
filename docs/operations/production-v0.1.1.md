@@ -27,7 +27,7 @@ path returns 404.
 ## Mandatory preflight
 
 Prepare a root/operator-readable environment file outside Git from .env.production.example,
-mode 0600, then run:
+mode 0600. Set TELMIVO_ENV_FILE inside that file to its own absolute path, then run:
 
 ~~~sh
 python3 scripts/production/preflight.py \
