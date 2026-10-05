@@ -25,6 +25,9 @@ func (s *Service) validateScheduleContext(ctx context.Context, tx pgx.Tx, scope 
 	if w.ScheduleKind() != "CRON" {
 		return nil
 	}
+	if _, err := workflow.NextCron(w.Schedule.Cron, scheduleTimezone(w), s.now()); err != nil {
+		return database.ErrInvalid
+	}
 	explicitContact, explicitUser := w.Schedule.Contact, w.Schedule.User
 	event := businessevents.Event{
 		Bot:     scope.BotID,
