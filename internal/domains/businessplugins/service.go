@@ -22,13 +22,13 @@ import (
 
 type Clock interface{ Now() time.Time }
 type Service struct {
-	DB         *database.Store
-	Core       *platform.Service
-	Commercial *commerce.Service
-	Support    *supportplugins.Service
-	Content    *contentplugins.Service
-	Clock      Clock
-	Fallback   contentplugins.SupportHandler
+	DB              *database.Store
+	Core            *platform.Service
+	Commercial      *commerce.Service
+	Support         *supportplugins.Service
+	Content         *contentplugins.Service
+	Clock           Clock
+	Fallback        contentplugins.SupportHandler
 	PaymentProvider ExternalPaymentProvider
 }
 
