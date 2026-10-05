@@ -45,8 +45,9 @@ The trusted Core checks:
 - atomic amount exactly matches the immutable order total;
 - payer Telegram identity matches the CRM identity captured for the order.
 
-Only then is the payment marked PAID. Mismatches fail closed and are recorded in the payment
-event ledger.
+Only then is the payment marked PAID. Pre-checkout mismatches fail closed without mutating
+payment state; accepted pre-checkout and verified/rejected successful-payment evidence are
+recorded in the payment event ledger.
 
 Telegram Stars refunds are full refunds because the Bot API refund primitive is full-payment.
 Refund outcomes are persisted as acknowledged, rejected or unknown.
