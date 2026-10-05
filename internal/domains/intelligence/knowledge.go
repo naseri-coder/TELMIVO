@@ -98,10 +98,44 @@ func lexicalScore(query, body string) float64 {
 	return float64(matched) / float64(len(q))
 }
 
+func (s *Service) ensureKnowledgeIndexes(ctx context.Context, tx pgx.Tx, scope sdk.Scope, c assistant.Config) error {
+	rows, err := tx.Query(ctx, `SELECT k.id::text,k.name,k.body,k.enabled,k.source_kind,k.source_ref,k.revision
+		FROM ai_knowledge k
+		WHERE k.workspace_id=$1 AND k.bot_id=$2 AND k.enabled
+		AND (k.id::text=ANY($3::text[]) OR (k.source_ref<>'' AND (k.source_kind||':'||k.source_ref)=ANY($4::text[])))
+		AND NOT EXISTS(SELECT 1 FROM ai_knowledge_chunks ch WHERE ch.knowledge_id=k.id)
+		ORDER BY k.id LIMIT 40`, scope.AccountID, scope.BotID, c.Knowledge, c.Sources)
+	if err != nil {
+		return err
+	}
+	missing := []Knowledge{}
+	for rows.Next() {
+		var k Knowledge
+		if err = rows.Scan(&k.ID, &k.Name, &k.Body, &k.Enabled, &k.SourceKind, &k.SourceRef, &k.Revision); err != nil {
+			rows.Close()
+			return err
+		}
+		missing = append(missing, k)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	for _, k := range missing {
+		if err = s.reindexKnowledge(ctx, tx, scope, k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Service) retrieveHybrid(ctx context.Context, tx pgx.Tx, scope sdk.Scope, c assistant.Config, query string) ([]string, error) {
 	out := []string{}
 	if len(c.Knowledge) == 0 && len(c.Sources) == 0 {
 		return out, nil
+	}
+	if err := s.ensureKnowledgeIndexes(ctx, tx, scope, c); err != nil {
+		return out, err
 	}
 	if len(query) > 500 {
 		query = query[:500]
