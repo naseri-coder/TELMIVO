@@ -3,6 +3,7 @@ export interface Money{unit:string;scale:number;amount:string}
 export interface Setting{type:'string'|'integer'|'boolean';max_length?:number;enum?:string[];minimum?:number;maximum?:number}
 export interface Plugin{id:string;name:string;description:string;version:string;scope:string;commercial_status:string;entitled:boolean;reason:string;included:boolean;plan:string;prices?:{daily:Money;monthly:Money};trial_eligible:boolean;trial_seconds:number;dependencies:string[];conflicts:string[];state:string;revision:number;settings:{properties:Record<string,Setting>;required?:string[]};configuration?:Record<string,unknown>;installable:boolean}
 export interface Bot{id:string;name:string;status:string}
+export interface BotRuntime{bot_id:string;username:string;status:string;ingress_path:string;connected:boolean}
 export interface Selection{requested:string[];configurations:Record<string,Record<string,unknown>>;activate:boolean}
 export interface Review{requested:string[];required:string[];order:string[];plugins:Plugin[];issues:{code:string;plugin:string;other?:string}[];ready:boolean;digest:string}
 // Exact denomination/scale from the commercial catalog, never floats or invented FX.
