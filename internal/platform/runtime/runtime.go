@@ -73,6 +73,27 @@ func Run(role string) error {
 		groups.Authority = testfixtures.GroupAuthority{}
 	}
 	api := &httpapi.API{DB: db, Cache: redis, Queue: q, Config: c, Identity: ident, Groups: groups}
+	if role == "api" {
+		var scoped storage.Scoped
+		if c.Environment == "production" {
+			s3, err := storage.NewS3(c.StorageEndpoint, c.StorageBucket, c.StorageRegion, c.StorageAccessKey, c.StorageSecretKey, nil)
+			if err != nil {
+				return err
+			}
+			scoped, err = storage.NewS3Scoped(s3)
+			if err != nil {
+				return err
+			}
+		} else {
+			local, err := storage.NewLocal(c.UploadStorageRoot, c.MaxMediaBytes)
+			if err != nil {
+				return err
+			}
+			defer local.Close()
+			scoped = storage.Scoped{Provider: local}
+		}
+		api.Storage = &scoped
+	}
 	if c.BotFactoryTestFixture && role == "api" {
 		registry, err := testfixtures.FactoryRegistry()
 		if err != nil {
