@@ -111,6 +111,38 @@ func TestR4CUploaderLifecycleAndQuota(t *testing.T) {
 	if _, e = s.Detail(ctx, other.UserID, u.WorkspaceID, item.ID); !errors.Is(e, database.ErrForbidden) {
 		t.Fatal("cross-workspace read allowed", e)
 	}
+
+	abandoned, e := s.Create(ctx, u.UserID, u.WorkspaceID, "r4c-abandoned", uploads.Create{
+		WorkflowID: wf.ID, Name: "abandoned.txt", ContentType: "text/plain", SizeBytes: 3, Key: "r4c-upload-abandoned",
+	})
+	must(t, e)
+	objectKey, e := storage.ObjectKey(u.WorkspaceID, "uploader:"+item.ID)
+	must(t, e)
+
+	s.Now = func() time.Time { return time.Now().UTC().Add(31 * 24 * time.Hour) }
+	cleaned, e := s.CleanupExpired(ctx, u.UserID, u.WorkspaceID, 10)
+	must(t, e)
+	if cleaned != 2 {
+		t.Fatal("unexpected retention cleanup count", cleaned)
+	}
+	item, e = s.Detail(ctx, u.UserID, u.WorkspaceID, item.ID)
+	must(t, e)
+	abandoned, e = s.Detail(ctx, u.UserID, u.WorkspaceID, abandoned.ID)
+	must(t, e)
+	if item.State != "EXPIRED" || abandoned.State != "EXPIRED" {
+		t.Fatal("retention lifecycle not terminal", item.State, abandoned.State)
+	}
+	if _, e = s.Storage.Metadata(ctx, u.WorkspaceID, objectKey); !errors.Is(e, storage.ErrUnavailable) {
+		t.Fatal("expired private object still present", e)
+	}
+	var reservations, reserved int
+	tenant(t, u, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE state='RESERVED') FROM quota_reservations
+			WHERE workspace_id=$1 AND operation_key='upload:r4c-upload-abandoned'`, u.WorkspaceID).Scan(&reservations, &reserved)
+	})
+	if reservations == 0 || reserved != 0 {
+		t.Fatal("abandoned upload quota reservation leaked", reservations, reserved)
+	}
 }
 
 func TestR4CFileManagerHandoffIdentifier(t *testing.T) {
