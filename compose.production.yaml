@@ -1,0 +1,149 @@
+name: telmivo
+
+x-app: &app
+  image: ${TELMIVO_BACKEND_IMAGE:?immutable backend image required}
+  env_file: ${TELMIVO_ENV_FILE:-.env.production}
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  networks: [app]
+
+x-http-health: &http-health
+  interval: 15s
+  timeout: 4s
+  retries: 4
+  start_period: 20s
+
+services:
+  api:
+    <<: *app
+    command: [/app/api]
+    healthcheck:
+      <<: *http-health
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()"]
+
+  worker:
+    <<: *app
+    command: [/app/worker]
+    healthcheck:
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      test: [CMD-SHELL, "kill -0 1"]
+
+  media-worker:
+    <<: *app
+    command: [/app/media-worker]
+    volumes:
+      - media-storage:/var/lib/telmivo/media
+      - media-work:/var/lib/telmivo/work
+    healthcheck:
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      test: [CMD-SHELL, "kill -0 1"]
+
+  main-bot:
+    <<: *app
+    command: [/app/main-bot]
+    healthcheck:
+      <<: *http-health
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()"]
+
+  group-bot:
+    <<: *app
+    command: [/app/group-bot]
+    healthcheck:
+      <<: *http-health
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()"]
+
+  downloader-bot:
+    <<: *app
+    command: [/app/downloader-bot]
+    healthcheck:
+      <<: *http-health
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()"]
+
+  miniapp:
+    image: ${TELMIVO_MINIAPP_IMAGE:?immutable miniapp image required}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m
+      - /var/run:rw,noexec,nosuid,size=4m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [app]
+    healthcheck:
+      <<: *http-health
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8080/"]
+
+  reverse-proxy:
+    image: ${TELMIVO_PROXY_IMAGE:?immutable proxy image required}
+    restart: unless-stopped
+    environment:
+      TELMIVO_DOMAIN: ${TELMIVO_DOMAIN:?public domain required}
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - ./deployments/reverse-proxy/nginx.production.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${TELMIVO_TLS_CERT:?TLS certificate path required}:/run/telmivo/tls.crt:ro
+      - ${TELMIVO_TLS_KEY:?TLS private key path required}:/run/telmivo/tls.key:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m
+      - /var/run:rw,noexec,nosuid,size=4m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      api:
+        condition: service_healthy
+      miniapp:
+        condition: service_healthy
+      main-bot:
+        condition: service_healthy
+      group-bot:
+        condition: service_healthy
+      downloader-bot:
+        condition: service_healthy
+    networks: [app]
+
+  migrate:
+    <<: *app
+    profiles: [maintenance]
+    restart: "no"
+    command: [/app/migrate]
+
+  grants:
+    image: ${TELMIVO_POSTGRES_IMAGE:?immutable PostgreSQL client image required}
+    profiles: [maintenance]
+    restart: "no"
+    env_file: ${TELMIVO_ENV_FILE:-.env.production}
+    command: ["sh", "-ec", "exec psql \"$$MIGRATION_DATABASE_URL\" -X -v ON_ERROR_STOP=1 -f /grants.sql"]
+    volumes:
+      - ./infrastructure/postgres/grants.sql:/grants.sql:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [app]
+
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  media-storage:
+  media-work:
