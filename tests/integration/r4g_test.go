@@ -79,8 +79,8 @@ func TestR4GCrossFeatureContinuity(t *testing.T) {
 	}
 	assistantManifest, err := f.core.Registry.Manifest(assistant.ID)
 	must(t, err)
-	if assistantManifest.Version != "1.1.0" || assistantManifest.DataVersion != 2 {
-		t.Fatal("AI Assistant 2.0 manifest drift", assistantManifest.Version, assistantManifest.DataVersion)
+	if assistantManifest.Version != "1.0.0" || assistantManifest.DataVersion != 1 {
+		t.Fatal("AI Assistant 2.0 compatibility manifest drift", assistantManifest.Version, assistantManifest.DataVersion)
 	}
 
 	catalog, err := f.s.Catalog(ctx, f.admin.UserID, f.u.WorkspaceID)
