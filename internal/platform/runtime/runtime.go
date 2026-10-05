@@ -10,6 +10,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/mainbot"
+	"github.com/naseri-coder/TELMIVO/internal/domains/uploads"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	telegramclient "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
 	"github.com/naseri-coder/TELMIVO/internal/platform/cache"
@@ -93,6 +94,24 @@ func Run(role string) error {
 			scoped = storage.Scoped{Provider: local}
 		}
 		api.Storage = &scoped
+		cleaner := &uploads.Service{DB: db, Storage: scoped}
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				n, err := cleaner.SweepExpired(ctx)
+				if err != nil && ctx.Err() == nil {
+					slog.Warn("uploader retention cleanup failed", "error_code", "UPLOADER_RETENTION_CLEANUP_FAILED")
+				} else if n > 0 {
+					slog.Info("uploader retention cleanup", "expired_uploads", n)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 	}
 	if c.BotFactoryTestFixture && role == "api" {
 		registry, err := testfixtures.FactoryRegistry()
