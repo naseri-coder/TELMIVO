@@ -101,7 +101,6 @@ func (c *Client) Connect(ctx context.Context, endpoint, secret string) (string, 
 	return me.Name, nil
 }
 
-
 func (c *Client) Disconnect(ctx context.Context) error {
 	var ok bool
 	if e := c.call(ctx, "deleteWebhook", map[string]any{"drop_pending_updates": false}, &ok); e != nil {
