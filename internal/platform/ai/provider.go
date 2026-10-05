@@ -9,20 +9,20 @@ import (
 )
 
 type Model struct {
-	ID         string               `json:"id"`
-	Name       string               `json:"name"`
-	Provider   string               `json:"provider"`
-	Identifier string               `json:"identifier"`
-	Enabled    bool                 `json:"enabled"`
-	Tools      bool                 `json:"tools"`
-	Structured bool                 `json:"structured"`
-	MaxInput   int                  `json:"max_input"`
-	MaxOutput  int64                `json:"max_output"`
-	InputMicrounitsPerMillion  int64 `json:"input_microunits_per_million"`
-	OutputMicrounitsPerMillion int64 `json:"output_microunits_per_million"`
-	Endpoint   string               `json:"-"`
-	Secret     cred.EncryptedSecret `json:"-"`
-	Revision   int64                `json:"revision"`
+	ID                         string               `json:"id"`
+	Name                       string               `json:"name"`
+	Provider                   string               `json:"provider"`
+	Identifier                 string               `json:"identifier"`
+	Enabled                    bool                 `json:"enabled"`
+	Tools                      bool                 `json:"tools"`
+	Structured                 bool                 `json:"structured"`
+	MaxInput                   int                  `json:"max_input"`
+	MaxOutput                  int64                `json:"max_output"`
+	InputMicrounitsPerMillion  int64                `json:"input_microunits_per_million"`
+	OutputMicrounitsPerMillion int64                `json:"output_microunits_per_million"`
+	Endpoint                   string               `json:"-"`
+	Secret                     cred.EncryptedSecret `json:"-"`
+	Revision                   int64                `json:"revision"`
 }
 
 func (m Model) Valid() bool {
