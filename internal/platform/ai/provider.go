@@ -18,13 +18,15 @@ type Model struct {
 	Structured bool                 `json:"structured"`
 	MaxInput   int                  `json:"max_input"`
 	MaxOutput  int64                `json:"max_output"`
+	InputMicrounitsPerMillion  int64 `json:"input_microunits_per_million"`
+	OutputMicrounitsPerMillion int64 `json:"output_microunits_per_million"`
 	Endpoint   string               `json:"-"`
 	Secret     cred.EncryptedSecret `json:"-"`
 	Revision   int64                `json:"revision"`
 }
 
 func (m Model) Valid() bool {
-	return m.ID != "" && len(m.ID) <= 100 && m.Name != "" && len(m.Name) <= 100 && m.Identifier != "" && len(m.Identifier) <= 100 && (m.Provider == "openai-compatible" || m.Provider == "synthetic") && m.MaxInput > 0 && m.MaxInput <= 32768 && m.MaxOutput > 0 && m.MaxOutput <= 2048
+	return m.ID != "" && len(m.ID) <= 100 && m.Name != "" && len(m.Name) <= 100 && m.Identifier != "" && len(m.Identifier) <= 100 && (m.Provider == "openai-compatible" || m.Provider == "synthetic") && m.MaxInput > 0 && m.MaxInput <= 32768 && m.MaxOutput > 0 && m.MaxOutput <= 2048 && m.InputMicrounitsPerMillion >= 0 && m.InputMicrounitsPerMillion <= 1_000_000_000_000 && m.OutputMicrounitsPerMillion >= 0 && m.OutputMicrounitsPerMillion <= 1_000_000_000_000
 }
 
 type Message struct {
