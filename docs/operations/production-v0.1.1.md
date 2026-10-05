@@ -35,9 +35,13 @@ python3 scripts/production/preflight.py \
   --tls-cert /secure/fullchain.pem \
   --tls-key /secure/privkey.pem
 
-docker compose --env-file /secure/telmivo.env \
+TELMIVO_ENV_FILE=/secure/telmivo.env \
+  docker compose --env-file /secure/telmivo.env \
   -f compose.production.yaml config --quiet
 ~~~
+
+TELMIVO_ENV_FILE must point to the same already validated file whenever Compose is invoked;
+this prevents interpolation and container runtime configuration from silently diverging.
 
 The preflight rejects mutable image tags, plaintext DB/Redis/NATS transports, synthetic mode,
 missing official bot credentials, weak webhook configuration, invalid keyrings, temporary
@@ -80,10 +84,12 @@ Before any migration:
 Only after those checks pass may an authorized operator run:
 
 ~~~sh
-docker compose --env-file /secure/telmivo.env -f compose.production.yaml \
+TELMIVO_ENV_FILE=/secure/telmivo.env \
+  docker compose --env-file /secure/telmivo.env -f compose.production.yaml \
   --profile maintenance run --rm migrate
 
-docker compose --env-file /secure/telmivo.env -f compose.production.yaml \
+TELMIVO_ENV_FILE=/secure/telmivo.env \
+  docker compose --env-file /secure/telmivo.env -f compose.production.yaml \
   --profile maintenance run --rm grants
 ~~~
 
@@ -104,7 +110,8 @@ compatibility with the current database has been explicitly established.
 After the authorized change window:
 
 ~~~sh
-docker compose --env-file /secure/telmivo.env -f compose.production.yaml up -d
+TELMIVO_ENV_FILE=/secure/telmivo.env \
+  docker compose --env-file /secure/telmivo.env -f compose.production.yaml up -d
 ~~~
 
 Read-only smoke checks must cover HTTPS, API readiness, Mini App load, official bot readiness,
