@@ -32,15 +32,15 @@ type Service struct {
 }
 
 type Workflow struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	ApprovalRequired bool     `json:"approval_required"`
-	AllowedTypes     []string `json:"allowed_types"`
-	MaxBytes         int64    `json:"max_bytes"`
-	RetentionDays    int      `json:"retention_days"`
-	Destination      string   `json:"destination"`
-	Enabled          bool     `json:"enabled"`
-	Revision         int64    `json:"revision"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	ApprovalRequired bool      `json:"approval_required"`
+	AllowedTypes     []string  `json:"allowed_types"`
+	MaxBytes         int64     `json:"max_bytes"`
+	RetentionDays    int       `json:"retention_days"`
+	Destination      string    `json:"destination"`
+	Enabled          bool      `json:"enabled"`
+	Revision         int64     `json:"revision"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -325,9 +325,9 @@ func (s *Service) Create(ctx context.Context, actor, workspace, correlation stri
 			return database.ErrInvalid
 		}
 		amounts := map[string]int64{
-			"uploader.max_file_bytes":    in.SizeBytes,
-			"uploader.bytes_uploaded":    in.SizeBytes,
-			"uploader.files_per_period":  1,
+			"uploader.max_file_bytes":     in.SizeBytes,
+			"uploader.bytes_uploaded":     in.SizeBytes,
+			"uploader.files_per_period":   1,
 			"uploader.concurrent_uploads": 1,
 		}
 		d, req, e := s.decision(ctx, tx, actor, workspace, "uploader.use", amounts)
