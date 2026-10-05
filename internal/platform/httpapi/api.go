@@ -125,7 +125,9 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/managed-files", a.contentFiles)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/managed-files", a.contentFileSave)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/managed-files/{reference}", a.contentFileSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/runtime", a.contentRuntime)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/connect", a.contentConnect)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/disconnect", a.contentDisconnect)
 	protected.HandleFunc("GET /api/v1/customer-bots", a.factoryList)
 	protected.HandleFunc("GET /api/v1/customer-bots/catalog", a.factoryCatalog)
 	protected.HandleFunc("POST /api/v1/customer-bots/preview", a.factoryPreview)
@@ -313,6 +315,10 @@ func handleError(w http.ResponseWriter, e error) {
 	}
 	if errors.Is(e, database.ErrForbidden) {
 		fail(w, 403, "forbidden")
+		return
+	}
+	if errors.Is(e, contentplugins.ErrRuntimeNotRunning) {
+		fail(w, 409, "BOT_RUNTIME_NOT_RUNNING")
 		return
 	}
 	if errors.Is(e, groupbot.ErrAuthority) {
