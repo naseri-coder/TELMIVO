@@ -26,22 +26,23 @@ func Contains(a []string, s string) bool {
 }
 
 type Config struct {
-	Name         string   `json:"name"`
-	Model        string   `json:"model"`
-	Instructions string   `json:"instructions"`
-	Language     string   `json:"language"`
-	Mode         string   `json:"mode"`
-	Tools        []string `json:"tools"`
-	WriteEnabled bool     `json:"write_enabled"`
-	Memory       bool     `json:"memory"`
-	Recent       int      `json:"recent"`
+	Name               string   `json:"name"`
+	Model              string   `json:"model"`
+	Instructions       string   `json:"instructions"`
+	Language           string   `json:"language"`
+	Mode               string   `json:"mode"`
+	Tools              []string `json:"tools"`
+	WriteEnabled       bool     `json:"write_enabled"`
+	Memory             bool     `json:"memory"`
+	Recent             int      `json:"recent"`
 	OutputTokens       int64    `json:"output_tokens"`
 	RetrievalMode      string   `json:"retrieval_mode"`
 	MaxKnowledgeChunks int      `json:"max_knowledge_chunks"`
 	MaxCostMicrounits  int64    `json:"max_cost_microunits"`
 	Knowledge          []string `json:"knowledge"`
-	Files        []string `json:"files"`
-	Revision     int64    `json:"revision"`
+	Sources            []string `json:"sources"`
+	Files              []string `json:"files"`
+	Revision           int64    `json:"revision"`
 }
 
 func (c Config) Retrieval() string {
@@ -57,7 +58,7 @@ func (c Config) RetrievalLimit() int {
 	return c.MaxKnowledgeChunks
 }
 func (c Config) Valid() bool {
-	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 100 || len(c.Instructions) > 4096 || len(c.Language) > 32 || c.Model == "" || len(c.Model) > 100 || !Contains([]string{"AI_ONLY", "AI_WITH_HANDOFF", "AGENT_ASSIST"}, c.Mode) || c.Recent < 0 || c.Recent > 12 || c.OutputTokens < 1 || c.OutputTokens > 2048 || !Contains([]string{"LEXICAL", "HYBRID"}, c.Retrieval()) || c.RetrievalLimit() < 1 || c.RetrievalLimit() > 8 || c.MaxCostMicrounits < 0 || c.MaxCostMicrounits > 1_000_000_000_000 || len(c.Tools) > MaxTools || len(c.Knowledge) > 20 || len(c.Files) > 20 {
+	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 100 || len(c.Instructions) > 4096 || len(c.Language) > 32 || c.Model == "" || len(c.Model) > 100 || !Contains([]string{"AI_ONLY", "AI_WITH_HANDOFF", "AGENT_ASSIST"}, c.Mode) || c.Recent < 0 || c.Recent > 12 || c.OutputTokens < 1 || c.OutputTokens > 2048 || !Contains([]string{"LEXICAL", "HYBRID"}, c.Retrieval()) || c.RetrievalLimit() < 1 || c.RetrievalLimit() > 8 || c.MaxCostMicrounits < 0 || c.MaxCostMicrounits > 1_000_000_000_000 || len(c.Tools) > MaxTools || len(c.Knowledge) > 20 || len(c.Sources) > 20 || len(c.Files) > 20 {
 		return false
 	}
 	seen := map[string]bool{}
@@ -67,10 +68,14 @@ func (c Config) Valid() bool {
 		}
 		seen[t] = true
 	}
-	for _, list := range [][]string{c.Knowledge, c.Files} {
+	for index, list := range [][]string{c.Knowledge, c.Sources, c.Files} {
 		seen := map[string]bool{}
 		for _, id := range list {
-			if len(id) == 0 || len(id) > 100 || seen[id] {
+			max := 100
+			if index == 1 {
+				max = 220
+			}
+			if len(id) == 0 || len(id) > max || seen[id] {
 				return false
 			}
 			seen[id] = true
