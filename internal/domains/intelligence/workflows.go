@@ -74,7 +74,12 @@ func (s *Service) Preview(ctx context.Context, actor string, scope sdk.Scope, w 
 	if !w.Valid() || len(body(data)) > 4096 {
 		return nil, database.ErrInvalid
 	}
-	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error { return s.available(ctx, tx, actor, scope, w) })
+	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error {
+		if e := s.available(ctx, tx, actor, scope, w); e != nil {
+			return e
+		}
+		return s.validateScheduleContext(ctx, tx, scope, w)
+	})
 	return map[string]any{"valid": e == nil, "matches": w.Conditions.Match(data), "mutated": false}, e
 }
 func (s *Service) available(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, w workflow.Workflow) error {
@@ -126,6 +131,9 @@ func (s *Service) SaveWorkflow(ctx context.Context, actor string, scope sdk.Scop
 		if e := s.available(ctx, tx, actor, scope, w); e != nil {
 			return e
 		}
+		if e := s.validateScheduleContext(ctx, tx, scope, w); e != nil {
+			return e
+		}
 		if id == "" {
 			if in.Expected != 0 {
 				return database.ErrConflict
@@ -138,7 +146,10 @@ func (s *Service) SaveWorkflow(ctx context.Context, actor string, scope sdk.Scop
 				}
 				var e error
 				w, _, e = s.workflow(ctx, tx, scope, id)
-				return e
+				if e != nil {
+					return e
+				}
+				return s.syncSchedule(ctx, tx, scope, w)
 			}
 			if !errors.Is(e, pgx.ErrNoRows) {
 				return e
@@ -171,7 +182,10 @@ func (s *Service) SaveWorkflow(ctx context.Context, actor string, scope sdk.Scop
 		if e != nil {
 			return e
 		}
-		return audit(ctx, tx, actor, scope, "automation.workflow.updated", id, map[string]any{"revision": w.Revision, "enabled": w.Enabled})
+		if e = s.syncSchedule(ctx, tx, scope, w); e != nil {
+			return e
+		}
+		return audit(ctx, tx, actor, scope, "automation.workflow.updated", id, map[string]any{"revision": w.Revision, "enabled": w.Enabled, "schedule": w.ScheduleKind()})
 	})
 	return w, e
 }
@@ -276,11 +290,21 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, scope sdk.Scope, id, e
 	if !errors.Is(e, pgx.ErrNoRows) {
 		return "", e
 	}
+	availableAt := s.now().Add(w.Delay())
+	if event.Fields == nil {
+		event.Fields = map[string][]string{}
+	}
+	if w.ScheduleKind() == "SLA" || (w.ScheduleKind() == "EVENT" && w.DelaySeconds > 0) {
+		event.Fields["schedule.kind"] = []string{w.ScheduleKind()}
+		event.Fields["schedule.fire_at"] = []string{availableAt.UTC().Format(time.RFC3339)}
+	}
 	state, code := "QUEUED", ""
 	if !w.Enabled {
 		state, code = "SKIPPED", "WORKFLOW_DISABLED"
 	} else if event.Depth >= workflow.MaxDepth || workflow.Contains(event.Workflows, id) {
 		state, code = "SKIPPED", "LOOP_PREVENTED"
+	} else if w.ScheduleKind() == "SLA" && event.Ticket == "" {
+		state, code = "SKIPPED", "SLA_SUBJECT_MISSING"
 	} else if !w.Conditions.Match(event.Fields) {
 		state, code = "SKIPPED", "CONDITIONS_NOT_MATCHED"
 	} else if err := s.validate(ctx, tx, actor, scope, "automation.manage", "workflow.execute", true); err != nil {
@@ -289,7 +313,7 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, scope sdk.Scope, id, e
 		return "", err
 	}
 	var out string
-	e = tx.QueryRow(ctx, "INSERT INTO automation_executions(workspace_id,bot_id,workflow_id,event_id,actor_id,snapshot,event,state,code,available_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text", scope.AccountID, scope.BotID, id, eventID, actor, body(w), body(event), state, code, s.now().Add(timeDuration(w.DelaySeconds)), s.now()).Scan(&out)
+	e = tx.QueryRow(ctx, "INSERT INTO automation_executions(workspace_id,bot_id,workflow_id,event_id,actor_id,snapshot,event,state,code,available_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text", scope.AccountID, scope.BotID, id, eventID, actor, body(w), body(event), state, code, availableAt, s.now()).Scan(&out)
 	if e != nil {
 		return "", e
 	}
@@ -322,7 +346,7 @@ func (s *Service) Manual(ctx context.Context, actor string, scope sdk.Scope, id,
 // Options exposes only integrations currently admitted for this actual caller.
 func (s *Service) Options(ctx context.Context, actor string, scope sdk.Scope) (map[string][]string, error) {
 	scope.PluginID = workflow.ID
-	out := map[string][]string{"triggers": {"manual"}, "actions": {}}
+	out := map[string][]string{"triggers": {"manual", "schedule.cron"}, "actions": {}}
 	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error {
 		for _, a := range workflow.Actions {
 			if s.available(ctx, tx, actor, scope, workflow.Workflow{Actions: []workflow.Action{{Type: a}}}) == nil {

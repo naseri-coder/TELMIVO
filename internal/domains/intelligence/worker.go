@@ -44,6 +44,9 @@ func (s *Service) Poll(ctx context.Context) error {
 				type pending struct{ id, bot string }
 				items := []pending{}
 				e = s.DB.Tenant(ctx, m.actor, m.account, false, func(tx pgx.Tx) error {
+					if e := s.materializeSchedules(ctx, tx, m.account); e != nil {
+						return e
+					}
 					rows, e := tx.Query(ctx, "SELECT id::text,bot_id::text FROM automation_executions WHERE workspace_id=$1 AND (state='QUEUED' AND available_at<=$2 OR state='RUNNING' AND lease_until<=$2) ORDER BY available_at,id LIMIT 4", m.account, s.now())
 					if e != nil {
 						return e
