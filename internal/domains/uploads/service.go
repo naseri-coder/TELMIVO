@@ -650,6 +650,166 @@ func (s *Service) Action(ctx context.Context, actor, workspace, id, correlation 
 	return current, e
 }
 
+func (s *Service) expireOne(ctx context.Context, actor, workspace, id string) (bool, error) {
+	if s.Storage.Provider == nil {
+		return false, storage.ErrUnavailable
+	}
+	var key string
+	claimed := false
+	e := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+		u, k, e := s.upload(ctx, tx, workspace, id, true)
+		if e != nil {
+			return e
+		}
+		now := s.now()
+		if u.ExpiresAt.IsZero() || u.ExpiresAt.After(now) {
+			return nil
+		}
+		if u.State == "PROCESSING" {
+			if (u.ErrorCode != "RETENTION_DELETE_PENDING" && u.ErrorCode != "RETENTION_DELETE_RETRY") || u.UpdatedAt.Add(5*time.Minute).After(now) {
+				return nil
+			}
+			key = k
+			claimed = true
+			return nil
+		}
+		switch u.State {
+		case "RECEIVED", "VALIDATING", "PENDING_APPROVAL", "STORED":
+		default:
+			return nil
+		}
+		tag, e := tx.Exec(ctx, `UPDATE uploads SET state='PROCESSING',error_code='RETENTION_DELETE_PENDING',revision=revision+1,updated_at=now()
+			WHERE workspace_id=$1 AND id::text=$2 AND revision=$3 AND state=$4`, workspace, id, u.Revision, u.State)
+		if e != nil {
+			return e
+		}
+		if tag.RowsAffected() != 1 {
+			return database.ErrConflict
+		}
+		key = k
+		claimed = true
+		return nil
+	})
+	if e != nil || !claimed {
+		return false, e
+	}
+
+	if e = s.Storage.Delete(ctx, workspace, key); e != nil {
+		_ = s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+			u, _, x := s.upload(ctx, tx, workspace, id, true)
+			if x != nil || u.State != "PROCESSING" || (u.ErrorCode != "RETENTION_DELETE_PENDING" && u.ErrorCode != "RETENTION_DELETE_RETRY") {
+				return x
+			}
+			_, x = tx.Exec(ctx, "UPDATE uploads SET error_code='RETENTION_DELETE_RETRY',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2 AND revision=$3", workspace, id, u.Revision)
+			return x
+		})
+		return false, e
+	}
+
+	e = s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+		u, _, e := s.upload(ctx, tx, workspace, id, true)
+		if e != nil {
+			return e
+		}
+		if u.State != "PROCESSING" || (u.ErrorCode != "RETENTION_DELETE_PENDING" && u.ErrorCode != "RETENTION_DELETE_RETRY") {
+			return database.ErrConflict
+		}
+		if e = policies.Settle(ctx, tx, workspace, "upload:"+operationFromUpload(ctx, tx, workspace, id), false); e != nil {
+			return e
+		}
+		tag, e := tx.Exec(ctx, "UPDATE uploads SET state='EXPIRED',error_code='',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2 AND revision=$3", workspace, id, u.Revision)
+		if e != nil {
+			return e
+		}
+		if tag.RowsAffected() != 1 {
+			return database.ErrConflict
+		}
+		return database.Audit(ctx, tx, actor, workspace, "uploader.expire", "upload", id, "uploader-retention", map[string]any{"state": "PROCESSING"}, map[string]any{"state": "EXPIRED"})
+	})
+	return e == nil, e
+}
+
+func (s *Service) CleanupExpired(ctx context.Context, actor, workspace string, limit int) (int, error) {
+	if limit < 1 || limit > 200 {
+		return 0, database.ErrInvalid
+	}
+	now := s.now()
+	ids := []string{}
+	e := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+		rs, e := tx.Query(ctx, `SELECT id::text FROM uploads
+			WHERE workspace_id=$1 AND expires_at<=$2 AND (
+				state IN('RECEIVED','VALIDATING','PENDING_APPROVAL','STORED') OR
+				(state='PROCESSING' AND error_code IN('RETENTION_DELETE_PENDING','RETENTION_DELETE_RETRY') AND updated_at<=$3)
+			)
+			ORDER BY expires_at,id LIMIT $4`, workspace, now, now.Add(-5*time.Minute), limit)
+		if e != nil {
+			return e
+		}
+		defer rs.Close()
+		for rs.Next() {
+			var id string
+			if e = rs.Scan(&id); e != nil {
+				return e
+			}
+			ids = append(ids, id)
+		}
+		return rs.Err()
+	})
+	if e != nil {
+		return 0, e
+	}
+	cleaned := 0
+	for _, id := range ids {
+		ok, e := s.expireOne(ctx, actor, workspace, id)
+		if e != nil {
+			return cleaned, e
+		}
+		if ok {
+			cleaned++
+		}
+	}
+	return cleaned, nil
+}
+
+func (s *Service) SweepExpired(ctx context.Context) (int, error) {
+	if s.Storage.Provider == nil {
+		return 0, storage.ErrUnavailable
+	}
+	rows, e := s.DB.Pool.Query(ctx, `SELECT user_id::text,workspace_id::text
+		FROM workspace_members WHERE role_key='OWNER' ORDER BY workspace_id,user_id`)
+	if e != nil {
+		return 0, e
+	}
+	type owner struct {
+		actor, workspace string
+	}
+	owners := []owner{}
+	for rows.Next() {
+		var o owner
+		if e = rows.Scan(&o.actor, &o.workspace); e != nil {
+			break
+		}
+		owners = append(owners, o)
+	}
+	rowsErr := rows.Err()
+	rows.Close()
+	if e != nil {
+		return 0, e
+	}
+	if rowsErr != nil {
+		return 0, rowsErr
+	}
+	total := 0
+	for _, o := range owners {
+		n, e := s.CleanupExpired(ctx, o.actor, o.workspace, 50)
+		total += n
+		if e != nil {
+			return total, e
+		}
+	}
+	return total, nil
+}
+
 func (s *Service) Open(ctx context.Context, actor, workspace, id string) (io.ReadCloser, storage.Metadata, error) {
 	var key string
 	e := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
