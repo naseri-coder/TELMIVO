@@ -282,10 +282,10 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 				result.Outcome = OutcomeRejected
 			}
 		}
-	} else if s.Payments == nil {
+	} else if s.PaymentProvider == nil {
 		result = ExternalResult{Outcome: OutcomeRejected, Status: "PROVIDER_UNAVAILABLE"}
 	} else {
-		result, e = s.Payments.Create(ctx, in.Provider, ExternalCheckoutRequest{Key: in.Key, OrderID: orderID, PaymentID: out.ID, Amount: out.Amount})
+		result, e = s.PaymentProvider.Create(ctx, in.Provider, ExternalCheckoutRequest{Key: in.Key, OrderID: orderID, PaymentID: out.ID, Amount: out.Amount})
 		if e != nil {
 			result = ExternalResult{Outcome: OutcomeUnknown, Status: "PROVIDER_OUTCOME_UNKNOWN"}
 		}
@@ -338,7 +338,7 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 	return out, e
 }
 
-func paymentEvent(ctx context.Context, tx pgx.Tx, scope sdk.Scope, p Payment, key, kind, ref string, amount ledger.Money, value any) error {
+func (s *Service) paymentEvent(ctx context.Context, tx pgx.Tx, scope sdk.Scope, p Payment, key, kind, ref string, amount ledger.Money, value any) error {
 	d := hash(value)
 	var old string
 	e := tx.QueryRow(ctx, "SELECT digest FROM commerce_payment_events WHERE payment_id=$1 AND event_key=$2", p.ID, key).Scan(&old)
@@ -382,7 +382,7 @@ func (s *Service) applyVerified(ctx context.Context, actor string, scope sdk.Sco
 		}
 		valid := p.Provider == v.Provider && p.Amount == v.Amount && (p.Rail != RailTelegramStars || (v.PayerTelegramID == payer && v.PayerTelegramID > 0))
 		if !valid {
-			if e = paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_REJECTED", v.ExternalReference, v.Amount, eventValue); e != nil {
+			if e = s.paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_REJECTED", v.ExternalReference, v.Amount, eventValue); e != nil {
 				return e
 			}
 			if p.State == PaymentAwaiting {
@@ -394,12 +394,12 @@ func (s *Service) applyVerified(ctx context.Context, actor string, scope sdk.Sco
 			return e
 		}
 		if p.State == PaymentPaid || p.State == PaymentRefundPending || p.State == PaymentRefundUnknown || p.State == PaymentRefunded {
-			return paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_VERIFIED", v.ExternalReference, v.Amount, eventValue)
+			return s.paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_VERIFIED", v.ExternalReference, v.Amount, eventValue)
 		}
 		if p.State != PaymentAwaiting && p.State != PaymentUnknown {
 			return database.ErrConflict
 		}
-		if e = paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_VERIFIED", v.ExternalReference, v.Amount, eventValue); e != nil {
+		if e = s.paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_VERIFIED", v.ExternalReference, v.Amount, eventValue); e != nil {
 			return e
 		}
 		now := s.now()
@@ -453,7 +453,7 @@ func (s *Service) PreCheckoutStars(ctx context.Context, actor string, scope sdk.
 			ok = p.Rail == RailTelegramStars && p.Provider == "telegram" && (p.State == PaymentAwaiting || p.State == PaymentUnknown) && p.Amount.Asset == ledger.XTR && p.Amount.AmountAtomic == amount && payer == user
 			if ok {
 				value := []any{queryID, payload, currency, amount, user}
-				if e = paymentEvent(ctx, tx, scope, p, "precheckout:"+queryID, "PRECHECKOUT_ACCEPTED", queryID, p.Amount, value); e != nil {
+				if e = s.paymentEvent(ctx, tx, scope, p, "precheckout:"+queryID, "PRECHECKOUT_ACCEPTED", queryID, p.Amount, value); e != nil {
 					return e
 				}
 				if p.State == PaymentUnknown {
@@ -581,10 +581,10 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 				result.Outcome = OutcomeRejected
 			}
 		}
-	} else if s.Payments == nil {
+	} else if s.PaymentProvider == nil {
 		result.Status = "PROVIDER_UNAVAILABLE"
 	} else {
-		result, e = s.Payments.Refund(ctx, p.Provider, ExternalRefundRequest{Key: in.Key, OrderID: p.OrderID, PaymentID: p.ID, ProviderPaymentID: p.ProviderPaymentID, Amount: p.Amount, Reason: in.Reason})
+		result, e = s.PaymentProvider.Refund(ctx, p.Provider, ExternalRefundRequest{Key: in.Key, OrderID: p.OrderID, PaymentID: p.ID, ProviderPaymentID: p.ProviderPaymentID, Amount: p.Amount, Reason: in.Reason})
 		if e != nil {
 			result = ExternalResult{Outcome: OutcomeUnknown, Status: "REFUND_OUTCOME_UNKNOWN"}
 		}
@@ -640,7 +640,7 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 		} else if pState == PaymentRefundUnknown {
 			kind = "REFUND_UNKNOWN"
 		}
-		if e = paymentEvent(ctx, tx, scope, p, "refund:"+r.ID, kind, result.Reference, p.Amount, []any{r.ID, result}); e != nil {
+		if e = s.paymentEvent(ctx, tx, scope, p, "refund:"+r.ID, kind, result.Reference, p.Amount, []any{r.ID, result}); e != nil {
 			return e
 		}
 		out, e = scanRefund(tx.QueryRow(ctx, "SELECT "+refundColumns+" FROM commerce_refunds WHERE id=$1", r.ID))
@@ -663,10 +663,10 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 	if e != nil {
 		return p, e
 	}
-	if p.Rail != RailExternal || s.Payments == nil || (p.State != PaymentUnknown && p.State != PaymentRefundUnknown) {
+	if p.Rail != RailExternal || s.PaymentProvider == nil || (p.State != PaymentUnknown && p.State != PaymentRefundUnknown) {
 		return p, database.ErrConflict
 	}
-	result, e := s.Payments.Reconcile(ctx, p.Provider, ExternalReconcileRequest{PaymentID: p.ID, OrderID: p.OrderID, ProviderPaymentID: p.ProviderPaymentID, Amount: p.Amount})
+	result, e := s.PaymentProvider.Reconcile(ctx, p.Provider, ExternalReconcileRequest{PaymentID: p.ID, OrderID: p.OrderID, ProviderPaymentID: p.ProviderPaymentID, Amount: p.Amount})
 	if e != nil {
 		return p, e
 	}
@@ -722,7 +722,7 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 				return e
 			}
 		}
-		if e = paymentEvent(ctx, tx, scope, current, "reconcile:"+p.ID+":"+next, "CHECKOUT_RECONCILED", result.Reference, p.Amount, result); e != nil {
+		if e = s.paymentEvent(ctx, tx, scope, current, "reconcile:"+p.ID+":"+next, "CHECKOUT_RECONCILED", result.Reference, p.Amount, result); e != nil {
 			return e
 		}
 		p, _, e = payment(ctx, tx, scope, p.ID, false)
