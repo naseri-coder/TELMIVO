@@ -1,0 +1,28 @@
+name: R4 v0.2.0 Release Readiness
+
+on:
+  push:
+    branches: [feature/r4g-v0.2-final-hardening]
+  pull_request:
+    branches: [feature/r4f-ai-assistant-2-v0.2, develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r4-release-readiness-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail-closed R4 source release audit
+        run: python3 scripts/ci/r4g-release-check.py
+
+  native:
+    needs: static
+    uses: ./.github/workflows/migration-check.yml
