@@ -29,7 +29,7 @@ import (
 type r3d4Transport struct {
 	states                 map[int64]string
 	state, code            string
-	sends, checks, prompts atomic.Int64
+	sends, checks, prompts, disconnects atomic.Int64
 	outcome                string
 	lastKind, lastFile     string
 }
@@ -55,6 +55,10 @@ func (t *r3d4Transport) Prompt(context.Context, int64, string, any) error {
 }
 func (t *r3d4Transport) Connect(context.Context, string, string) (string, error) {
 	return "r3d4_connected_test", nil
+}
+func (t *r3d4Transport) Disconnect(context.Context) error {
+	t.disconnects.Add(1)
+	return nil
 }
 
 type r3d4Provider struct{ transport *r3d4Transport }
