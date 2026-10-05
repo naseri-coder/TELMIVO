@@ -140,7 +140,7 @@ func (s *Service) Config(ctx context.Context, actor string, scope sdk.Scope) (as
 		var e error
 		out, e = s.config(ctx, tx, scope)
 		if errors.Is(e, pgx.ErrNoRows) {
-			out = assistant.Config{Name: "دستیار", Mode: "AI_WITH_HANDOFF", Tools: []string{}, Knowledge: []string{}, Files: []string{}, Recent: 6, Memory: true, OutputTokens: 512}
+			out = assistant.Config{Name: "دستیار", Mode: "AI_WITH_HANDOFF", Tools: []string{}, Knowledge: []string{}, Sources: []string{}, Files: []string{}, Recent: 6, Memory: true, OutputTokens: 512, RetrievalMode: "HYBRID", MaxKnowledgeChunks: 4}
 			return nil
 		}
 		return e
@@ -171,7 +171,16 @@ func (s *Service) SaveConfig(ctx context.Context, actor string, scope sdk.Scope,
 		}
 		for _, id := range c.Knowledge {
 			var yes bool
-			if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3)", scope.AccountID, scope.BotID, id).Scan(&yes); e != nil {
+			if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3 AND enabled)", scope.AccountID, scope.BotID, id).Scan(&yes); e != nil {
+				return e
+			}
+			if !yes {
+				return database.ErrInvalid
+			}
+		}
+		for _, selector := range c.Sources {
+			var yes bool
+			if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND source_kind||':'||source_ref=$3 AND source_kind IN('FILE_MANAGER','UPLOADER') AND enabled)", scope.AccountID, scope.BotID, selector).Scan(&yes); e != nil {
 				return e
 			}
 			if !yes {
@@ -192,25 +201,27 @@ func (s *Service) SaveConfig(ctx context.Context, actor string, scope sdk.Scope,
 }
 
 type Knowledge struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Body     string `json:"body"`
-	Enabled  bool   `json:"enabled"`
-	Revision int64  `json:"revision"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Body       string `json:"body"`
+	Enabled    bool   `json:"enabled"`
+	SourceKind string `json:"source_kind"`
+	SourceRef  string `json:"source_ref"`
+	Revision   int64  `json:"revision"`
 }
 
 func (s *Service) Knowledge(ctx context.Context, actor string, scope sdk.Scope) ([]Knowledge, error) {
 	scope.PluginID = assistant.ID
 	out := []Knowledge{}
 	e := s.tenant(ctx, actor, scope, "ai.manage", "ai.invoke", func(tx pgx.Tx) error {
-		rs, e := tx.Query(ctx, "SELECT id::text,name,body,enabled,revision FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 ORDER BY id LIMIT 100", scope.AccountID, scope.BotID)
+		rs, e := tx.Query(ctx, "SELECT id::text,name,body,enabled,source_kind,source_ref,revision FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 ORDER BY id LIMIT 100", scope.AccountID, scope.BotID)
 		if e != nil {
 			return e
 		}
 		defer rs.Close()
 		for rs.Next() {
 			var k Knowledge
-			if e = rs.Scan(&k.ID, &k.Name, &k.Body, &k.Enabled, &k.Revision); e != nil {
+			if e = rs.Scan(&k.ID, &k.Name, &k.Body, &k.Enabled, &k.SourceKind, &k.SourceRef, &k.Revision); e != nil {
 				return e
 			}
 			out = append(out, k)
@@ -221,7 +232,11 @@ func (s *Service) Knowledge(ctx context.Context, actor string, scope sdk.Scope) 
 }
 func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Scope, k Knowledge, keyValue string, expected int64) (Knowledge, error) {
 	scope.PluginID = assistant.ID
-	if k.Name == "" || len(k.Name) > 100 || k.Body == "" || len(k.Body) > 4096 || !key(keyValue) || expected < 0 {
+	if k.SourceKind == "" {
+		k.SourceKind = "MANUAL"
+	}
+	k.SourceRef = ""
+	if k.SourceKind != "MANUAL" || k.Name == "" || len(k.Name) > 100 || k.Body == "" || len(k.Body) > 4096 || !key(keyValue) || expected < 0 {
 		return k, database.ErrInvalid
 	}
 	e := s.tenant(ctx, actor, scope, "ai.manage", "ai.invoke", func(tx pgx.Tx) error {
@@ -230,12 +245,15 @@ func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Sco
 				return database.ErrConflict
 			}
 			var fp string
-			err := tx.QueryRow(ctx, "SELECT id::text,revision,fingerprint FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, keyValue).Scan(&k.ID, &k.Revision, &fp)
+			var current Knowledge
+			err := tx.QueryRow(ctx, "SELECT id::text,name,body,enabled,source_kind,source_ref,revision,fingerprint FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, keyValue).
+				Scan(&current.ID, &current.Name, &current.Body, &current.Enabled, &current.SourceKind, &current.SourceRef, &current.Revision, &fp)
 			if err == nil {
-				if fp != hash([]any{k.Name, k.Body, k.Enabled}) {
+				if fp != hash([]any{k.SourceKind, k.SourceRef, k.Name, k.Body, k.Enabled}) {
 					return database.ErrConflict
 				}
-				return nil
+				k = current
+				return s.reindexKnowledge(ctx, tx, scope, k)
 			}
 			if !errors.Is(err, pgx.ErrNoRows) {
 				return err
@@ -247,15 +265,15 @@ func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Sco
 			if count >= 100 {
 				return database.ErrInvalid
 			}
-			e := tx.QueryRow(ctx, "INSERT INTO ai_knowledge(workspace_id,bot_id,name,body,enabled,operation_key,fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id::text,revision,fingerprint", scope.AccountID, scope.BotID, k.Name, k.Body, k.Enabled, keyValue, hash([]any{k.Name, k.Body, k.Enabled})).Scan(&k.ID, &k.Revision, &fp)
+			e := tx.QueryRow(ctx, "INSERT INTO ai_knowledge(workspace_id,bot_id,name,body,enabled,operation_key,fingerprint,source_kind,source_ref) VALUES($1,$2,$3,$4,$5,$6,$7,'MANUAL','') RETURNING id::text,revision,fingerprint", scope.AccountID, scope.BotID, k.Name, k.Body, k.Enabled, keyValue, hash([]any{k.SourceKind, k.SourceRef, k.Name, k.Body, k.Enabled})).Scan(&k.ID, &k.Revision, &fp)
 			if e != nil {
 				return e
 			}
-			if fp != hash([]any{k.Name, k.Body, k.Enabled}) {
+			if fp != hash([]any{k.SourceKind, k.SourceRef, k.Name, k.Body, k.Enabled}) {
 				return database.ErrConflict
 			}
 		} else {
-			tag, e := tx.Exec(ctx, "UPDATE ai_knowledge SET name=$4,body=$5,enabled=$6,revision=revision+1 WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3 AND revision=$7", scope.AccountID, scope.BotID, k.ID, k.Name, k.Body, k.Enabled, expected)
+			tag, e := tx.Exec(ctx, "UPDATE ai_knowledge SET name=$4,body=$5,enabled=$6,revision=revision+1 WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3 AND revision=$7 AND source_kind='MANUAL'", scope.AccountID, scope.BotID, k.ID, k.Name, k.Body, k.Enabled, expected)
 			if e != nil {
 				return e
 			}
@@ -263,6 +281,9 @@ func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Sco
 				return database.ErrConflict
 			}
 			k.Revision = expected + 1
+		}
+		if e := s.reindexKnowledge(ctx, tx, scope, k); e != nil {
+			return e
 		}
 		return audit(ctx, tx, actor, scope, "ai.knowledge.updated", k.ID, map[string]any{"revision": k.Revision})
 	})
