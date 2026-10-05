@@ -26,7 +26,7 @@ func (a *API) IntelligenceService() *intelligence.Service {
 	if synthetic {
 		ai = testfixtures.AIProvider{}
 	}
-	return &intelligence.Service{DB: a.DB, Core: core, Commercial: f.Commercial, Support: support, Content: content, Provider: ai, Credentials: f.Credentials, Clock: f.Commercial.Clock, Synthetic: synthetic}
+	return &intelligence.Service{DB: a.DB, Core: core, Commercial: f.Commercial, Support: support, Content: content, Storage: a.Storage, Provider: ai, Credentials: f.Credentials, Clock: f.Commercial.Clock, Synthetic: synthetic}
 }
 func (a *API) intelligenceWorkflows(w http.ResponseWriter, r *http.Request) {
 	v, e := a.IntelligenceService().Workflows(r.Context(), user(r), contentScope(r, workflow.ID), r.URL.Query().Get("cursor"))
@@ -123,6 +123,15 @@ func (a *API) intelligenceKnowledgeSave(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	v, e := a.IntelligenceService().SaveKnowledge(r.Context(), user(r), contentScope(r, assistant.ID), in.Knowledge, in.Key, in.Expected)
+	supportReply(w, v, e)
+}
+func (a *API) intelligenceIngest(w http.ResponseWriter, r *http.Request) {
+	var in intelligence.IngestRequest
+	if decode(w, r, &in) != nil {
+		fail(w, 400, "invalid")
+		return
+	}
+	v, e := a.IntelligenceService().Ingest(r.Context(), user(r), contentScope(r, assistant.ID), in)
 	supportReply(w, v, e)
 }
 func (a *API) intelligenceChat(w http.ResponseWriter, r *http.Request) {
