@@ -21,15 +21,19 @@ import (
 
 type r4dTransport struct {
 	*r3d7Transport
-	invoices atomic.Int64
-	refunds  atomic.Int64
+	invoices         atomic.Int64
+	refunds          atomic.Int64
+	prechecks        atomic.Int64
+	precheckAccepted atomic.Bool
 }
 
 func (t *r4dTransport) CreateStarsInvoice(context.Context, string, string, string, int64) (string, string) {
 	t.invoices.Add(1)
 	return "https://t.me/$r4d_synthetic_invoice", "CHECKOUT_CREATED"
 }
-func (*r4dTransport) AnswerStarsPreCheckout(context.Context, string, bool) string {
+func (t *r4dTransport) AnswerStarsPreCheckout(_ context.Context, _ string, ok bool) string {
+	t.prechecks.Add(1)
+	t.precheckAccepted.Store(ok)
 	return "PRECHECKOUT_ACKNOWLEDGED"
 }
 func (t *r4dTransport) RefundStars(context.Context, int64, string) string {
@@ -70,7 +74,14 @@ func TestR4DStarsCheckoutVerificationRefundAndReplay(t *testing.T) {
 	if replay.ID != p.ID || tr.invoices.Load() != 1 {
 		t.Fatal("checkout replay duplicated external effect", replay, tr.invoices.Load())
 	}
+	must(t, f.biz.PreCheckoutStars(ctx, f.u.UserID, f.scope(shop.ID), "pre-r4d-mismatch", "telmivo:"+p.ID, "XTR", 49, 10101001))
+	if tr.prechecks.Load() != 1 || tr.precheckAccepted.Load() {
+		t.Fatal("mismatched pre-checkout was accepted")
+	}
 	must(t, f.biz.PreCheckoutStars(ctx, f.u.UserID, f.scope(shop.ID), "pre-r4d-1", "telmivo:"+p.ID, "XTR", 50, 10101001))
+	if tr.prechecks.Load() != 2 || !tr.precheckAccepted.Load() {
+		t.Fatal("matching pre-checkout was not accepted")
+	}
 
 	u := contentplugins.Update{ID: 777}
 	u.Message = &contentplugins.Message{}
