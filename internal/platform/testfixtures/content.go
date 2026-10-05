@@ -24,6 +24,15 @@ func (contentTransport) SendFile(context.Context, int64, string, string, string)
 	return 101, "DELIVERY_ACKNOWLEDGED"
 }
 func (contentTransport) Prompt(context.Context, int64, string, any) error { return nil }
+func (contentTransport) CreateStarsInvoice(context.Context, string, string, string, int64) (string, string) {
+	return "https://t.me/$synthetic_invoice", "CHECKOUT_CREATED"
+}
+func (contentTransport) AnswerStarsPreCheckout(context.Context, string, bool) string {
+	return "PRECHECKOUT_ACKNOWLEDGED"
+}
+func (contentTransport) RefundStars(context.Context, int64, string) string {
+	return "REFUND_ACKNOWLEDGED"
+}
 func (t contentTransport) Connect(context.Context, string, string) (string, error) {
 	return "synthetic_" + strings.ReplaceAll(t.bot, "-", ""), nil
 }
