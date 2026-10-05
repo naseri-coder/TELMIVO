@@ -130,6 +130,11 @@ func validMoney(m ledger.Money) bool {
 	return ok && m.AmountAtomic > 0
 }
 
+func validReconciledPayment(p Payment, result ExternalResult) bool {
+	return result.Outcome == OutcomeAcknowledged && validMoney(result.Amount) &&
+		result.Amount == p.Amount && strings.TrimSpace(result.Reference) != "" && len(result.Reference) <= 512
+}
+
 func validProvider(v string) bool {
 	if len(v) < 1 || len(v) > 64 {
 		return false
@@ -316,10 +321,12 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 			if code == "" {
 				code = "CHECKOUT_OUTCOME_UNKNOWN"
 			}
-		default:
+		case OutcomeRejected:
 			if code == "" {
 				code = "CHECKOUT_REJECTED"
 			}
+		default:
+			state, code = PaymentUnknown, "CHECKOUT_OUTCOME_UNKNOWN"
 		}
 		tag, e := tx.Exec(ctx, `UPDATE commerce_payment_intents SET state=$4,checkout_reference=$5,checkout_url=$6,outcome_code=$7,revision=revision+1,updated_at=$8
 			WHERE workspace_id=$1 AND bot_id=$2 AND id=$3 AND revision=$9`, scope.AccountID, scope.BotID, out.ID, state, result.Reference, result.URL, code, s.now(), current.Revision)
@@ -359,7 +366,7 @@ func (s *Service) paymentEvent(ctx context.Context, tx pgx.Tx, scope sdk.Scope, 
 func (s *Service) applyVerified(ctx context.Context, actor string, scope sdk.Scope, correlation string, v VerifiedPayment) (Payment, error) {
 	scope.PluginID = shop.ID
 	var out Payment
-	if !key(v.EventKey) || v.PaymentID == "" || !validProvider(v.Provider) || !validMoney(v.Amount) {
+	if !key(v.EventKey) || v.PaymentID == "" || !validProvider(v.Provider) || !validMoney(v.Amount) || strings.TrimSpace(v.ExternalReference) == "" || len(v.ExternalReference) > 512 {
 		return out, database.ErrInvalid
 	}
 	e := s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
@@ -394,6 +401,9 @@ func (s *Service) applyVerified(ctx context.Context, actor string, scope sdk.Sco
 			return e
 		}
 		if p.State == PaymentPaid || p.State == PaymentRefundPending || p.State == PaymentRefundUnknown || p.State == PaymentRefunded {
+			if p.ProviderPaymentID != v.ExternalReference {
+				return database.ErrConflict
+			}
 			return s.paymentEvent(ctx, tx, scope, p, v.EventKey, "PAYMENT_VERIFIED", v.ExternalReference, v.Amount, eventValue)
 		}
 		if p.State != PaymentAwaiting && p.State != PaymentUnknown {
@@ -618,11 +628,14 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 			if code == "" {
 				code = "REFUND_OUTCOME_UNKNOWN"
 			}
-		default:
+		case OutcomeRejected:
 			completed = &now
 			if code == "" {
 				code = "REFUND_REJECTED"
 			}
+		default:
+			rState, pState, code = "UNKNOWN", PaymentRefundUnknown, "REFUND_OUTCOME_UNKNOWN"
+			completed = &now
 		}
 		if _, e = tx.Exec(ctx, "UPDATE commerce_refunds SET state=$2,provider_reference=$3,outcome_code=$4,revision=revision+1,updated_at=$5,completed_at=$6 WHERE id=$1", r.ID, rState, result.Reference, code, now, completed); e != nil {
 			return e
@@ -671,11 +684,13 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 		return p, e
 	}
 	if p.State == PaymentUnknown && result.Status == PaymentPaid {
-		amount := result.Amount
-		if !validMoney(amount) {
-			amount = p.Amount
+		if !validReconciledPayment(p, result) {
+			return p, database.ErrConflict
 		}
-		return s.applyVerified(ctx, actor, scope, correlation, VerifiedPayment{Provider: p.Provider, EventKey: "reconcile:paid:" + p.ID, PaymentID: p.ID, ExternalReference: result.Reference, Amount: amount})
+		return s.applyVerified(ctx, actor, scope, correlation, VerifiedPayment{Provider: p.Provider, EventKey: "reconcile:paid:" + p.ID, PaymentID: p.ID, ExternalReference: result.Reference, Amount: result.Amount})
+	}
+	if (result.Status == PaymentPaid || result.Status == PaymentRefunded) && !validReconciledPayment(p, result) {
+		return p, database.ErrConflict
 	}
 
 	e = s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {

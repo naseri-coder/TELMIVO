@@ -110,6 +110,8 @@ func TestR4DStarsCheckoutVerificationRefundAndReplay(t *testing.T) {
 	if !confirmed {
 		t.Fatal("verified payment did not confirm order")
 	}
+	_, e = f.biz.HandlePayment(ctx, f.scope(shop.ID), "r4d-stars-webhook-replay", u)
+	must(t, e)
 
 	refund, e := f.biz.Refund(ctx, f.u.UserID, f.scope(shop.ID), p.ID, "r4d-stars-refund", businessplugins.RefundRequest{Key: "r4d-stars-refund", Reason: "customer request"})
 	must(t, e)
@@ -136,15 +138,21 @@ func TestR4DStarsCheckoutVerificationRefundAndReplay(t *testing.T) {
 }
 
 type r4dExternal struct {
-	creates    atomic.Int64
-	refunds    atomic.Int64
-	createErr  atomic.Bool
-	refundMode atomic.Int64
-	status     string
+	creates         atomic.Int64
+	refunds         atomic.Int64
+	createErr       atomic.Bool
+	refundMode      atomic.Int64
+	status          string
+	reconcileResult *businessplugins.ExternalResult
+	createResult    *businessplugins.ExternalResult
+	refundResult    *businessplugins.ExternalResult
 }
 
 func (p *r4dExternal) Create(context.Context, string, businessplugins.ExternalCheckoutRequest) (businessplugins.ExternalResult, error) {
 	p.creates.Add(1)
+	if p.createResult != nil {
+		return *p.createResult, nil
+	}
 	if p.createErr.Load() {
 		return businessplugins.ExternalResult{}, errors.New("provider transport interrupted")
 	}
@@ -152,13 +160,19 @@ func (p *r4dExternal) Create(context.Context, string, businessplugins.ExternalCh
 }
 func (p *r4dExternal) Refund(context.Context, string, businessplugins.ExternalRefundRequest) (businessplugins.ExternalResult, error) {
 	p.refunds.Add(1)
+	if p.refundResult != nil {
+		return *p.refundResult, nil
+	}
 	if p.refundMode.Load() == 1 {
 		return businessplugins.ExternalResult{}, errors.New("refund transport interrupted")
 	}
 	return businessplugins.ExternalResult{Outcome: businessplugins.OutcomeAcknowledged, Status: "REFUND_VERIFIED", Reference: "ext-refund"}, nil
 }
-func (p *r4dExternal) Reconcile(context.Context, string, businessplugins.ExternalReconcileRequest) (businessplugins.ExternalResult, error) {
-	return businessplugins.ExternalResult{Status: p.status, Reference: "ext-reconciled"}, nil
+func (p *r4dExternal) Reconcile(_ context.Context, _ string, in businessplugins.ExternalReconcileRequest) (businessplugins.ExternalResult, error) {
+	if p.reconcileResult != nil {
+		return *p.reconcileResult, nil
+	}
+	return businessplugins.ExternalResult{Outcome: businessplugins.OutcomeAcknowledged, Status: p.status, Reference: "ext-reconciled", Amount: in.Amount}, nil
 }
 
 func TestR4DExternalProviderNeutralUnknownAndReconciliation(t *testing.T) {
@@ -183,6 +197,18 @@ func TestR4DExternalProviderNeutralUnknownAndReconciliation(t *testing.T) {
 	if ext.creates.Load() != 1 {
 		t.Fatal("ambiguous checkout blindly retried")
 	}
+	for _, evidence := range []businessplugins.ExternalResult{
+		{Outcome: businessplugins.OutcomeAcknowledged, Status: businessplugins.PaymentPaid, Reference: "unverified-charge"},
+		{Outcome: businessplugins.OutcomeUnknown, Status: businessplugins.PaymentPaid, Reference: "ambiguous-charge", Amount: p.Amount},
+		{Outcome: businessplugins.OutcomeAcknowledged, Status: businessplugins.PaymentPaid, Reference: "wrong-amount-charge", Amount: ledger.Money{Asset: ledger.USD, AmountAtomic: 499}},
+	} {
+		ext.reconcileResult = &evidence
+		got, err := f.biz.Reconcile(ctx, f.u.UserID, f.scope(shop.ID), p.ID, "r4d-reconcile-unverified")
+		if !errors.Is(err, database.ErrConflict) || got.State != businessplugins.PaymentUnknown {
+			t.Fatal("incomplete reconciliation evidence accepted", got, err)
+		}
+	}
+	ext.reconcileResult = nil
 	ext.status = businessplugins.PaymentAwaiting
 	p, e = f.biz.Reconcile(ctx, f.u.UserID, f.scope(shop.ID), p.ID, "r4d-reconcile-awaiting")
 	must(t, e)
@@ -220,6 +246,44 @@ func TestR4DExternalProviderNeutralUnknownAndReconciliation(t *testing.T) {
 	})
 	if refundState != "REFUNDED" {
 		t.Fatal("refund ledger not reconciled", refundState)
+	}
+}
+
+func TestR4DUnrecognizedProviderOutcomesRemainUnknown(t *testing.T) {
+	f, _ := r4dFixture(t)
+	ext := &r4dExternal{createResult: &businessplugins.ExternalResult{Outcome: "UNRECOGNIZED"}}
+	f.biz.PaymentProvider = ext
+	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
+		Definition: shop.Product{Name: "Ambiguous protocol", Enabled: true, Price: ledger.Money{Asset: ledger.USD, AmountAtomic: 500}},
+		Key:        "r4d-protocol-product",
+	})
+	must(t, e)
+	o, e := f.biz.PlaceTrusted(ctx, f.u.UserID, f.scope(shop.ID), "r4d-protocol-order", businessplugins.Customer{User: 10101003, Name: "Protocol Customer"}, []shop.Item{{Product: d.ID, Quantity: 1}})
+	must(t, e)
+	in := businessplugins.CheckoutRequest{Key: "r4d-protocol-checkout", Rail: businessplugins.RailExternal, Provider: "bridge.test"}
+	p, e := f.biz.Checkout(ctx, f.u.UserID, f.scope(shop.ID), o.ID, "r4d-protocol-checkout", in)
+	must(t, e)
+	if p.State != businessplugins.PaymentUnknown {
+		t.Fatal("unrecognized provider outcome treated as deterministic rejection", p)
+	}
+	_, e = f.biz.Checkout(ctx, f.u.UserID, f.scope(shop.ID), o.ID, "r4d-protocol-checkout-replay", in)
+	must(t, e)
+	if ext.creates.Load() != 1 {
+		t.Fatal("ambiguous checkout retried")
+	}
+	p, e = f.biz.VerifyExternal(ctx, f.u.UserID, f.scope(shop.ID), "r4d-protocol-paid", businessplugins.VerifiedPayment{Provider: "bridge.test", EventKey: "protocol-payment", PaymentID: p.ID, ExternalReference: "protocol-charge", Amount: p.Amount})
+	must(t, e)
+	ext.refundResult = &businessplugins.ExternalResult{}
+	r := businessplugins.RefundRequest{Key: "r4d-protocol-refund", Reason: "protocol test"}
+	rf, e := f.biz.Refund(ctx, f.u.UserID, f.scope(shop.ID), p.ID, "r4d-protocol-refund", r)
+	must(t, e)
+	if rf.State != "UNKNOWN" {
+		t.Fatal("missing refund outcome treated as deterministic rejection", rf)
+	}
+	_, e = f.biz.Refund(ctx, f.u.UserID, f.scope(shop.ID), p.ID, "r4d-protocol-refund-replay", r)
+	must(t, e)
+	if ext.refunds.Load() != 1 {
+		t.Fatal("ambiguous refund retried")
 	}
 }
 
