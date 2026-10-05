@@ -39,6 +39,9 @@ func Main(role string) {
 }
 func Run(role string) error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	if role == "customer-bot-runtime" {
+		return errors.New("CUSTOMER_BOT_RUNTIME_RETIRED_USE_API_INGRESS")
+	}
 	c, e := config.FromEnv()
 	if e != nil {
 		return e
@@ -177,14 +180,16 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 	ctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	defer func() { cancel(); wg.Wait() }()
-	// Five worker producers can finish together during shutdown.
-	errorsCh := make(chan error, 5)
+	// Six worker producers can finish together during shutdown.
+	errorsCh := make(chan error, 6)
 	if role == "worker" {
 		service := (&httpapi.API{DB: db, Config: c}).IntelligenceService()
 		wg.Add(2)
 		go func() { defer wg.Done(); errorsCh <- service.Poll(ctx) }()
 		wg.Add(1)
 		go func() { defer wg.Done(); errorsCh <- (&httpapi.API{DB: db, Config: c}).BusinessService().Poll(ctx) }()
+		wg.Add(1)
+		go func() { defer wg.Done(); errorsCh <- (&httpapi.API{DB: db, Config: c}).ChannelService().Poll(ctx) }()
 		go func() {
 			defer wg.Done()
 			errorsCh <- q.Consume(ctx, db, "telmivo.events.business", "automation-events-v1", service.DispatchTx)

@@ -92,6 +92,14 @@ func (a *API) contentFileSave(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, out)
 }
+func (a *API) contentRuntime(w http.ResponseWriter, r *http.Request) {
+	out, e := a.content().RuntimeStatus(r.Context(), user(r), contentScope(r, files.ID))
+	if e != nil {
+		handleError(w, e)
+		return
+	}
+	respond(w, 200, out)
+}
 func (a *API) contentConnect(w http.ResponseWriter, r *http.Request) {
 	var in struct{}
 	if decode(w, r, &in) != nil {
@@ -102,7 +110,29 @@ func (a *API) contentConnect(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	respond(w, 200, map[string]bool{"connected": true})
+	out, e := a.content().RuntimeStatus(r.Context(), user(r), contentScope(r, files.ID))
+	if e != nil {
+		handleError(w, e)
+		return
+	}
+	respond(w, 200, out)
+}
+func (a *API) contentDisconnect(w http.ResponseWriter, r *http.Request) {
+	var in struct{}
+	if decode(w, r, &in) != nil {
+		fail(w, 400, "invalid")
+		return
+	}
+	if e := a.content().Disconnect(r.Context(), user(r), contentScope(r, files.ID), correlation(r)); e != nil {
+		handleError(w, e)
+		return
+	}
+	out, e := a.content().RuntimeStatus(r.Context(), user(r), contentScope(r, files.ID))
+	if e != nil {
+		handleError(w, e)
+		return
+	}
+	respond(w, 200, out)
 }
 func (a *API) contentWebhook(w http.ResponseWriter, r *http.Request) {
 	s := a.content()
@@ -111,12 +141,17 @@ func (a *API) contentWebhook(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "forbidden")
 		return
 	}
+	scope := sdk.Scope{AccountID: account, BotID: bot, PluginID: files.ID}
+	if e := s.AdmitWebhook(r.Context(), scope); e != nil {
+		handleError(w, e)
+		return
+	}
 	var u contentplugins.Update
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&u) != nil {
 		fail(w, 400, "invalid")
 		return
 	}
-	if e := s.HandleUpdate(r.Context(), sdk.Scope{AccountID: account, BotID: bot, PluginID: files.ID}, "customer-telegram-update", u); e != nil {
+	if e := s.HandleUpdate(r.Context(), scope, "customer-telegram-update", u); e != nil {
 		handleError(w, e)
 		return
 	}

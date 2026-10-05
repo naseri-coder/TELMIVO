@@ -19,6 +19,8 @@ func TestReferenceTransport(t *testing.T) {
 		body := `{"ok":true,"result":{"message_id":101}}`
 		if method == "getMe" {
 			body = `{"ok":true,"result":{"id":999,"is_bot":true,"username":"synthetic"}}`
+		} else if method == "deleteWebhook" {
+			body = `{"ok":true,"result":true}`
 		} else if method == "getChatMember" {
 			body = `{"ok":true,"result":{"status":"` + state + `","is_member":true}}`
 			if len(methods)%3 == 2 {
@@ -45,6 +47,12 @@ func TestReferenceTransport(t *testing.T) {
 		if id != 101 || code != "DELIVERY_ACKNOWLEDGED" {
 			t.Fatal(kind, code)
 		}
+	}
+	if e := c.Disconnect(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if methods[len(methods)-1] != "deleteWebhook" {
+		t.Fatal(methods)
 	}
 	c.Enabled = false
 	if _, code = c.SendFile(context.Background(), 10, "document", "ref", "title"); code != "DELIVERY_FAILED" {

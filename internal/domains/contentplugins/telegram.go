@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 
 	"fmt"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,59 @@ func (s *Service) WebhookSecret(account, bot string) string {
 	h.Write([]byte("telmivo-customer-webhook:" + account + ":" + bot))
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+var ErrRuntimeNotRunning = errors.New("customer bot runtime not running")
+
+type RuntimeStatus struct {
+	BotID       string `json:"bot_id"`
+	Username    string `json:"username"`
+	Status      string `json:"status"`
+	IngressPath string `json:"ingress_path"`
+	Connected   bool   `json:"connected"`
+}
+
+func ingressPath(account, bot string) string {
+	return "/api/v1/customer-bot-updates/" + account + "/" + bot
+}
+
+func (s *Service) RuntimeStatus(ctx context.Context, actor string, scope sdk.Scope) (RuntimeStatus, error) {
+	out := RuntimeStatus{BotID: scope.BotID, IngressPath: ingressPath(scope.AccountID, scope.BotID)}
+	e := s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
+		if !database.Permission(ctx, tx, actor, scope.AccountID, "bots.manage") {
+			return database.ErrForbidden
+		}
+		if e := tx.QueryRow(ctx, "SELECT username,status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID).Scan(&out.Username, &out.Status); e != nil {
+			return e
+		}
+		out.Connected = out.Status == "RUNNING"
+		return nil
+	})
+	return out, e
+}
+
+func (s *Service) AdmitWebhook(ctx context.Context, scope sdk.Scope) error {
+	tx, e := s.DB.Pool.Begin(ctx)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(ctx)
+	if e = database.Scope(ctx, tx, scope.AccountID); e != nil {
+		return e
+	}
+	var status string
+	if e = tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID).Scan(&status); e != nil {
+		return e
+	}
+	if status != "RUNNING" {
+		return ErrRuntimeNotRunning
+	}
+	return nil
+}
+
+type disconnectTransport interface {
+	Disconnect(context.Context) error
+}
+
 func (s *Service) Connect(ctx context.Context, actor string, scope sdk.Scope, origin, corr string) error {
 	u, e := url.Parse(origin)
 	if e != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(s.DigestKey) < 32 {
@@ -34,21 +88,48 @@ func (s *Service) Connect(ctx context.Context, actor string, scope sdk.Scope, or
 		if e := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2 FOR UPDATE", scope.AccountID, scope.BotID).Scan(&status); e != nil {
 			return e
 		}
-		if status == "DISABLED" {
-			return sdk.ErrState
-		}
 		tr, e := s.transport(ctx, tx, scope)
 		if e != nil {
 			return e
 		}
-		name, e := tr.Connect(ctx, u.Scheme+"://"+u.Host+"/api/v1/customer-bot-updates/"+scope.AccountID+"/"+scope.BotID, s.WebhookSecret(scope.AccountID, scope.BotID))
+		name, e := tr.Connect(ctx, u.Scheme+"://"+u.Host+ingressPath(scope.AccountID, scope.BotID), s.WebhookSecret(scope.AccountID, scope.BotID))
 		if e != nil {
 			return e
 		}
 		if _, e = tx.Exec(ctx, "UPDATE customer_bots SET username=$3,status='RUNNING' WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID, name); e != nil {
 			return e
 		}
-		return database.Audit(ctx, tx, actor, scope.AccountID, "bot.telegram.connect", "customer_bot", scope.BotID, corr, map[string]any{}, map[string]any{"status": "RUNNING"})
+		return database.Audit(ctx, tx, actor, scope.AccountID, "bot.telegram.connect", "customer_bot", scope.BotID, corr, map[string]any{"status": status}, map[string]any{"status": "RUNNING", "username": name})
+	})
+}
+
+func (s *Service) Disconnect(ctx context.Context, actor string, scope sdk.Scope, corr string) error {
+	return s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
+		if !database.Permission(ctx, tx, actor, scope.AccountID, "bots.manage") {
+			return database.ErrForbidden
+		}
+		var status string
+		if e := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2 FOR UPDATE", scope.AccountID, scope.BotID).Scan(&status); e != nil {
+			return e
+		}
+		if status == "DISABLED" {
+			return nil
+		}
+		tr, e := s.transport(ctx, tx, scope)
+		if e != nil {
+			return e
+		}
+		d, ok := tr.(disconnectTransport)
+		if !ok {
+			return sdk.ErrPermission
+		}
+		if e = d.Disconnect(ctx); e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, "UPDATE customer_bots SET status='DISABLED' WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID); e != nil {
+			return e
+		}
+		return database.Audit(ctx, tx, actor, scope.AccountID, "bot.telegram.disconnect", "customer_bot", scope.BotID, corr, map[string]any{"status": status}, map[string]any{"status": "DISABLED"})
 	})
 }
 

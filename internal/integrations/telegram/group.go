@@ -18,6 +18,20 @@ func (c *Client) Inspect(ctx context.Context, chat, user int64) (groupbot.Member
 	}
 	return out, e
 }
+func (c *Client) Channel(ctx context.Context, chat int64) (string, error) {
+	var out struct {
+		ID    int64  `json:"id"`
+		Type  string `json:"type"`
+		Title string `json:"title"`
+	}
+	if e := c.call(ctx, "getChat", map[string]int64{"chat_id": chat}, &out); e != nil {
+		return "", e
+	}
+	if out.ID != chat || out.Type != "channel" || out.Title == "" {
+		return "", groupbot.ErrAuthority
+	}
+	return out.Title, nil
+}
 func (c *Client) Bot(ctx context.Context, chat int64) (int64, groupbot.Member, error) {
 	var me struct {
 		ID int64 `json:"id"`
