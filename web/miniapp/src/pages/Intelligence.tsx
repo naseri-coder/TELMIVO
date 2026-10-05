@@ -79,10 +79,10 @@ export function Assistant(){
   const selected=models.data?.find(m=>m.id===c.model);
   const manual=sources.data?.filter(k=>k.source_kind==='MANUAL')??[];
   const imported=sources.data?.filter(k=>k.source_kind!=='MANUAL'&&k.source_ref)??[];
-  return <><Link to={`/customer-bots/${bot}`}>بازگشت به افزونه‌ها</Link><h1>دستیار هوش مصنوعی ۲.۰</h1>{busy.error&&<ErrorState error={busy.error}/>}
+  return <><Link to={`/customer-bots/${bot}`}>بازگشت به افزونه‌ها</Link><h1>دستیار هوش مصنوعی</h1><p>Assistant 2.0 · Hybrid retrieval · bounded cost controls</p>{busy.error&&<ErrorState error={busy.error}/>}
     <Card><form onSubmit={async e=>{e.preventDefault();await busy.run(async()=>setEdit(await api<Config>(base,'POST',{configuration:c,expected_revision:c.revision})))}}>
       <Field label="نام دستیار"><input required maxLength={100} value={c.name} onChange={e=>set({name:e.target.value})}/></Field>
-      <Field label="مدل تأییدشده"><select required value={c.model} onChange={e=>set({model:e.target.value})}><option value="">انتخاب مدل</option>{models.data?.map(m=><option key={m.id} value={m.id}>{m.name} · {m.provider}</option>)}</select></Field>
+      <Field label="مدل تأییدشده"><select required value={c.model} onChange={e=>set({model:e.target.value})}><option value="">انتخاب مدل</option>{models.data?.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
       {selected&&<p>ورودی/خروجی: {selected.max_input}/{selected.max_output} · Tools: {selected.tools?'بله':'خیر'} · Structured: {selected.structured?'بله':'خیر'} · هزینه هر یک‌میلیون توکن: {selected.input_microunits_per_million}/{selected.output_microunits_per_million} microunit</p>}
       {models.data?.length===0&&<p>اپراتور باید یک مدل مجاز را پیکربندی کند.</p>}
       <Field label="دستورالعمل"><textarea maxLength={4096} value={c.instructions} onChange={e=>set({instructions:e.target.value})}/></Field>
