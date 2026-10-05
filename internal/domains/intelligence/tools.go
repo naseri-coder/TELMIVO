@@ -154,28 +154,9 @@ func (s *Service) gate(ctx context.Context, actor string, scope sdk.Scope, polic
 	return d.Allowed, e
 }
 
-// Retrieval is deliberately replaceable; PostgreSQL full-text lookup avoids new infrastructure.
+// Retrieval remains provider-neutral; R4F ranks indexed chunks without adding external infrastructure.
 func (s *Service) retrieve(ctx context.Context, tx pgx.Tx, scope sdk.Scope, c assistant.Config, query string) ([]string, error) {
-	out := []string{}
-	if len(c.Knowledge) == 0 {
-		return out, nil
-	}
-	if len(query) > 500 {
-		query = query[:500]
-	}
-	rs, e := tx.Query(ctx, "SELECT name,body FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND id::text=ANY($3::text[]) AND enabled AND to_tsvector('simple',body) @@ plainto_tsquery('simple',$4) ORDER BY id LIMIT 4", scope.AccountID, scope.BotID, c.Knowledge, query)
-	if e != nil {
-		return out, e
-	}
-	defer rs.Close()
-	for rs.Next() {
-		var name, b string
-		if e = rs.Scan(&name, &b); e != nil {
-			return out, e
-		}
-		out = append(out, name+": "+b)
-	}
-	return out, rs.Err()
+	return s.retrieveHybrid(ctx, tx, scope, c, query)
 }
 func (s *Service) ResetThread(ctx context.Context, actor string, scope sdk.Scope, id string, expected int64) error {
 	scope.PluginID = assistant.ID
