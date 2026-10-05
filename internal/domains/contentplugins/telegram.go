@@ -138,6 +138,13 @@ type Media struct {
 	UniqueID string `json:"file_unique_id"`
 	Name     string `json:"file_name"`
 }
+type SuccessfulPayment struct {
+	Currency                string `json:"currency"`
+	TotalAmount             int64  `json:"total_amount"`
+	InvoicePayload          string `json:"invoice_payload"`
+	TelegramPaymentChargeID string `json:"telegram_payment_charge_id"`
+	ProviderPaymentChargeID string `json:"provider_payment_charge_id"`
+}
 type Message struct {
 	From struct {
 		ID       int64  `json:"id"`
@@ -155,10 +162,20 @@ type Message struct {
 	Video    *Media  `json:"video"`
 	Audio    *Media  `json:"audio"`
 	Photos   []Media `json:"photo"`
+	SuccessfulPayment *SuccessfulPayment `json:"successful_payment"`
 }
 type Update struct {
 	ID       int64    `json:"update_id"`
 	Message  *Message `json:"message"`
+	PreCheckout *struct {
+		ID string `json:"id"`
+		From struct {
+			ID int64 `json:"id"`
+		} `json:"from"`
+		Currency string `json:"currency"`
+		TotalAmount int64 `json:"total_amount"`
+		InvoicePayload string `json:"invoice_payload"`
+	} `json:"pre_checkout_query"`
 	Callback *struct {
 		From struct {
 			ID int64 `json:"id"`
@@ -181,7 +198,17 @@ func (s *Service) webhookActor(ctx context.Context, scope sdk.Scope) (string, er
 	e = tx.QueryRow(ctx, `SELECT m.user_id::text FROM workspace_members m JOIN role_permissions p ON p.role_key=m.role_key AND p.permission_key='bots.manage' WHERE m.workspace_id=$1 AND m.role_key='OWNER' ORDER BY m.user_id LIMIT 1`, scope.AccountID).Scan(&actor)
 	return actor, e
 }
+type PaymentHandler interface {
+	HandlePayment(context.Context, sdk.Scope, string, Update) (bool, error)
+}
+
 func (s *Service) HandleUpdate(ctx context.Context, scope sdk.Scope, corr string, u Update) error {
+	if p, ok := s.Support.(PaymentHandler); ok {
+		handled, e := p.HandlePayment(ctx, scope, corr, u)
+		if handled {
+			return e
+		}
+	}
 	m := u.Message
 	text := ""
 	user := int64(0)
