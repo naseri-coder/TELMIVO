@@ -35,14 +35,29 @@ type Config struct {
 	WriteEnabled bool     `json:"write_enabled"`
 	Memory       bool     `json:"memory"`
 	Recent       int      `json:"recent"`
-	OutputTokens int64    `json:"output_tokens"`
-	Knowledge    []string `json:"knowledge"`
+	OutputTokens       int64    `json:"output_tokens"`
+	RetrievalMode      string   `json:"retrieval_mode"`
+	MaxKnowledgeChunks int      `json:"max_knowledge_chunks"`
+	MaxCostMicrounits  int64    `json:"max_cost_microunits"`
+	Knowledge          []string `json:"knowledge"`
 	Files        []string `json:"files"`
 	Revision     int64    `json:"revision"`
 }
 
+func (c Config) Retrieval() string {
+	if c.RetrievalMode == "" {
+		return "HYBRID"
+	}
+	return c.RetrievalMode
+}
+func (c Config) RetrievalLimit() int {
+	if c.MaxKnowledgeChunks == 0 {
+		return 4
+	}
+	return c.MaxKnowledgeChunks
+}
 func (c Config) Valid() bool {
-	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 100 || len(c.Instructions) > 4096 || len(c.Language) > 32 || c.Model == "" || len(c.Model) > 100 || !Contains([]string{"AI_ONLY", "AI_WITH_HANDOFF", "AGENT_ASSIST"}, c.Mode) || c.Recent < 0 || c.Recent > 12 || c.OutputTokens < 1 || c.OutputTokens > 2048 || len(c.Tools) > MaxTools || len(c.Knowledge) > 20 || len(c.Files) > 20 {
+	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 100 || len(c.Instructions) > 4096 || len(c.Language) > 32 || c.Model == "" || len(c.Model) > 100 || !Contains([]string{"AI_ONLY", "AI_WITH_HANDOFF", "AGENT_ASSIST"}, c.Mode) || c.Recent < 0 || c.Recent > 12 || c.OutputTokens < 1 || c.OutputTokens > 2048 || !Contains([]string{"LEXICAL", "HYBRID"}, c.Retrieval()) || c.RetrievalLimit() < 1 || c.RetrievalLimit() > 8 || c.MaxCostMicrounits < 0 || c.MaxCostMicrounits > 1_000_000_000_000 || len(c.Tools) > MaxTools || len(c.Knowledge) > 20 || len(c.Files) > 20 {
 		return false
 	}
 	seen := map[string]bool{}
@@ -73,5 +88,5 @@ func (s Structured) Valid() bool {
 	return Contains([]string{"general", "technical", "billing"}, s.Category) && Contains([]string{"LOW", "NORMAL", "HIGH", "URGENT"}, s.Priority)
 }
 func Manifest() sdk.Manifest {
-	return sdk.Manifest{SchemaVersion: 1, PluginID: ID, Name: "دستیار هوش مصنوعی", Description: "گفت‌وگو، ابزار مجاز و ارجاع به کارشناس", Version: "1.0.0", CoreVersions: sdk.VersionRange{Minimum: "0.3.0", MaximumExclusive: "1.0.0"}, DataVersion: 1, Permissions: []string{"ai.invoke", "telegram.send"}, Settings: sdk.SettingsSchema{Properties: map[string]sdk.Setting{}}, Extensions: sdk.Extensions{PricingPolicy: ID, QuotaPolicy: "ai.requests.monthly"}}
+	return sdk.Manifest{SchemaVersion: 1, PluginID: ID, Name: "دستیار هوش مصنوعی", Description: "گفت‌وگو، ابزار مجاز و ارجاع به کارشناس", Version: "1.1.0", CoreVersions: sdk.VersionRange{Minimum: "0.3.0", MaximumExclusive: "1.0.0"}, DataVersion: 2, Permissions: []string{"ai.invoke", "telegram.send"}, Settings: sdk.SettingsSchema{Properties: map[string]sdk.Setting{}}, Extensions: sdk.Extensions{PricingPolicy: ID, QuotaPolicy: "ai.requests.monthly"}}
 }
