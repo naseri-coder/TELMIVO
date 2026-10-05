@@ -16,6 +16,7 @@ import (
 	cred "github.com/naseri-coder/TELMIVO/internal/platform/crypto"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
+	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	"log/slog"
 	"time"
 )
@@ -27,6 +28,7 @@ type Service struct {
 	Commercial  *commerce.Service
 	Support     *supportplugins.Service
 	Content     *contentplugins.Service
+	Storage     *storage.Scoped
 	Provider    provider.Provider
 	Credentials cred.CredentialStore
 	Clock       Clock
