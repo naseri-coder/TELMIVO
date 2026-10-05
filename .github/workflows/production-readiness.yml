@@ -1,9 +1,9 @@
 name: Production Readiness
 on:
   push:
-    branches: [feature/production-readiness-v0.1.1, 'feature/r4*']
+    branches: [feature/production-readiness-v0.1.1, 'feature/r4*', 'feature/r5*']
   pull_request:
-    branches: [develop, main, 'feature/r4*']
+    branches: [develop, main, 'feature/r4*', 'feature/r5*']
 permissions:
   contents: read
 concurrency:
