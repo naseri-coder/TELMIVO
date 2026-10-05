@@ -724,7 +724,7 @@ func (s *Service) expireOne(ctx context.Context, actor, workspace, id string) (b
 		if tag.RowsAffected() != 1 {
 			return database.ErrConflict
 		}
-		return database.Audit(ctx, tx, actor, workspace, "uploader.expire", "upload", id, "uploader-retention", map[string]any{"state": "PROCESSING"}, map[string]any{"state": "EXPIRED"})
+		return database.Audit(ctx, tx, actor, workspace, "uploader.expire", "upload", id, "uploader-retention:"+id, map[string]any{"state": "PROCESSING"}, map[string]any{"state": "EXPIRED"})
 	})
 	return e == nil, e
 }
@@ -759,23 +759,27 @@ func (s *Service) CleanupExpired(ctx context.Context, actor, workspace string, l
 		return 0, e
 	}
 	cleaned := 0
+	var firstErr error
 	for _, id := range ids {
 		ok, e := s.expireOne(ctx, actor, workspace, id)
 		if e != nil {
-			return cleaned, e
+			if firstErr == nil {
+				firstErr = e
+			}
+			continue
 		}
 		if ok {
 			cleaned++
 		}
 	}
-	return cleaned, nil
+	return cleaned, firstErr
 }
 
 func (s *Service) SweepExpired(ctx context.Context) (int, error) {
 	if s.Storage.Provider == nil {
 		return 0, storage.ErrUnavailable
 	}
-	rows, e := s.DB.Pool.Query(ctx, `SELECT user_id::text,workspace_id::text
+	rows, e := s.DB.Pool.Query(ctx, `SELECT DISTINCT ON (workspace_id) user_id::text,workspace_id::text
 		FROM workspace_members WHERE role_key='OWNER' ORDER BY workspace_id,user_id`)
 	if e != nil {
 		return 0, e
@@ -800,14 +804,15 @@ func (s *Service) SweepExpired(ctx context.Context) (int, error) {
 		return 0, rowsErr
 	}
 	total := 0
+	var firstErr error
 	for _, o := range owners {
 		n, e := s.CleanupExpired(ctx, o.actor, o.workspace, 50)
 		total += n
-		if e != nil {
-			return total, e
+		if e != nil && firstErr == nil {
+			firstErr = e
 		}
 	}
-	return total, nil
+	return total, firstErr
 }
 
 func (s *Service) Open(ctx context.Context, actor, workspace, id string) (io.ReadCloser, storage.Metadata, error) {
