@@ -36,6 +36,7 @@ jobs:
           DUMMY_DIGEST='sha256:0000000000000000000000000000000000000000000000000000000000000000'
           cat > /tmp/telmivo-prod/env <<EOF
           TELMIVO_ENV=production
+          TELMIVO_ENV_FILE=/tmp/telmivo-prod/env
           SYNTHETIC_MODE=false
           HTTP_ADDR=:8080
           DATABASE_URL=postgresql://runtime:test@db.example/telmivo?sslmode=verify-full
