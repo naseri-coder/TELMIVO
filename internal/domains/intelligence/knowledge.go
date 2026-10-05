@@ -186,7 +186,20 @@ func (s *Service) saveImported(ctx context.Context, actor string, scope sdk.Scop
 		existing, err := s.sourceKnowledge(ctx, tx, scope, in.SourceKind, in.Reference)
 		if err == nil {
 			if hash([]any{existing.SourceKind, existing.SourceRef, existing.Name, existing.Body}) != fp {
-				return database.ErrConflict
+				tag, updateErr := tx.Exec(ctx, "UPDATE ai_knowledge SET name=$4,body=$5,enabled=true,fingerprint=$6,revision=revision+1 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3 AND revision=$7",
+					scope.AccountID, scope.BotID, existing.ID, name, bodyText, fp, existing.Revision)
+				if updateErr != nil {
+					return updateErr
+				}
+				if tag.RowsAffected() != 1 {
+					return database.ErrConflict
+				}
+				existing.Name, existing.Body, existing.Enabled, existing.Revision = name, bodyText, true, existing.Revision+1
+				if updateErr = s.reindexKnowledge(ctx, tx, scope, existing); updateErr != nil {
+					return updateErr
+				}
+				out = existing
+				return audit(ctx, tx, actor, scope, "ai.knowledge.refreshed", out.ID, map[string]any{"source_kind": in.SourceKind, "source_ref": in.Reference, "revision": out.Revision})
 			}
 			out = existing
 			return s.reindexKnowledge(ctx, tx, scope, out)
