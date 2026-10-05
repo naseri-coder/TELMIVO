@@ -58,8 +58,10 @@ The consumer foundation follows:
 `REQUESTED → PRECHECK → APPLE_ACTION_REQUIRED → APPLE_COMPLETED → VERIFICATION_PENDING → READY`
 with explicit failed/cancelled/expired exits.
 
-Organization-oriented workflows use `SYNC_PENDING`, `ACTIVE`, `RECONCILE_REQUIRED` and
-`SUSPENDED` where appropriate. No state change in R5A performs an external effect.
+Managed provisioning follows the frozen R5 lifecycle:
+`REQUESTED → IDP_CREATING → IDP_CREATED → APPLE_SYNC_PENDING → ACTIVE`.
+Explicit `SYNC_ERROR`, `RETRY_PENDING`, `RECONCILE_REQUIRED` and `SUSPENDED` paths cover
+recoverable and administrative exceptions. No state change in R5A performs an external effect.
 
 ## API
 
