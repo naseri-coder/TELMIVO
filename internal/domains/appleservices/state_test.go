@@ -19,7 +19,11 @@ func TestR5AStateMachines(t *testing.T) {
 		{ConsumerAccount, VerificationPending, Ready},
 		{IdentityVerification, AppleActionRequired, VerificationPending},
 		{BusinessConnection, Ready, ReconcileRequired},
-		{DirectoryProvisioning, SyncPending, Active},
+		{DirectoryProvisioning, Requested, IDPCreating},
+		{DirectoryProvisioning, IDPCreating, IDPCreated},
+		{DirectoryProvisioning, IDPCreated, AppleSyncPending},
+		{DirectoryProvisioning, AppleSyncPending, Active},
+		{ManagedAccount, IDPCreated, AppleSyncPending},
 		{ManagedAccount, Active, Suspended},
 		{Reconciliation, ReconcileRequired, Ready},
 	}
@@ -34,6 +38,7 @@ func TestR5AStateMachines(t *testing.T) {
 		to   State
 	}{
 		{ConsumerAccount, Requested, Ready},
+		{ConsumerAccount, AppleCompleted, Ready},
 		{IdentityVerification, Ready, Precheck},
 		{BusinessConnection, Failed, Ready},
 		{DirectoryProvisioning, Requested, Active},
