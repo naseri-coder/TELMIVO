@@ -21,6 +21,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
 	"github.com/naseri-coder/TELMIVO/internal/domains/supportplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/tickets"
+	"github.com/naseri-coder/TELMIVO/internal/domains/uploads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/wallets"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
@@ -58,6 +59,7 @@ type API struct {
 	Requests     atomic.Uint64
 	Groups       *groupbot.Service
 	Storage      *storage.Scoped
+	Uploads      *uploads.Service
 }
 type ctxKey string
 
@@ -103,6 +105,17 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/chat", a.intelligenceChat)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/threads/{thread}/reset", a.intelligenceReset)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/usage", a.intelligenceUsage)
+
+	protected.HandleFunc("GET /api/v1/uploader/workflows", a.uploadWorkflows)
+	protected.HandleFunc("POST /api/v1/uploader/workflows", a.uploadWorkflowSave)
+	protected.HandleFunc("POST /api/v1/uploader/workflows/{workflow}", a.uploadWorkflowSave)
+	protected.HandleFunc("GET /api/v1/uploader/uploads", a.uploadList)
+	protected.HandleFunc("POST /api/v1/uploader/uploads", a.uploadCreate)
+	protected.HandleFunc("PUT /api/v1/uploader/uploads/{upload}/content", a.uploadContent)
+	protected.HandleFunc("POST /api/v1/uploader/uploads/{upload}/actions", a.uploadAction)
+	protected.HandleFunc("GET /api/v1/uploader/uploads/{upload}/content", a.uploadOpen)
+	protected.HandleFunc("GET /api/v1/uploader/uploads/{upload}/signed-url", a.uploadSignedURL)
+	protected.HandleFunc("POST /api/v1/uploader/uploads/{upload}/file-manager", a.uploadHandoff)
 
 	protected.HandleFunc("GET /api/v1/channels", a.channelList)
 	protected.HandleFunc("POST /api/v1/channels/connect", a.channelConnect)
@@ -327,6 +340,14 @@ func handleError(w http.ResponseWriter, e error) {
 	}
 	if errors.Is(e, database.ErrForbidden) {
 		fail(w, 403, "forbidden")
+		return
+	}
+	if errors.Is(e, storage.ErrDenied) {
+		fail(w, 403, "forbidden")
+		return
+	}
+	if errors.Is(e, storage.ErrUnavailable) {
+		fail(w, 503, "unavailable")
 		return
 	}
 	if errors.Is(e, contentplugins.ErrRuntimeNotRunning) {
