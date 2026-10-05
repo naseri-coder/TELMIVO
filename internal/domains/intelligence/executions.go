@@ -30,6 +30,7 @@ type Execution struct {
 	Code      string               `json:"code"`
 	Index     int                  `json:"action_index"`
 	Attempt   int                  `json:"attempt"`
+	Available time.Time            `json:"available_at"`
 	Started   *time.Time           `json:"started_at"`
 	Completed *time.Time           `json:"completed_at"`
 	Steps     []Step               `json:"steps"`
@@ -40,7 +41,7 @@ func (s *Service) History(ctx context.Context, actor string, scope sdk.Scope, af
 	scope.PluginID = workflow.ID
 	out := []Execution{}
 	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error {
-		rs, e := tx.Query(ctx, "SELECT id::text,workflow_id::text,event_id,state,code,action_index,attempt,started_at,completed_at,results,result FROM automation_executions WHERE workspace_id=$1 AND bot_id=$2 AND ($3='' OR id::text>$3) ORDER BY id LIMIT 50", scope.AccountID, scope.BotID, after)
+		rs, e := tx.Query(ctx, "SELECT id::text,workflow_id::text,event_id,state,code,action_index,attempt,available_at,started_at,completed_at,results,result FROM automation_executions WHERE workspace_id=$1 AND bot_id=$2 AND ($3='' OR id::text>$3) ORDER BY id LIMIT 50", scope.AccountID, scope.BotID, after)
 		if e != nil {
 			return e
 		}
@@ -48,7 +49,7 @@ func (s *Service) History(ctx context.Context, actor string, scope sdk.Scope, af
 		for rs.Next() {
 			var x Execution
 			var steps, res []byte
-			if e = rs.Scan(&x.ID, &x.Workflow, &x.EventID, &x.State, &x.Code, &x.Index, &x.Attempt, &x.Started, &x.Completed, &steps, &res); e != nil {
+			if e = rs.Scan(&x.ID, &x.Workflow, &x.EventID, &x.State, &x.Code, &x.Index, &x.Attempt, &x.Available, &x.Started, &x.Completed, &steps, &res); e != nil {
 				return e
 			}
 			if json.Unmarshal(steps, &x.Steps) != nil || json.Unmarshal(res, &x.Result) != nil {
@@ -97,6 +98,20 @@ func (s *Service) Run(ctx context.Context, actor string, scope sdk.Scope, id str
 		if !current.Enabled {
 			_, e = tx.Exec(ctx, "UPDATE automation_executions SET state='CANCELLED',code='WORKFLOW_DISABLED',completed_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, id, s.now())
 			return e
+		}
+		if w.ScheduleKind() == "SLA" {
+			if event.Ticket == "" {
+				_, e = tx.Exec(ctx, "UPDATE automation_executions SET state='CANCELLED',code='SLA_SUBJECT_MISSING',completed_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, id, s.now())
+				return e
+			}
+			var status string
+			if e = tx.QueryRow(ctx, "SELECT status FROM support_tickets WHERE workspace_id=$1 AND bot_id=$2 AND reference=$3", scope.AccountID, scope.BotID, event.Ticket).Scan(&status); e != nil {
+				return e
+			}
+			if status == "RESOLVED" || status == "CLOSED" {
+				_, e = tx.Exec(ctx, "UPDATE automation_executions SET state='CANCELLED',code='SLA_RESOLVED',completed_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, id, s.now())
+				return e
+			}
 		}
 		if e = s.validate(ctx, tx, runner, scope, "automation.manage", "workflow.execute", true); e != nil {
 			return e
