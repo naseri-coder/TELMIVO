@@ -242,8 +242,13 @@ func (s *Service) Ingest(ctx context.Context, actor string, scope sdk.Scope, in 
 	err := s.tenant(ctx, actor, scope, "ai.manage", "ai.invoke", func(tx pgx.Tx) error {
 		switch in.SourceKind {
 		case "FILE_MANAGER":
-			if !database.Permission(ctx, tx, actor, scope.AccountID, "files.read") {
-				return database.ErrForbidden
+			if s.Content == nil || s.Content.Core == nil {
+				return database.ErrInvalid
+			}
+			fileScope := scope
+			fileScope.PluginID = "file-manager"
+			if err := s.Content.Core.ValidateExecutionTx(ctx, tx, actor, fileScope, "files.read", false); err != nil {
+				return err
 			}
 			var raw []byte
 			if err := tx.QueryRow(ctx, "SELECT definition FROM content_files WHERE workspace_id=$1 AND bot_id=$2 AND reference=$3", scope.AccountID, scope.BotID, in.Reference).Scan(&raw); err != nil {
