@@ -13,10 +13,6 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 )
 
-func r5aGrant(t *testing.T, u interface{ GetWorkspaceID() string }) {
-	t.Helper()
-}
-
 func r5aWorkspaceGrant(t *testing.T, userID, workspaceID string, limit int64) {
 	t.Helper()
 	must(t, db.Tenant(ctx, userID, workspaceID, false, func(tx pgx.Tx) error {
@@ -132,6 +128,17 @@ func TestR5AFoundationPermissionsQuotaAuditIsolation(t *testing.T) {
 	}))
 	if leaked != 0 {
 		t.Fatal("Apple Services tenant isolation failed")
+	}
+
+	var forcedRLS int
+	must(t, owner.Pool.QueryRow(ctx, `SELECT count(*)
+		FROM pg_class
+		WHERE relname=ANY($1::text[])
+		  AND relrowsecurity
+		  AND relforcerowsecurity`,
+		[]string{"apple_service_profiles", "apple_service_operations", "apple_service_operation_events"}).Scan(&forcedRLS))
+	if forcedRLS != 3 {
+		t.Fatal("Apple Services FORCE RLS coverage incomplete", forcedRLS)
 	}
 
 	var sensitiveColumns int
