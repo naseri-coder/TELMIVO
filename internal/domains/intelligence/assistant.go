@@ -178,7 +178,15 @@ func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Ch
 		if len(body(p.Request)) > p.Model.MaxInput {
 			return &provider.Failure{Code: "CONTEXT_TOO_LARGE"}
 		}
-		for metric, n := range map[string]int64{"ai.requests.monthly": 1, "ai.input_tokens.monthly": 32768 * assistant.MaxCalls, "ai.output_tokens.monthly": p.Config.OutputTokens * assistant.MaxCalls} {
+		reserveCost := requestCostMicrounits(p.Model, int64(p.Model.MaxInput)*assistant.MaxCalls, p.Config.OutputTokens*assistant.MaxCalls)
+		if p.Config.MaxCostMicrounits > 0 && reserveCost > p.Config.MaxCostMicrounits {
+			return &provider.Failure{Code: "AI_COST_LIMIT"}
+		}
+		limits := map[string]int64{"ai.requests.monthly": 1, "ai.input_tokens.monthly": 32768 * assistant.MaxCalls, "ai.output_tokens.monthly": p.Config.OutputTokens * assistant.MaxCalls}
+		if reserveCost > 0 {
+			limits["ai.cost_microunits.monthly"] = reserveCost
+		}
+		for metric, n := range limits {
 			if e = s.quota(ctx, tx, scope, metric, n, true); e != nil {
 				return e
 			}
@@ -297,7 +305,8 @@ func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Ch
 		if err := s.lock(finalCtx, tx, scope); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(finalCtx, "UPDATE ai_requests SET state=$4,code=$5,result=$6,input_tokens=$7,output_tokens=$8,tool_calls=$9,completed_at=$10,latency_ms=$11 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3 AND state='SENDING'", scope.AccountID, scope.BotID, p.ID, out.State, out.Code, body(out), input, output, toolCount, s.now(), time.Since(started).Milliseconds())
+		actualCost := requestCostMicrounits(p.Model, input, output)
+		tag, err := tx.Exec(finalCtx, "UPDATE ai_requests SET state=$4,code=$5,result=$6,input_tokens=$7,output_tokens=$8,tool_calls=$9,cost_microunits=$10,retrieved_chunks=$11,completed_at=$12,latency_ms=$13 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3 AND state='SENDING'", scope.AccountID, scope.BotID, p.ID, out.State, out.Code, body(out), input, output, toolCount, actualCost, len(p.Request.Knowledge), s.now(), time.Since(started).Milliseconds())
 		if err != nil {
 			return err
 		}
@@ -320,7 +329,7 @@ func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Ch
 		if err != nil {
 			return err
 		}
-		return audit(finalCtx, tx, actor, scope, "ai_request_completed", p.ID, map[string]any{"state": out.State, "code": out.Code, "input_tokens": input, "output_tokens": output, "tool_calls": toolCount})
+		return audit(finalCtx, tx, actor, scope, "ai_request_completed", p.ID, map[string]any{"state": out.State, "code": out.Code, "input_tokens": input, "output_tokens": output, "tool_calls": toolCount, "cost_microunits": actualCost, "retrieved_chunks": len(p.Request.Knowledge)})
 	})
 	if finish != nil {
 		return Result{ID: p.ID, Thread: p.Thread, State: "UNKNOWN", Code: "FINALIZE_FAILED"}, finish
