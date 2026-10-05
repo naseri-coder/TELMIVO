@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"sync/atomic"
@@ -222,7 +223,7 @@ func TestR4DBrowserFixture(t *testing.T) {
 	scope := sdk.Scope{AccountID: u.WorkspaceID, BotID: bot}
 	for _, id := range []string{"crm", shop.ID} {
 		scope.PluginID = id
-		i, e := f.core.Change(ctx, u.UserID, scope, sdk.Install, 0, nil, "r4d-browser")
+		i, e := f.core.Change(ctx, u.UserID, scope, sdk.Install, 0, json.RawMessage(`{}`), "r4d-browser")
 		must(t, e)
 		_, e = f.core.Change(ctx, u.UserID, scope, sdk.Activate, i.Revision, nil, "r4d-browser")
 		must(t, e)
