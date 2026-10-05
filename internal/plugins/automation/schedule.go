@@ -95,11 +95,11 @@ func parseCronField(raw string, min, max int, weekday bool) (cronField, error) {
 }
 
 type cronSpec struct {
-	minute  cronField
-	hour    cronField
-	day     cronField
-	month   cronField
-	weekday cronField
+	minute   cronField
+	hour     cronField
+	day      cronField
+	month    cronField
+	weekday  cronField
 	location *time.Location
 }
 

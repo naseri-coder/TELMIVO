@@ -4,6 +4,7 @@ package integration
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -31,6 +32,12 @@ func r4eExecution(t *testing.T, f r3d6Data, workflowID string) intelligence.Exec
 
 func TestR4ECronSchedule(t *testing.T) {
 	f := r3d6Fixture(t)
+	invalid := f.wf("schedule.cron", workflow.Action{Type: "telegram.send", Value: "Invalid target"})
+	invalid.Schedule = workflow.Schedule{Kind: "CRON", Cron: "* * * * *", Timezone: "UTC", Contact: "00000000-0000-0000-0000-000000000000"}
+	_, err := f.ai.SaveWorkflow(ctx, f.u.UserID, f.scope(workflow.ID), "", intelligence.WorkflowChange{Workflow: invalid, Key: "r4e-invalid-context"})
+	if !errors.Is(err, database.ErrInvalid) {
+		t.Fatal("invalid cron target accepted", err)
+	}
 	w := f.wf("schedule.cron", workflow.Action{Type: "telegram.send", Value: "Scheduled ping"})
 	w.Schedule = workflow.Schedule{Kind: "CRON", Cron: "* * * * *", Timezone: "UTC", User: 10101001}
 	saved := f.save(t, "r4e-cron", w)

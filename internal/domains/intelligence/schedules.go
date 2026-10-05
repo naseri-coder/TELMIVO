@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,51 @@ func scheduleTimezone(w workflow.Workflow) string {
 		return "UTC"
 	}
 	return w.Schedule.Timezone
+}
+
+func (s *Service) validateScheduleContext(ctx context.Context, tx pgx.Tx, scope sdk.Scope, w workflow.Workflow) error {
+	if w.ScheduleKind() != "CRON" {
+		return nil
+	}
+	explicitContact, explicitUser := w.Schedule.Contact, w.Schedule.User
+	event := businessevents.Event{
+		Bot:     scope.BotID,
+		Ticket:  w.Schedule.Ticket,
+		Contact: w.Schedule.Contact,
+		User:    w.Schedule.User,
+		Fields:  map[string][]string{},
+	}
+	if event.Ticket != "" || event.Contact != "" {
+		if err := s.hydrate(ctx, tx, scope, &event); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return database.ErrInvalid
+			}
+			return err
+		}
+	}
+	if explicitContact != "" && event.Contact != explicitContact {
+		return database.ErrInvalid
+	}
+	if explicitUser > 0 && event.User > 0 && event.User != explicitUser {
+		return database.ErrInvalid
+	}
+	for _, action := range w.Actions {
+		switch {
+		case strings.HasPrefix(action.Type, "ticket."), action.Type == "ai.invoke":
+			if event.Ticket == "" {
+				return database.ErrInvalid
+			}
+		case strings.HasPrefix(action.Type, "crm."), action.Type == "ai.store_result":
+			if event.Contact == "" {
+				return database.ErrInvalid
+			}
+		case action.Type == "telegram.send":
+			if event.User <= 0 {
+				return database.ErrInvalid
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Service) syncSchedule(ctx context.Context, tx pgx.Tx, scope sdk.Scope, w workflow.Workflow) error {

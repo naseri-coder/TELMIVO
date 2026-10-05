@@ -74,7 +74,12 @@ func (s *Service) Preview(ctx context.Context, actor string, scope sdk.Scope, w 
 	if !w.Valid() || len(body(data)) > 4096 {
 		return nil, database.ErrInvalid
 	}
-	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error { return s.available(ctx, tx, actor, scope, w) })
+	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error {
+		if e := s.available(ctx, tx, actor, scope, w); e != nil {
+			return e
+		}
+		return s.validateScheduleContext(ctx, tx, scope, w)
+	})
 	return map[string]any{"valid": e == nil, "matches": w.Conditions.Match(data), "mutated": false}, e
 }
 func (s *Service) available(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, w workflow.Workflow) error {
@@ -124,6 +129,9 @@ func (s *Service) SaveWorkflow(ctx context.Context, actor string, scope sdk.Scop
 	fp := hash(w)
 	e := s.tenant(ctx, actor, scope, "automation.manage", "workflow.execute", func(tx pgx.Tx) error {
 		if e := s.available(ctx, tx, actor, scope, w); e != nil {
+			return e
+		}
+		if e := s.validateScheduleContext(ctx, tx, scope, w); e != nil {
 			return e
 		}
 		if id == "" {
