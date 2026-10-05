@@ -93,5 +93,5 @@ func (s Structured) Valid() bool {
 	return Contains([]string{"general", "technical", "billing"}, s.Category) && Contains([]string{"LOW", "NORMAL", "HIGH", "URGENT"}, s.Priority)
 }
 func Manifest() sdk.Manifest {
-	return sdk.Manifest{SchemaVersion: 1, PluginID: ID, Name: "دستیار هوش مصنوعی", Description: "گفت‌وگو، ابزار مجاز و ارجاع به کارشناس", Version: "1.1.0", CoreVersions: sdk.VersionRange{Minimum: "0.3.0", MaximumExclusive: "1.0.0"}, DataVersion: 2, Permissions: []string{"ai.invoke", "telegram.send"}, Settings: sdk.SettingsSchema{Properties: map[string]sdk.Setting{}}, Extensions: sdk.Extensions{PricingPolicy: ID, QuotaPolicy: "ai.requests.monthly"}}
+	return sdk.Manifest{SchemaVersion: 1, PluginID: ID, Name: "دستیار هوش مصنوعی", Description: "گفت‌وگو، ابزار مجاز و ارجاع به کارشناس", Version: "1.0.0", CoreVersions: sdk.VersionRange{Minimum: "0.3.0", MaximumExclusive: "1.0.0"}, DataVersion: 1, Permissions: []string{"ai.invoke", "telegram.send"}, Settings: sdk.SettingsSchema{Properties: map[string]sdk.Setting{}}, Extensions: sdk.Extensions{PricingPolicy: ID, QuotaPolicy: "ai.requests.monthly"}}
 }
