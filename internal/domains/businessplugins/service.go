@@ -29,6 +29,7 @@ type Service struct {
 	Content    *contentplugins.Service
 	Clock      Clock
 	Fallback   contentplugins.SupportHandler
+	Payments   ExternalPaymentProvider
 }
 
 func (s *Service) now() time.Time {
