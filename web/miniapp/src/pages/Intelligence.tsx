@@ -74,7 +74,8 @@ export function Assistant(){
   const data=useCustomer<Config>(base);const models=useCustomer<Model[]>(base+'/models');const sources=useCustomer<Knowledge[]>(base+'/knowledge');const usage=useCustomer<Usage[]>(base+'/usage');
   const [edit,setEdit]=useState<Config>();const [source,setSource]=useState({name:'',body:''});const [ingest,setIngest]=useState({source_kind:'FILE_MANAGER',reference:'',name:''});const busy=useMutation();
   if(data.error)return <ErrorState error={data.error} retry={data.retry}/>;if(!data.data)return <Loading/>;
-  const c={retrieval_mode:'HYBRID',max_knowledge_chunks:4,max_cost_microunits:0,sources:[],...(edit??data.data)};
+  const raw=edit??data.data;
+  const c={...raw,retrieval_mode:raw.retrieval_mode||'HYBRID',max_knowledge_chunks:raw.max_knowledge_chunks||4,max_cost_microunits:raw.max_cost_microunits||0,knowledge:raw.knowledge??[],sources:raw.sources??[],files:raw.files??[]};
   const set=(v:Partial<Config>)=>setEdit({...c,...v});
   const selected=models.data?.find(m=>m.id===c.model);
   const manual=sources.data?.filter(k=>k.source_kind==='MANUAL')??[];
