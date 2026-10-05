@@ -24,10 +24,8 @@ import (
 
 func r4fEnableFileManager(t *testing.T, f r3d6Data) {
 	t.Helper()
-	m, ok := f.core.Registry.Manifest(files.ID)
-	if !ok {
-		t.Fatal("file manager manifest unavailable")
-	}
+	m, err := f.core.Registry.Manifest(files.ID)
+	must(t, err)
 	f.r3d5FixtureData.commercialFixture.save(t, commerce.Version{
 		Kind: commerce.PluginKind, Key: files.ID,
 		Definition: commerce.Definition{Plugin: &commerce.Plugin{Scope: sdk.PerBot, SaleEnabled: false, Capabilities: m.Permissions, Prices: r3d2Prices(0)}},
@@ -64,6 +62,11 @@ func r4fUploaderSource(t *testing.T, f r3d6Data, bodyText string) (string, func(
 		_, err := tx.Exec(ctx, `INSERT INTO uploads(id,workspace_id,creator_id,customer_bot_id,state,metadata,original_name,content_type,size_bytes,storage_key,expires_at)
 			VALUES($1,$2,$3,$4,'STORED','{}',$5,'text/plain',$6,$7,$8)`,
 			id, f.u.WorkspaceID, f.u.UserID, f.bot, "r4f-source.txt", int64(len(bodyText)), key, f.clock.at.Add(time.Hour))
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO upload_files(workspace_id,upload_id,storage_key,media_type,size_bytes)
+			VALUES($1,$2,$3,'text/plain',$4)`, f.u.WorkspaceID, id, key, int64(len(bodyText)))
 		return err
 	})
 	return id, func() { must(t, local.Close()) }
