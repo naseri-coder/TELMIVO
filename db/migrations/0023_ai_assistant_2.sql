@@ -6,6 +6,7 @@ ALTER TABLE ai_knowledge
   ADD COLUMN source_kind text NOT NULL DEFAULT 'MANUAL' CHECK(source_kind IN('MANUAL','FILE_MANAGER','UPLOADER')),
   ADD COLUMN source_ref text NOT NULL DEFAULT '' CHECK(length(source_ref)<=200);
 CREATE INDEX ai_knowledge_source ON ai_knowledge(workspace_id,bot_id,source_kind,source_ref);
+CREATE UNIQUE INDEX ai_knowledge_one_source ON ai_knowledge(bot_id,source_kind,source_ref) WHERE source_ref<>'';
 
 CREATE TABLE ai_knowledge_chunks(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
