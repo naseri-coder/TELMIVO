@@ -92,8 +92,11 @@ func (s *Service) materializeSchedules(ctx context.Context, tx pgx.Tx, account s
 		occurrence := d.occurrence + 1
 		eventID := "cron:" + d.next.UTC().Format("20060102T150405Z")
 		event := businessevents.Event{
-			Bot: d.bot,
-			Actor: actor,
+			Bot:     d.bot,
+			Actor:   actor,
+			Ticket:  w.Schedule.Ticket,
+			Contact: w.Schedule.Contact,
+			User:    w.Schedule.User,
 			Fields: map[string][]string{
 				"schedule.kind":       {"CRON"},
 				"schedule.fire_at":    {d.next.UTC().Format(time.RFC3339)},
@@ -101,6 +104,11 @@ func (s *Service) materializeSchedules(ctx context.Context, tx pgx.Tx, account s
 			},
 			Workflows:   []string{},
 			Correlation: eventID,
+		}
+		if event.Ticket != "" || event.Contact != "" {
+			if err = s.hydrate(ctx, tx, scope, &event); err != nil {
+				return err
+			}
 		}
 		if _, err = s.enqueue(ctx, tx, scope, d.workflow, eventID, event); err != nil {
 			return err
@@ -114,4 +122,10 @@ func (s *Service) materializeSchedules(ctx context.Context, tx pgx.Tx, account s
 		}
 	}
 	return nil
+}
+
+func (s *Service) TickSchedules(ctx context.Context, actor, account string) error {
+	return s.DB.Tenant(ctx, actor, account, false, func(tx pgx.Tx) error {
+		return s.materializeSchedules(ctx, tx, account)
+	})
 }

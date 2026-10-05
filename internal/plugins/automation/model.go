@@ -52,6 +52,9 @@ type Schedule struct {
 	Cron       string `json:"cron,omitempty"`
 	Timezone   string `json:"timezone,omitempty"`
 	SLASeconds int    `json:"sla_seconds,omitempty"`
+	Ticket     string `json:"ticket,omitempty"`
+	Contact    string `json:"contact,omitempty"`
+	User       int64  `json:"user,omitempty"`
 }
 type Workflow struct {
 	ID           string    `json:"id"`
@@ -84,13 +87,16 @@ func (w Workflow) Delay() time.Duration {
 }
 
 func (w Workflow) validSchedule() bool {
+	if len(w.Schedule.Ticket) > 100 || len(w.Schedule.Contact) > 100 || w.Schedule.User < 0 {
+		return false
+	}
 	switch w.ScheduleKind() {
 	case "EVENT":
-		return w.Trigger != "schedule.cron" && w.Schedule.Cron == "" && w.Schedule.Timezone == "" && w.Schedule.SLASeconds == 0 && w.DelaySeconds >= 0 && w.DelaySeconds <= MaxDelaySeconds
+		return w.Trigger != "schedule.cron" && w.Schedule.Cron == "" && w.Schedule.Timezone == "" && w.Schedule.SLASeconds == 0 && w.Schedule.Ticket == "" && w.Schedule.Contact == "" && w.Schedule.User == 0 && w.DelaySeconds >= 0 && w.DelaySeconds <= MaxDelaySeconds
 	case "CRON":
 		return w.Trigger == "schedule.cron" && w.DelaySeconds == 0 && w.Schedule.SLASeconds == 0 && ValidCron(w.Schedule.Cron, w.Schedule.Timezone)
 	case "SLA":
-		return strings.HasPrefix(w.Trigger, "ticket.") && w.DelaySeconds == 0 && w.Schedule.Cron == "" && w.Schedule.Timezone == "" && w.Schedule.SLASeconds > 0 && w.Schedule.SLASeconds <= MaxSLASeconds
+		return strings.HasPrefix(w.Trigger, "ticket.") && w.DelaySeconds == 0 && w.Schedule.Cron == "" && w.Schedule.Timezone == "" && w.Schedule.SLASeconds > 0 && w.Schedule.SLASeconds <= MaxSLASeconds && w.Schedule.Ticket == "" && w.Schedule.Contact == "" && w.Schedule.User == 0
 	}
 	return false
 }
@@ -128,6 +134,22 @@ func (w Workflow) Valid() bool {
 		}
 		if !Contains(Actions, a.Type) || len(a.Value) > 4000 || len(a.Field) > 64 {
 			return false
+		}
+		if w.ScheduleKind() == "CRON" {
+			switch {
+			case strings.HasPrefix(a.Type, "ticket."), a.Type == "ai.invoke":
+				if w.Schedule.Ticket == "" {
+					return false
+				}
+			case strings.HasPrefix(a.Type, "crm."), a.Type == "ai.store_result":
+				if w.Schedule.Contact == "" && w.Schedule.Ticket == "" {
+					return false
+				}
+			case a.Type == "telegram.send":
+				if w.Schedule.User == 0 && w.Schedule.Contact == "" && w.Schedule.Ticket == "" {
+					return false
+				}
+			}
 		}
 	}
 	b, _ := json.Marshal(w)
