@@ -172,7 +172,7 @@ func (a *API) uploadHandoff(w http.ResponseWriter, r *http.Request) {
 	}
 	scope := sdk.Scope{AccountID: workspace(r), BotID: in.Bot, PluginID: files.ID}
 	out, e := a.content().SaveFile(r.Context(), user(r), scope, "", correlation(r), contentplugins.FileChange{
-		File: files.File{FileID: "upload:" + item.ID, UniqueID: "upload:" + item.ID, Kind: kind, Title: strings.TrimSpace(in.Title), Policy: in.Policy, Enabled: true},
+		File: files.File{FileID: "upload_" + item.ID, UniqueID: "upload_" + item.ID, Kind: kind, Title: strings.TrimSpace(in.Title), Policy: in.Policy, Enabled: true},
 		Key:  in.Key,
 	})
 	if e != nil {
