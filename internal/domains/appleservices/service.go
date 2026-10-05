@@ -205,9 +205,14 @@ func (s *Service) CreateOperation(ctx context.Context, actor, workspace, correla
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		profile, _, err := s.ensureProfileTx(ctx, tx, actor, workspace)
+		profile, createdProfile, err := s.ensureProfileTx(ctx, tx, actor, workspace)
 		if err != nil {
 			return err
+		}
+		if createdProfile {
+			if err = database.Audit(ctx, tx, actor, workspace, "apple.profile.created", "apple_service_profile", workspace, correlation, map[string]any{}, map[string]any{"state": profile.State, "revision": profile.Revision}); err != nil {
+				return err
+			}
 		}
 		if profile.State != "FOUNDATION_READY" {
 			return database.ErrConflict
