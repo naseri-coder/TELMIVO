@@ -65,6 +65,12 @@ func (s Scoped) Delete(ctx context.Context, workspace, key string) error {
 	}
 	return s.Provider.Delete(ctx, key)
 }
+func (s Scoped) SignedURL(ctx context.Context, workspace, key string, ttl time.Duration) (string, error) {
+	if e := s.check(workspace, key); e != nil {
+		return "", e
+	}
+	return s.Provider.SignedURL(ctx, key, ttl)
+}
 func (s Scoped) Metadata(ctx context.Context, workspace, key string) (Metadata, error) {
 	if e := s.check(workspace, key); e != nil {
 		return Metadata{}, e
