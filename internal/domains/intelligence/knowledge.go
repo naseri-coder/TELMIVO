@@ -307,7 +307,7 @@ func (s *Service) Ingest(ctx context.Context, actor string, scope sdk.Scope, in 
 		}
 		bodyText = strings.TrimSpace(string(raw))
 	}
-	if name == "" || bodyText == "" || len([]byte(bodyText)) > maxImportedKnowledgeBytes {
+	if name == "" || len(name) > 100 || bodyText == "" || len([]byte(bodyText)) > maxImportedKnowledgeBytes {
 		return Knowledge{}, database.ErrInvalid
 	}
 	return s.saveImported(ctx, actor, scope, in, name, bodyText)
