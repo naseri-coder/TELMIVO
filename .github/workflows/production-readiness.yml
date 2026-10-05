@@ -1,0 +1,75 @@
+name: Production Readiness
+on:
+  push:
+    branches: [feature/production-readiness-v0.1.1]
+  pull_request:
+    branches: [develop, main]
+permissions:
+  contents: read
+concurrency:
+  group: production-readiness-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Production config and key rotation tests
+        run: go test ./internal/platform/config ./internal/platform/crypto -count=1
+      - name: Build production application images
+        run: |
+          docker build -f deployments/docker/backend.Dockerfile -t telmivo-backend:production-readiness .
+          docker build -f deployments/docker/miniapp.Dockerfile -t telmivo-miniapp:production-readiness .
+      - name: Validate production configuration contract
+        run: |
+          mkdir -p /tmp/telmivo-prod
+          printf 'synthetic cert for compose validation\n' > /tmp/telmivo-prod/tls.crt
+          printf 'synthetic key for compose validation\n' > /tmp/telmivo-prod/tls.key
+          KEY_A='QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE='
+          KEY_B='QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI='
+          DIGEST='Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M='
+          DUMMY_DIGEST='sha256:0000000000000000000000000000000000000000000000000000000000000000'
+          cat > /tmp/telmivo-prod/env <<EOF
+          TELMIVO_ENV=production
+          SYNTHETIC_MODE=false
+          HTTP_ADDR=:8080
+          DATABASE_URL=postgresql://runtime:test@db.example/telmivo?sslmode=verify-full
+          MIGRATION_DATABASE_URL=postgresql://migration:test@db.example/telmivo?sslmode=verify-full
+          REDIS_URL=rediss://redis.example:6380/0
+          NATS_URL=tls://nats.example:4222
+          TELMIVO_DOMAIN=app.example.com
+          MINIAPP_URL=https://app.example.com
+          BOT_TOKEN=12345:abcdefghijklmnopqrstuvwxyzABCDE
+          GROUP_BOT_TOKEN=23456:abcdefghijklmnopqrstuvwxyzABCDE
+          DOWNLOADER_BOT_TOKEN=34567:abcdefghijklmnopqrstuvwxyzABCDE
+          WEBHOOK_SECRET=wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+          WEBHOOK_DIGEST_KEY=$DIGEST
+          CREDENTIAL_KEY_ID=active-v2
+          CREDENTIAL_KEYRING=legacy-v1=$KEY_A;active-v2=$KEY_B
+          ADMIN_TELEGRAM_IDS=1
+          MEDIA_CONCURRENCY=2
+          MAX_MEDIA_BYTES=51380224
+          MEDIA_STORAGE_ROOT=/var/lib/telmivo/media
+          MEDIA_WORK_ROOT=/var/lib/telmivo/work
+          TELMIVO_BACKEND_IMAGE=registry.example/telmivo/backend@$DUMMY_DIGEST
+          TELMIVO_MINIAPP_IMAGE=registry.example/telmivo/miniapp@$DUMMY_DIGEST
+          TELMIVO_PROXY_IMAGE=registry.example/nginx@$DUMMY_DIGEST
+          TELMIVO_POSTGRES_IMAGE=registry.example/postgres@$DUMMY_DIGEST
+          TELMIVO_TLS_CERT=/tmp/telmivo-prod/tls.crt
+          TELMIVO_TLS_KEY=/tmp/telmivo-prod/tls.key
+          EOF
+          sed -i 's/^          //' /tmp/telmivo-prod/env
+          chmod 600 /tmp/telmivo-prod/env
+          python3 scripts/production/preflight.py --env-file /tmp/telmivo-prod/env
+          docker compose --env-file /tmp/telmivo-prod/env -f compose.production.yaml config --quiet
+          ! docker compose --env-file /tmp/telmivo-prod/env -f compose.production.yaml config --services | grep -qx customer-bot-runtime
+          grep -q '/telegram/main/webhook' deployments/reverse-proxy/nginx.production.conf.template
+          grep -q '/telegram/group/webhook' deployments/reverse-proxy/nginx.production.conf.template
+          grep -q '/telegram/downloader/webhook' deployments/reverse-proxy/nginx.production.conf.template
+      - name: Backend image remains non-root
+        run: test "$(docker run --rm --entrypoint id telmivo-backend:production-readiness -u)" = 10001
