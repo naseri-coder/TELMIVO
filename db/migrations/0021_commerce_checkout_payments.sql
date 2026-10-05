@@ -28,6 +28,8 @@ CREATE TABLE commerce_payment_intents(
 );
 CREATE INDEX commerce_payment_order ON commerce_payment_intents(workspace_id,bot_id,order_id,created_at DESC);
 CREATE INDEX commerce_payment_state ON commerce_payment_intents(workspace_id,bot_id,state,updated_at);
+CREATE UNIQUE INDEX commerce_payment_one_active ON commerce_payment_intents(order_id)
+ WHERE state IN('CREATING','AWAITING_PAYMENT','PAID','UNKNOWN','REFUND_PENDING','REFUND_UNKNOWN');
 CREATE UNIQUE INDEX commerce_payment_provider_identity ON commerce_payment_intents(bot_id,provider_key,provider_payment_id) WHERE provider_payment_id<>'';
 
 CREATE TABLE commerce_payment_events(
@@ -36,7 +38,7 @@ CREATE TABLE commerce_payment_events(
  bot_id uuid NOT NULL,
  payment_id uuid NOT NULL,
  event_key text NOT NULL CHECK(length(event_key) BETWEEN 1 AND 200),
- kind text NOT NULL CHECK(kind IN('PRECHECKOUT_ACCEPTED','PAYMENT_VERIFIED','PAYMENT_REJECTED','CHECKOUT_RECONCILED','REFUND_VERIFIED','REFUND_REJECTED')),
+ kind text NOT NULL CHECK(kind IN('PRECHECKOUT_ACCEPTED','PAYMENT_VERIFIED','PAYMENT_REJECTED','CHECKOUT_RECONCILED','REFUND_VERIFIED','REFUND_REJECTED','REFUND_UNKNOWN')),
  amount jsonb,
  external_reference text NOT NULL DEFAULT '' CHECK(length(external_reference)<=512),
  digest text NOT NULL CHECK(length(digest)=64),
@@ -88,10 +90,11 @@ BEGIN
  IF TG_TABLE_NAME='commerce_refunds' THEN
   IF NEW.payment_id<>OLD.payment_id OR NEW.amount<>OLD.amount OR NEW.reason<>OLD.reason OR NEW.operation_key<>OLD.operation_key OR NEW.fingerprint<>OLD.fingerprint THEN RAISE EXCEPTION 'refund identity immutable'; END IF;
   IF NEW.revision<>OLD.revision+1 THEN RAISE EXCEPTION 'refund revision invalid'; END IF;
-  IF OLD.state IN('REFUNDED','FAILED','UNKNOWN') THEN RAISE EXCEPTION 'refund terminal state immutable'; END IF;
+  IF OLD.state IN('REFUNDED','FAILED') THEN RAISE EXCEPTION 'refund terminal state immutable'; END IF;
   IF NEW.state<>OLD.state AND NOT (
     (OLD.state='REQUESTED' AND NEW.state='PROCESSING') OR
-    (OLD.state='PROCESSING' AND NEW.state IN('REFUNDED','FAILED','UNKNOWN'))
+    (OLD.state='PROCESSING' AND NEW.state IN('REFUNDED','FAILED','UNKNOWN')) OR
+    (OLD.state='UNKNOWN' AND NEW.state IN('REFUNDED','FAILED'))
   ) THEN RAISE EXCEPTION 'refund transition invalid'; END IF;
  END IF;
  RETURN NEW;
