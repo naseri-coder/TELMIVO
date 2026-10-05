@@ -26,6 +26,7 @@ jobs:
           files="$(gofmt -l cmd internal db tests)"
           if [ -n "$files" ]; then
             printf 'gofmt required for:\n%s\n' "$files"
+            gofmt -d $files
             exit 1
           fi
       - run: go vet ./...
