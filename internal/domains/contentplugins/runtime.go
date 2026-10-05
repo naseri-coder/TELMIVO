@@ -113,13 +113,13 @@ func (s *Service) InvokeTx(ctx context.Context, tx pgx.Tx, actor string, scope s
 			next = "FAILED"
 		} else {
 			fileID := f.FileID
-			if strings.HasPrefix(fileID, "upload:") {
+			if strings.HasPrefix(fileID, "upload_") {
 				if s.Storage == nil || s.Storage.Provider == nil {
 					result.Code = "DELIVERY_FAILED"
 					next = "FAILED"
 				} else {
 					var key string
-					uploadID := strings.TrimPrefix(fileID, "upload:")
+					uploadID := strings.TrimPrefix(fileID, "upload_")
 					e = tx.QueryRow(ctx, `SELECT uf.storage_key FROM upload_files uf JOIN uploads u ON u.id=uf.upload_id AND u.workspace_id=uf.workspace_id WHERE u.workspace_id=$1 AND u.id::text=$2 AND u.state='STORED'`, scope.AccountID, uploadID).Scan(&key)
 					if e == nil {
 						fileID, e = s.Storage.SignedURL(ctx, scope.AccountID, key, 10*time.Minute)
