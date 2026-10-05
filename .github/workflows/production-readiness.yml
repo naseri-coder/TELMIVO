@@ -67,8 +67,8 @@ jobs:
           sed -i 's/^          //' /tmp/telmivo-prod/env
           chmod 600 /tmp/telmivo-prod/env
           python3 scripts/production/preflight.py --env-file /tmp/telmivo-prod/env
-          docker compose --env-file /tmp/telmivo-prod/env -f compose.production.yaml config --quiet
-          ! docker compose --env-file /tmp/telmivo-prod/env -f compose.production.yaml config --services | grep -qx customer-bot-runtime
+          TELMIVO_ENV_FILE=/tmp/telmivo-prod/env docker compose --env-file /tmp/telmivo-prod/env -f compose.production.yaml config --quiet
+          ! TELMIVO_ENV_FILE=/tmp/telmivo-prod/env docker compose --env-file /tmp/telmivo-prod/env -f compose.production.yaml config --services | grep -qx customer-bot-runtime
           grep -q '/telegram/main/webhook' deployments/reverse-proxy/nginx.production.conf.template
           grep -q '/telegram/group/webhook' deployments/reverse-proxy/nginx.production.conf.template
           grep -q '/telegram/downloader/webhook' deployments/reverse-proxy/nginx.production.conf.template
