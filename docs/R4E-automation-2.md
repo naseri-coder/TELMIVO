@@ -44,6 +44,12 @@ Existing loop-depth, entitlement, permission, quota and action-count limits rema
 Migration 0022 adds `automation_schedule_state` with FORCE RLS, composite tenant ownership,
 immutable scope, monotonic revision, next/last occurrence state and a due-time index.
 
+Migration 0022 also performs the Core-owned plugin installation upgrade from Automation
+`1.0.0 / DataVersion 1` to `1.1.0 / DataVersion 2`. Unknown Automation installation
+versions fail the migration closed. The runtime immutability guard is disabled only for this
+exact migration update and is immediately re-enabled; configuration, plugin data, state and
+capabilities are not rewritten.
+
 The existing `automation_executions.available_at` remains the authoritative delay/deadline field;
 R4E does not introduce a parallel delayed-job table.
 
