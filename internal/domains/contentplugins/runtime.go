@@ -107,6 +107,10 @@ func (s *Service) InvokeTx(ctx context.Context, tx pgx.Tx, actor string, scope s
 	result := Result{Code: d.Code, Access: d}
 	next := "DENIED"
 	if d.Allowed {
+		// Access decisions such as GRANTED/PUBLIC are not delivery outcomes.
+		// Clear the access code before transport resolution so ordinary Telegram
+		// files still reach SendFile; storage failures set an explicit outcome.
+		result.Code = ""
 		tr, e := s.transport(ctx, tx, scope)
 		if e != nil {
 			result.Code = "CHECK_UNAVAILABLE"
