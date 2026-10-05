@@ -252,7 +252,7 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 			return database.ErrInvalid
 		}
 		var active bool
-		if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM commerce_payment_intents WHERE workspace_id=$1 AND bot_id=$2 AND order_id=$3 AND state IN('CREATING','AWAITING_PAYMENT','PAID','REFUND_PENDING','REFUND_UNKNOWN'))", scope.AccountID, scope.BotID, orderID).Scan(&active); e != nil {
+		if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM commerce_payment_intents WHERE workspace_id=$1 AND bot_id=$2 AND order_id=$3 AND state IN('CREATING','AWAITING_PAYMENT','PAID','UNKNOWN','REFUND_PENDING','REFUND_UNKNOWN'))", scope.AccountID, scope.BotID, orderID).Scan(&active); e != nil {
 			return e
 		}
 		if active {
