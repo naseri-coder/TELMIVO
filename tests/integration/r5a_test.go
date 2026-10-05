@@ -172,12 +172,16 @@ func TestR5ARecoveryPreparation(t *testing.T) {
 		Kind: apple.ManagedAccount, SubjectRef: "managed:recovery", Key: "r5a-recovery",
 	})
 	must(t, err)
-	op, err = svc.Transition(ctx, u.UserID, u.WorkspaceID, op.ID, "r5a-recovery-precheck", apple.TransitionRequest{
-		State: apple.Precheck, Expected: op.Revision, Reason: "prepare restore fixture",
+	op, err = svc.Transition(ctx, u.UserID, u.WorkspaceID, op.ID, "r5a-recovery-idp-creating", apple.TransitionRequest{
+		State: apple.IDPCreating, Expected: op.Revision, Reason: "prepare restore fixture",
 	})
 	must(t, err)
-	_, err = svc.Transition(ctx, u.UserID, u.WorkspaceID, op.ID, "r5a-recovery-sync", apple.TransitionRequest{
-		State: apple.SyncPending, Expected: op.Revision, Reason: "prepare restore fixture",
+	op, err = svc.Transition(ctx, u.UserID, u.WorkspaceID, op.ID, "r5a-recovery-idp-created", apple.TransitionRequest{
+		State: apple.IDPCreated, Expected: op.Revision, Reason: "prepare restore fixture",
+	})
+	must(t, err)
+	_, err = svc.Transition(ctx, u.UserID, u.WorkspaceID, op.ID, "r5a-recovery-apple-sync", apple.TransitionRequest{
+		State: apple.AppleSyncPending, Expected: op.Revision, Reason: "prepare restore fixture",
 	})
 	must(t, err)
 }
@@ -192,7 +196,7 @@ func TestR5ARecovered(t *testing.T) {
 	var workspace string
 	must(t, store.Pool.QueryRow(ctx, `SELECT workspace_id::text,state,revision
 		FROM apple_service_operations WHERE operation_key='r5a-recovery'`).Scan(&workspace, &state, &revision))
-	if state != "SYNC_PENDING" || revision != 3 {
+	if state != "APPLE_SYNC_PENDING" || revision != 4 {
 		t.Fatal("R5A operation recovery drift", state, revision)
 	}
 	var profileState string
@@ -202,7 +206,7 @@ func TestR5ARecovered(t *testing.T) {
 	}
 	var events int
 	must(t, store.Pool.QueryRow(ctx, "SELECT count(*) FROM apple_service_operation_events WHERE workspace_id=$1", workspace).Scan(&events))
-	if events != 3 {
+	if events != 4 {
 		t.Fatal("R5A event history recovery drift", events)
 	}
 }
