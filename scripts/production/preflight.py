@@ -116,6 +116,16 @@ def main():
 
     storage = urlparse(required(env, "OBJECT_STORAGE_ENDPOINT"))
     if storage.scheme != "https" or not storage.hostname or storage.username or storage.password or storage.query or storage.fragment:
+        raise PreflightError("OBJECT_STORAGE_ENDPOINT must use HTTPS without embedded credentials")
+    bucket = required(env, "OBJECT_STORAGE_BUCKET")
+    if len(bucket) < 3 or len(bucket) > 63 or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", bucket) or ".." in bucket:
+        raise PreflightError("OBJECT_STORAGE_BUCKET is invalid")
+    required(env, "OBJECT_STORAGE_REGION")
+    required(env, "OBJECT_STORAGE_ACCESS_KEY")
+    required(env, "OBJECT_STORAGE_SECRET_KEY")
+
+    storage = urlparse(required(env, "OBJECT_STORAGE_ENDPOINT"))
+    if storage.scheme != "https" or not storage.hostname or storage.username or storage.password or storage.query or storage.fragment:
         raise PreflightError("OBJECT_STORAGE_ENDPOINT must be private HTTPS storage")
     bucket = required(env, "OBJECT_STORAGE_BUCKET")
     if len(bucket) < 3 or len(bucket) > 63 or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", bucket) or ".." in bucket:
