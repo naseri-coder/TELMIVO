@@ -17,3 +17,14 @@ Automation 2.0 accepts bounded declarative schedules only. Cron/SLA scheduling d
 R4G freezes the v0.2.0 source migration chain at 0001–0023 and adds final FORCE-RLS, cross-feature recovery and release-matrix checks. A GitHub Actions failure before the first step, a cancelled/missing job or an unapproved skip is not security validation evidence and must not be reported as a release PASS.
 
 CI scans source secret patterns, Go vulnerabilities and npm high/critical advisories; CodeQL depends on private-repository capabilities. The R1 run reported code scanning disabled; the prepared job requires the CODEQL_ENABLED repository variable after the owner enables that capability. Pattern scanning is supplementary, not exhaustive security assurance. Synthetic mode disables live bot webhooks, notifications, media and payments. No production deployment exists.
+
+## R5A Apple Services foundation
+
+Apple Services foundation state is workspace-scoped and protected by FORCE RLS. R5A stores no
+Apple password, one-time code, access token, client secret or provider credential. The foundation
+API can only create and transition internal TELMIVO operations; it performs no outbound Apple,
+Google, Microsoft or generic IdP request.
+
+Apple operation creation is entitlement- and quota-gated, idempotent, revision-fenced and audited.
+Only OWNER/ADMIN receive Apple permissions in R5A. Existing plans and plugin entitlements remain
+disabled by default; controlled grants are required until later commercialization work.
