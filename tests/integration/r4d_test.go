@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"os"
 	"sync/atomic"
 	"testing"
 
@@ -253,7 +254,7 @@ func TestR4DRecoveryPreparation(t *testing.T) {
 }
 
 func TestR4DRecovered(t *testing.T) {
-	store, e := database.Open(ctx, getenv("TEST_RESTORE_MIGRATION_DATABASE_URL"), false)
+	store, e := database.Open(ctx, os.Getenv("TEST_RESTORE_MIGRATION_DATABASE_URL"), false)
 	must(t, e)
 	defer store.Pool.Close()
 	var state, orderState string
