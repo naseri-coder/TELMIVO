@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 const maxCronSearchMinutes = 5 * 366 * 24 * 60

@@ -41,7 +41,7 @@ func TestWorkflowScheduleValidation(t *testing.T) {
 	}
 	cron := base
 	cron.Trigger = "schedule.cron"
-	cron.Schedule = Schedule{Kind: "CRON", Cron: "0 * * * *", Timezone: "UTC"}
+	cron.Schedule = Schedule{Kind: "CRON", Cron: "0 * * * *", Timezone: "UTC", User: 10001}
 	if !cron.Valid() {
 		t.Fatal("cron workflow invalid")
 	}
