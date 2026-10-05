@@ -44,7 +44,7 @@ func TestProductionSecretsFailClosed(t *testing.T) {
 	}
 	for _, change := range []struct{ k, v string }{
 		{"CREDENTIAL_KEYRING", "active-v2=invalid"},
-		{"WEBHOOK_DIGEST_KEY", "invalid"},
+		{"WEBHOOK_DIGEST_KEY", "not-base64-secret"},
 		{"WEBHOOK_SECRET", "short"},
 		{"MINIAPP_URL", "https://user:password@mini.example"},
 		{"DATABASE_URL", "postgresql://u:p@db.example/telmivo?sslmode=disable"},
