@@ -152,6 +152,36 @@ func TestR4FHybridRetrievalIngestionAndCost(t *testing.T) {
 	}
 }
 
+func TestR4FLegacyKnowledgeLazyIndex(t *testing.T) {
+	f := r3d6Fixture(t)
+	var id string
+	tenant(t, f.u, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `INSERT INTO ai_knowledge(workspace_id,bot_id,name,body,enabled,operation_key,fingerprint)
+			VALUES($1,$2,'Legacy knowledge','legacy refund knowledge before R4F',true,'r4f-legacy','legacy-fingerprint')
+			RETURNING id::text`, f.u.WorkspaceID, f.bot).Scan(&id)
+	})
+	if number(t, f.u, "SELECT count(*) FROM ai_knowledge_chunks WHERE knowledge_id=$1", id) != 0 {
+		t.Fatal("legacy fixture unexpectedly pre-indexed")
+	}
+	cfg := f.config
+	cfg.Knowledge = []string{id}
+	cfg.Sources = []string{}
+	cfg.RetrievalMode = "HYBRID"
+	cfg.MaxKnowledgeChunks = 4
+	_, err := f.ai.SaveConfig(ctx, f.u.UserID, f.scope(assistant.ID), cfg, f.config.Revision)
+	must(t, err)
+	result, err := f.ai.Chat(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.Chat{
+		Key: "r4f-legacy-query", Text: "legacy refund", Purpose: "PLAYGROUND",
+	})
+	must(t, err)
+	if result.State != "SUCCEEDED" || len(f.p.requests) != 1 || len(f.p.requests[0].Knowledge) == 0 {
+		t.Fatal("legacy knowledge was not retrieved", result, f.p.requests)
+	}
+	if number(t, f.u, "SELECT count(*) FROM ai_knowledge_chunks WHERE knowledge_id=$1", id) == 0 {
+		t.Fatal("legacy knowledge was not lazily indexed")
+	}
+}
+
 func TestR4FBrowserFixture(t *testing.T) {
 	f := r3d6Fixture(t)
 	u, _ := r3aLogin(t, 98014001, false)
