@@ -266,7 +266,13 @@ func TestR2BPluginContracts(t *testing.T) {
 	_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=true WHERE feature_key='uploader'; UPDATE plugins SET status='ENABLED' WHERE key='uploader'; UPDATE plan_plugin_entitlements SET enabled=true WHERE plan_key='PRO' AND plugin_key='uploader'")
 	must(t, e)
 	defer func() {
-		_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=$1 WHERE feature_key='uploader'; UPDATE plugins SET status=$2 WHERE key='uploader'; UPDATE plan_plugin_entitlements SET enabled=$3 WHERE plan_key='PRO' AND plugin_key='uploader'; DELETE FROM plugin_dependencies WHERE plugin_key='uploader'", priorFeature, priorPlugin, priorPlanPlugin)
+		_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=$1 WHERE feature_key='uploader'", priorFeature)
+		must(t, e)
+		_, e = owner.Pool.Exec(ctx, "UPDATE plugins SET status=$1 WHERE key='uploader'", priorPlugin)
+		must(t, e)
+		_, e = owner.Pool.Exec(ctx, "UPDATE plan_plugin_entitlements SET enabled=$1 WHERE plan_key='PRO' AND plugin_key='uploader'", priorPlanPlugin)
+		must(t, e)
+		_, e = owner.Pool.Exec(ctx, "DELETE FROM plugin_dependencies WHERE plugin_key='uploader'")
 		must(t, e)
 	}()
 	tenant(t, u, func(tx pgx.Tx) error {
