@@ -28,8 +28,9 @@ for(const width of [390,1280]){
       page.waitForResponse(r=>/\/api\/v1\/channels\/[^/]+\/posts$/.test(new URL(r.url()).pathname)&&r.request().method()==='POST'&&r.status()===200),
       page.getByRole('button',{name:'ذخیره پیش‌نویس',exact:true}).click()
     ]);
-    await expect(page.getByText(body,{exact:true})).toBeVisible();
-    await expect(page.getByText('پیش‌نویس',{exact:true})).toBeVisible();
+    const post=page.locator('section.card').filter({hasText:body});
+    await expect(post.getByText(body,{exact:true})).toBeVisible();
+    await expect(post.getByText('پیش‌نویس',{exact:true})).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
     await page.screenshot({path:`test-results/channels-${width}.png`,fullPage:true});
   });
