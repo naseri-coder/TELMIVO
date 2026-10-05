@@ -74,6 +74,7 @@ func (s *Service) AdmitWebhook(ctx context.Context, scope sdk.Scope) error {
 type disconnectTransport interface {
 	Disconnect(context.Context) error
 }
+
 func (s *Service) Connect(ctx context.Context, actor string, scope sdk.Scope, origin, corr string) error {
 	u, e := url.Parse(origin)
 	if e != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(s.DigestKey) < 32 {
