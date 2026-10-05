@@ -17,6 +17,10 @@ service while preserving a replaceable vector boundary for a future approved emb
 Hybrid ranking combines local vector cosine similarity with lexical token overlap. The number of
 retrieved chunks is bounded per request (1–8) and recorded on the request usage row.
 
+Existing pre-R4F manual knowledge is not discarded or required to be rewritten. If a selected
+knowledge row has no chunk index yet, the first authorized retrieval rebuilds its deterministic
+index inside the tenant transaction before ranking it.
+
 ## Knowledge ingestion
 
 Two TELMIVO-owned source types are admitted:
@@ -63,6 +67,11 @@ R4F does not grant write authority from retrieval content, model output or impor
 Migration 0023 widens bounded knowledge storage, adds source identity, durable knowledge chunks,
 retrieval/cost accounting and the cost quota catalog entry. New chunk rows use FORCE RLS and
 workspace/bot composite ownership.
+
+The AI Assistant manifest remains at version 1.0.0 / data version 1 in this stage because the
+current plugin lifecycle has no executable upgrade action. R4F's additive database evolution is
+owned by the core migration chain, so already-active assistant installations are not intentionally
+invalidated by a manifest-version bump.
 
 Native validation covers vector behavior, hybrid retrieval, File Manager and Uploader ingestion,
 cost accounting/ceiling enforcement, browser configuration and backup/restore of the indexed
