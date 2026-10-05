@@ -21,7 +21,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: test -z "$(gofmt -l cmd internal db tests)"
+      - name: Go format gate
+        run: |
+          files="$(gofmt -l cmd internal db tests)"
+          if [ -n "$files" ]; then
+            printf 'gofmt required for:\n%s\n' "$files"
+            gofmt -d $files
+            exit 1
+          fi
       - run: go vet ./...
       - name: Install media validation dependency
         run: sudo apt-get update && sudo apt-get install -y ffmpeg

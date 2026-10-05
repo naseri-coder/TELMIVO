@@ -10,6 +10,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/mainbot"
+	"github.com/naseri-coder/TELMIVO/internal/domains/uploads"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	telegramclient "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
 	"github.com/naseri-coder/TELMIVO/internal/platform/cache"
@@ -39,6 +40,9 @@ func Main(role string) {
 }
 func Run(role string) error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	if role == "customer-bot-runtime" {
+		return errors.New("CUSTOMER_BOT_RUNTIME_RETIRED_USE_API_INGRESS")
+	}
 	c, e := config.FromEnv()
 	if e != nil {
 		return e
@@ -70,6 +74,45 @@ func Run(role string) error {
 		groups.Authority = testfixtures.GroupAuthority{}
 	}
 	api := &httpapi.API{DB: db, Cache: redis, Queue: q, Config: c, Identity: ident, Groups: groups}
+	if role == "api" {
+		var scoped storage.Scoped
+		if c.Environment == "production" {
+			s3, err := storage.NewS3(c.StorageEndpoint, c.StorageBucket, c.StorageRegion, c.StorageAccessKey, c.StorageSecretKey, nil)
+			if err != nil {
+				return err
+			}
+			scoped, err = storage.NewS3Scoped(s3)
+			if err != nil {
+				return err
+			}
+		} else {
+			local, err := storage.NewLocal(c.UploadStorageRoot, c.MaxMediaBytes)
+			if err != nil {
+				return err
+			}
+			defer local.Close()
+			scoped = storage.Scoped{Provider: local}
+		}
+		api.Storage = &scoped
+		cleaner := &uploads.Service{DB: db, Storage: scoped}
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				n, err := cleaner.SweepExpired(ctx)
+				if err != nil && ctx.Err() == nil {
+					slog.Warn("uploader retention cleanup failed", "error_code", "UPLOADER_RETENTION_CLEANUP_FAILED")
+				} else if n > 0 {
+					slog.Info("uploader retention cleanup", "expired_uploads", n)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
 	if c.BotFactoryTestFixture && role == "api" {
 		registry, err := testfixtures.FactoryRegistry()
 		if err != nil {
@@ -177,14 +220,16 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 	ctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	defer func() { cancel(); wg.Wait() }()
-	// Five worker producers can finish together during shutdown.
-	errorsCh := make(chan error, 5)
+	// Six worker producers can finish together during shutdown.
+	errorsCh := make(chan error, 6)
 	if role == "worker" {
 		service := (&httpapi.API{DB: db, Config: c}).IntelligenceService()
 		wg.Add(2)
 		go func() { defer wg.Done(); errorsCh <- service.Poll(ctx) }()
 		wg.Add(1)
 		go func() { defer wg.Done(); errorsCh <- (&httpapi.API{DB: db, Config: c}).BusinessService().Poll(ctx) }()
+		wg.Add(1)
+		go func() { defer wg.Done(); errorsCh <- (&httpapi.API{DB: db, Config: c}).ChannelService().Poll(ctx) }()
 		go func() {
 			defer wg.Done()
 			errorsCh <- q.Consume(ctx, db, "telmivo.events.business", "automation-events-v1", service.DispatchTx)

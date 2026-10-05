@@ -257,10 +257,22 @@ func TestR2BCredentialRotation(t *testing.T) {
 }
 func TestR2BPluginContracts(t *testing.T) {
 	u := fixture(t, true)
+	var priorFeature bool
+	var priorPlugin string
+	var priorPlanPlugin bool
+	must(t, owner.Pool.QueryRow(ctx, "SELECT enabled FROM feature_flags WHERE feature_key='uploader'").Scan(&priorFeature))
+	must(t, owner.Pool.QueryRow(ctx, "SELECT status FROM plugins WHERE key='uploader'").Scan(&priorPlugin))
+	must(t, owner.Pool.QueryRow(ctx, "SELECT enabled FROM plan_plugin_entitlements WHERE plan_key='PRO' AND plugin_key='uploader'").Scan(&priorPlanPlugin))
 	_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=true WHERE feature_key='uploader'; UPDATE plugins SET status='ENABLED' WHERE key='uploader'; UPDATE plan_plugin_entitlements SET enabled=true WHERE plan_key='PRO' AND plugin_key='uploader'")
 	must(t, e)
 	defer func() {
-		_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=false WHERE feature_key='uploader'; UPDATE plugins SET status='DISABLED' WHERE key='uploader'; UPDATE plan_plugin_entitlements SET enabled=false WHERE plan_key='PRO' AND plugin_key='uploader'; DELETE FROM plugin_dependencies WHERE plugin_key='uploader'")
+		_, e := owner.Pool.Exec(ctx, "UPDATE feature_flags SET enabled=$1 WHERE feature_key='uploader'", priorFeature)
+		must(t, e)
+		_, e = owner.Pool.Exec(ctx, "UPDATE plugins SET status=$1 WHERE key='uploader'", priorPlugin)
+		must(t, e)
+		_, e = owner.Pool.Exec(ctx, "UPDATE plan_plugin_entitlements SET enabled=$1 WHERE plan_key='PRO' AND plugin_key='uploader'", priorPlanPlugin)
+		must(t, e)
+		_, e = owner.Pool.Exec(ctx, "DELETE FROM plugin_dependencies WHERE plugin_key='uploader'")
 		must(t, e)
 	}()
 	tenant(t, u, func(tx pgx.Tx) error {

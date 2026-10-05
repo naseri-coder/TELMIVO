@@ -12,6 +12,8 @@ import (
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
 	files "github.com/naseri-coder/TELMIVO/internal/plugins/filemanager"
 	"log/slog"
+	"strings"
+	"time"
 )
 
 type Result struct {
@@ -105,12 +107,36 @@ func (s *Service) InvokeTx(ctx context.Context, tx pgx.Tx, actor string, scope s
 	result := Result{Code: d.Code, Access: d}
 	next := "DENIED"
 	if d.Allowed {
+		// Access decisions such as GRANTED/PUBLIC are not delivery outcomes.
+		// Clear the access code before transport resolution so ordinary Telegram
+		// files still reach SendFile; storage failures set an explicit outcome.
+		result.Code = ""
 		tr, e := s.transport(ctx, tx, scope)
 		if e != nil {
 			result.Code = "CHECK_UNAVAILABLE"
 			next = "FAILED"
 		} else {
-			result.MessageID, result.Code = tr.SendFile(ctx, req.User, f.Kind, f.FileID, f.Title)
+			fileID := f.FileID
+			if strings.HasPrefix(fileID, "upload_") {
+				if s.Storage == nil || s.Storage.Provider == nil {
+					result.Code = "DELIVERY_FAILED"
+					next = "FAILED"
+				} else {
+					var key string
+					uploadID := strings.TrimPrefix(fileID, "upload_")
+					e = tx.QueryRow(ctx, `SELECT uf.storage_key FROM upload_files uf JOIN uploads u ON u.id=uf.upload_id AND u.workspace_id=uf.workspace_id WHERE u.workspace_id=$1 AND u.id::text=$2 AND u.state='STORED'`, scope.AccountID, uploadID).Scan(&key)
+					if e == nil {
+						fileID, e = s.Storage.SignedURL(ctx, scope.AccountID, key, 10*time.Minute)
+					}
+					if e != nil {
+						result.Code = "DELIVERY_FAILED"
+						next = "FAILED"
+					}
+				}
+			}
+			if result.Code == "" {
+				result.MessageID, result.Code = tr.SendFile(ctx, req.User, f.Kind, fileID, f.Title)
+			}
 			next = "FAILED"
 			if result.Code == "DELIVERY_ACKNOWLEDGED" && result.MessageID > 0 {
 				next = "SENT"

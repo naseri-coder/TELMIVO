@@ -13,22 +13,27 @@ func key(v byte) string {
 
 func productionEnv() map[string]string {
 	return map[string]string{
-		"TELMIVO_ENV":          "production",
-		"SYNTHETIC_MODE":       "false",
-		"DATABASE_URL":         "postgresql://u:p@db.example/telmivo?sslmode=verify-full",
-		"REDIS_URL":            "rediss://redis.example:6380/0",
-		"NATS_URL":             "tls://nats.example:4222",
-		"MINIAPP_URL":          "https://mini.example",
-		"BOT_TOKEN":            "12345:abcdefghijklmnopqrstuvwxyzABCDE",
-		"GROUP_BOT_TOKEN":      "23456:abcdefghijklmnopqrstuvwxyzABCDE",
-		"DOWNLOADER_BOT_TOKEN": "34567:abcdefghijklmnopqrstuvwxyzABCDE",
-		"WEBHOOK_SECRET":       strings.Repeat("w", 32),
-		"WEBHOOK_DIGEST_KEY":   key(3),
-		"CREDENTIAL_KEY_ID":    "active-v2",
-		"CREDENTIAL_KEYRING":   "legacy-v1=" + key(1) + ";active-v2=" + key(2),
-		"ADMIN_TELEGRAM_IDS":   "1",
-		"MEDIA_STORAGE_ROOT":   "/var/lib/telmivo/media",
-		"MEDIA_WORK_ROOT":      "/var/lib/telmivo/work",
+		"TELMIVO_ENV":               "production",
+		"SYNTHETIC_MODE":            "false",
+		"DATABASE_URL":              "postgresql://u:p@db.example/telmivo?sslmode=verify-full",
+		"REDIS_URL":                 "rediss://redis.example:6380/0",
+		"NATS_URL":                  "tls://nats.example:4222",
+		"MINIAPP_URL":               "https://mini.example",
+		"BOT_TOKEN":                 "12345:abcdefghijklmnopqrstuvwxyzABCDE",
+		"GROUP_BOT_TOKEN":           "23456:abcdefghijklmnopqrstuvwxyzABCDE",
+		"DOWNLOADER_BOT_TOKEN":      "34567:abcdefghijklmnopqrstuvwxyzABCDE",
+		"WEBHOOK_SECRET":            strings.Repeat("w", 32),
+		"WEBHOOK_DIGEST_KEY":        key(3),
+		"CREDENTIAL_KEY_ID":         "active-v2",
+		"CREDENTIAL_KEYRING":        "legacy-v1=" + key(1) + ";active-v2=" + key(2),
+		"ADMIN_TELEGRAM_IDS":        "1",
+		"MEDIA_STORAGE_ROOT":        "/var/lib/telmivo/media",
+		"MEDIA_WORK_ROOT":           "/var/lib/telmivo/work",
+		"OBJECT_STORAGE_ENDPOINT":   "https://objects.example",
+		"OBJECT_STORAGE_BUCKET":     "telmivo-private",
+		"OBJECT_STORAGE_REGION":     "eu-test-1",
+		"OBJECT_STORAGE_ACCESS_KEY": "access-key",
+		"OBJECT_STORAGE_SECRET_KEY": "secret-key",
 	}
 }
 
@@ -51,12 +56,14 @@ func TestProductionSecretsFailClosed(t *testing.T) {
 		{"REDIS_URL", "redis://redis.example:6379/0"},
 		{"NATS_URL", "nats://nats.example:4222"},
 		{"MEDIA_STORAGE_ROOT", "/tmp/media"},
+		{"OBJECT_STORAGE_ENDPOINT", "http://objects.example"},
+		{"OBJECT_STORAGE_SECRET_KEY", ""},
 		{"SYNTHETIC_MODE", "true"},
 	} {
 		old := env[change.k]
 		env[change.k] = change.v
 		_, e := Load(get)
-		if e == nil || strings.Contains(e.Error(), change.v) {
+		if e == nil || (change.v != "" && strings.Contains(e.Error(), change.v)) {
 			t.Fatal(change.k, e)
 		}
 		env[change.k] = old

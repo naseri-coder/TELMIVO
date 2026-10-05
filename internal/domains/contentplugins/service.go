@@ -15,6 +15,7 @@ import (
 	platform "github.com/naseri-coder/TELMIVO/internal/domains/pluginplatform"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
+	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
 	assistant "github.com/naseri-coder/TELMIVO/internal/plugins/aiassistant"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/automation"
@@ -46,6 +47,7 @@ type Service struct {
 	Commercial *commerce.Service
 	Provider   Provider
 	DigestKey  []byte
+	Storage    *storage.Scoped
 }
 
 func Registry(extra ...sdk.Manifest) (*platform.Registry, error) {

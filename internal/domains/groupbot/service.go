@@ -29,6 +29,7 @@ type Member struct {
 	Restrict bool   `json:"can_restrict_members"`
 	Invite   bool   `json:"can_invite_users"`
 	Manage   bool   `json:"can_manage_chat"`
+	Post     bool   `json:"can_post_messages"`
 }
 
 func (m Member) Admin() bool { return m.Status == "creator" || m.Status == "administrator" }

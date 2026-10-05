@@ -15,8 +15,9 @@ type Config struct {
 	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL string
 	BotToken, WebhookSecret, CredentialKey, CredentialKeyID           string
 	WebhookDigestKey, StorageEndpoint, StorageBucket                  string
+	StorageRegion, StorageAccessKey, StorageSecretKey                 string
 	GroupBotToken, DownloaderBotToken                                 string
-	MediaStorageRoot, MediaWorkRoot                                   string
+	MediaStorageRoot, MediaWorkRoot, UploadStorageRoot                string
 	CredentialKeys                                                    map[string][]byte
 	AdminIDs                                                          []int64
 	Synthetic                                                         bool
@@ -108,6 +109,15 @@ func (c Config) WebhookDigest() []byte {
 	return nil
 }
 
+func first(get func(string) string, keys ...string) string {
+	for _, key := range keys {
+		if value := get(key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func Load(get func(string) string) (Config, error) {
 	c := Config{
 		Environment:        get("TELMIVO_ENV"),
@@ -123,10 +133,14 @@ func Load(get func(string) string) (Config, error) {
 		CredentialKey:      get("CREDENTIAL_KEY"),
 		CredentialKeyID:    get("CREDENTIAL_KEY_ID"),
 		WebhookDigestKey:   get("WEBHOOK_DIGEST_KEY"),
-		StorageEndpoint:    get("S3_ENDPOINT"),
-		StorageBucket:      get("S3_BUCKET"),
+		StorageEndpoint:    first(get, "OBJECT_STORAGE_ENDPOINT", "S3_ENDPOINT"),
+		StorageBucket:      first(get, "OBJECT_STORAGE_BUCKET", "S3_BUCKET"),
+		StorageRegion:      first(get, "OBJECT_STORAGE_REGION", "S3_REGION"),
+		StorageAccessKey:   first(get, "OBJECT_STORAGE_ACCESS_KEY", "S3_ACCESS_KEY"),
+		StorageSecretKey:   first(get, "OBJECT_STORAGE_SECRET_KEY", "S3_SECRET_KEY"),
 		MediaStorageRoot:   get("MEDIA_STORAGE_ROOT"),
 		MediaWorkRoot:      get("MEDIA_WORK_ROOT"),
+		UploadStorageRoot:  get("UPLOAD_STORAGE_ROOT"),
 		SessionTTL:         time.Hour,
 		JobTimeout:         5 * time.Minute,
 		MediaConcurrency:   2,
@@ -143,6 +157,9 @@ func Load(get func(string) string) (Config, error) {
 	}
 	if c.MediaWorkRoot == "" {
 		c.MediaWorkRoot = "/tmp/telmivo-downloader-work"
+	}
+	if c.UploadStorageRoot == "" {
+		c.UploadStorageRoot = "/tmp/telmivo-uploader-storage"
 	}
 	if c.Environment != "development" && c.Environment != "test" && c.Environment != "production" {
 		return c, errors.New("invalid environment")
@@ -263,6 +280,11 @@ func Load(get func(string) string) (Config, error) {
 		}
 		if !productionPath(c.MediaStorageRoot) || !productionPath(c.MediaWorkRoot) {
 			return c, errors.New("production media paths must be persistent")
+		}
+		storageURL, storageErr := url.Parse(c.StorageEndpoint)
+		if storageErr != nil || storageURL.Scheme != "https" || storageURL.Host == "" || storageURL.User != nil || storageURL.RawQuery != "" || storageURL.Fragment != "" ||
+			c.StorageBucket == "" || len(c.StorageBucket) > 63 || c.StorageRegion == "" || c.StorageAccessKey == "" || c.StorageSecretKey == "" {
+			return c, errors.New("production private object storage required")
 		}
 	}
 	return c, nil
