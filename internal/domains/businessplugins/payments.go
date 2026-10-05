@@ -632,6 +632,8 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 		kind := "REFUND_REJECTED"
 		if pState == PaymentRefunded {
 			kind = "REFUND_VERIFIED"
+		} else if pState == PaymentRefundUnknown {
+			kind = "REFUND_UNKNOWN"
 		}
 		if e = paymentEvent(ctx, tx, scope, p, "refund:"+r.ID, kind, result.Reference, p.Amount, []any{r.ID, result}); e != nil {
 			return e
@@ -663,32 +665,32 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 	if e != nil {
 		return p, e
 	}
-	if result.Status == PaymentPaid {
+	if p.State == PaymentUnknown && result.Status == PaymentPaid {
 		amount := result.Amount
 		if !validMoney(amount) {
 			amount = p.Amount
 		}
 		return s.applyVerified(ctx, actor, scope, correlation, VerifiedPayment{Provider: p.Provider, EventKey: "reconcile:paid:" + p.ID, PaymentID: p.ID, ExternalReference: result.Reference, Amount: amount})
 	}
+
 	e = s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
 		current, _, e := payment(ctx, tx, scope, p.ID, true)
 		if e != nil {
 			return e
 		}
 		next := ""
-		switch result.Status {
-		case PaymentAwaiting:
-			if current.State == PaymentUnknown {
-				next = PaymentAwaiting
-			}
-		case PaymentFailed:
-			if current.State == PaymentUnknown {
-				next = PaymentFailed
-			}
-		case PaymentRefunded:
-			if current.State == PaymentUnknown || current.State == PaymentRefundUnknown {
-				next = PaymentRefunded
-			}
+		refundState := ""
+		switch {
+		case current.State == PaymentUnknown && result.Status == PaymentAwaiting:
+			next = PaymentAwaiting
+		case current.State == PaymentUnknown && result.Status == PaymentFailed:
+			next = PaymentFailed
+		case current.State == PaymentUnknown && result.Status == PaymentRefunded:
+			next = PaymentRefunded
+		case current.State == PaymentRefundUnknown && result.Status == PaymentRefunded:
+			next, refundState = PaymentRefunded, "REFUNDED"
+		case current.State == PaymentRefundUnknown && result.Status == PaymentPaid:
+			next, refundState = PaymentPaid, "FAILED"
 		}
 		if next == "" {
 			return database.ErrConflict
@@ -701,11 +703,28 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 		if _, e = tx.Exec(ctx, "UPDATE commerce_payment_intents SET state=$4,outcome_code='RECONCILED',refunded_at=$5,revision=revision+1,updated_at=$6 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, p.ID, next, refundedAt, now); e != nil {
 			return e
 		}
+		if refundState != "" {
+			var rid string
+			e = tx.QueryRow(ctx, "SELECT id::text FROM commerce_refunds WHERE workspace_id=$1 AND bot_id=$2 AND payment_id=$3 AND state='UNKNOWN' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", scope.AccountID, scope.BotID, p.ID).Scan(&rid)
+			if e != nil {
+				return e
+			}
+			code := "RECONCILED_REFUND_FAILED"
+			if refundState == "REFUNDED" {
+				code = "RECONCILED_REFUND_VERIFIED"
+			}
+			if _, e = tx.Exec(ctx, "UPDATE commerce_refunds SET state=$2,outcome_code=$3,provider_reference=$4,revision=revision+1,updated_at=$5,completed_at=$5 WHERE id=$1", rid, refundState, code, result.Reference, now); e != nil {
+				return e
+			}
+		}
 		if e = paymentEvent(ctx, tx, scope, current, "reconcile:"+p.ID+":"+next, "CHECKOUT_RECONCILED", result.Reference, p.Amount, result); e != nil {
 			return e
 		}
 		p, _, e = payment(ctx, tx, scope, p.ID, false)
-		return e
+		if e != nil {
+			return e
+		}
+		return database.Audit(ctx, tx, actor, scope.AccountID, "commerce.payment.reconcile", "commerce_payment", p.ID, correlation, map[string]any{"state": current.State}, map[string]any{"state": p.State})
 	})
 	return p, e
 }
