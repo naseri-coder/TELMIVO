@@ -63,7 +63,7 @@ func TestProductionSecretsFailClosed(t *testing.T) {
 		old := env[change.k]
 		env[change.k] = change.v
 		_, e := Load(get)
-		if e == nil || strings.Contains(e.Error(), change.v) {
+		if e == nil || (change.v != "" && strings.Contains(e.Error(), change.v)) {
 			t.Fatal(change.k, e)
 		}
 		env[change.k] = old
