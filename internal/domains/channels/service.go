@@ -258,6 +258,7 @@ func scanPost(row pgx.Row) (Post, error) {
 	e := row.Scan(&p.ID, &p.ChannelID, &p.Body, &p.State, &p.ScheduledAt, &p.AttemptedAt, &p.DeliveredAt, &p.TelegramMessageID, &p.OutcomeCode, &p.Revision, &p.CreatedAt, &p.UpdatedAt)
 	return p, e
 }
+
 const postSelect = "SELECT id::text,channel_id::text,body,state,scheduled_at,attempted_at,delivered_at,telegram_message_id,outcome_code,revision,created_at,updated_at FROM channel_posts"
 
 func (s *Service) post(ctx context.Context, tx pgx.Tx, ws, channel, id string) (Post, error) {
@@ -459,6 +460,7 @@ type delivery struct {
 	post, channel, actor, body string
 	chat                       int64
 }
+
 func terminal(ctx context.Context, tx pgx.Tx, ws, id, state, code string, message *int64, at time.Time) error {
 	var channel string
 	var revision int64
