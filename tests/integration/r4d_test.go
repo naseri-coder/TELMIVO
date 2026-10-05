@@ -243,6 +243,13 @@ func TestR4DExternalProviderNeutralUnknownAndReconciliation(t *testing.T) {
 	if ext.creates.Load() != 1 {
 		t.Fatal("ambiguous checkout blindly retried")
 	}
+	_, e = f.biz.Checkout(ctx, f.u.UserID, f.scope(shop.ID), o.ID, "r4d-external-conflicting-checkout", businessplugins.CheckoutRequest{Key: "r4d-external-checkout-2", Rail: businessplugins.RailExternal, Provider: "bridge.test"})
+	if !errors.Is(e, database.ErrConflict) {
+		t.Fatal("second checkout while UNKNOWN must return domain conflict", e)
+	}
+	if ext.creates.Load() != 1 {
+		t.Fatal("conflicting checkout reached provider", ext.creates.Load())
+	}
 	for _, evidence := range []businessplugins.ExternalResult{
 		{Outcome: businessplugins.OutcomeAcknowledged, Status: businessplugins.PaymentPaid, Reference: "unverified-charge"},
 		{Outcome: businessplugins.OutcomeUnknown, Status: businessplugins.PaymentPaid, Reference: "ambiguous-charge", Amount: p.Amount},
