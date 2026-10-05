@@ -152,7 +152,7 @@ func (p *r4dExternal) Reconcile(context.Context, string, businessplugins.Externa
 func TestR4DExternalProviderNeutralUnknownAndReconciliation(t *testing.T) {
 	f, _ := r4dFixture(t)
 	ext := &r4dExternal{}
-	f.biz.Payments = ext
+	f.biz.PaymentProvider = ext
 	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
 		Definition: shop.Product{Name: "External Product", Enabled: true, Price: ledger.Money{Asset: ledger.USD, AmountAtomic: 500}},
 		Key:        "r4d-external-product",
