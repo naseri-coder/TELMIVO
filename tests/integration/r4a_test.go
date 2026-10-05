@@ -33,7 +33,7 @@ func TestR4ACanonicalRuntimeLifecycle(t *testing.T) {
 	must(t, f.content.Connect(ctx, f.u.UserID, scope, "https://mini.test", "r4a-connect"))
 	status, e = f.content.RuntimeStatus(ctx, f.u.UserID, scope)
 	must(t, e)
-	if status.Status != "RUNNING" || !status.Connected || status.Username != "r3d4_connected_test" {
+	if status.Status != "RUNNING" || !status.Connected || status.Username != f.transport.username {
 		t.Fatal("connection not projected", status)
 	}
 	must(t, f.content.AdmitWebhook(ctx, scope))
