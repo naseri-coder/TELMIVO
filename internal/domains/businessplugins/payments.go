@@ -217,7 +217,16 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 			if saved != fp {
 				return database.ErrConflict
 			}
-			out, payer, e = payment(ctx, tx, scope, out.ID, false)
+			out, payer, e = payment(ctx, tx, scope, out.ID, true)
+			if e != nil {
+				return e
+			}
+			if out.State == PaymentCreating {
+				if _, e = tx.Exec(ctx, "UPDATE commerce_payment_intents SET state='UNKNOWN',outcome_code='INTERRUPTED_CHECKOUT',revision=revision+1,updated_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, out.ID, s.now()); e != nil {
+					return e
+				}
+				out, payer, e = payment(ctx, tx, scope, out.ID, false)
+			}
 			return e
 		}
 		if !errors.Is(e, pgx.ErrNoRows) {
@@ -501,7 +510,25 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 			if saved != fp {
 				return database.ErrConflict
 			}
-			out, e = scanRefund(tx.QueryRow(ctx, "SELECT "+refundColumns+" FROM commerce_refunds WHERE id=$1", out.ID))
+			out, e = scanRefund(tx.QueryRow(ctx, "SELECT "+refundColumns+" FROM commerce_refunds WHERE id=$1 FOR UPDATE", out.ID))
+			if e != nil {
+				return e
+			}
+			if out.State == "PROCESSING" {
+				p, _, e = payment(ctx, tx, scope, paymentID, true)
+				if e != nil {
+					return e
+				}
+				if _, e = tx.Exec(ctx, "UPDATE commerce_refunds SET state='UNKNOWN',outcome_code='INTERRUPTED_REFUND',revision=revision+1,updated_at=$2,completed_at=$2 WHERE id=$1", out.ID, s.now()); e != nil {
+					return e
+				}
+				if p.State == PaymentRefundPending {
+					if _, e = tx.Exec(ctx, "UPDATE commerce_payment_intents SET state='REFUND_UNKNOWN',outcome_code='INTERRUPTED_REFUND',revision=revision+1,updated_at=$2 WHERE id=$1", p.ID, s.now()); e != nil {
+						return e
+					}
+				}
+				out, e = scanRefund(tx.QueryRow(ctx, "SELECT "+refundColumns+" FROM commerce_refunds WHERE id=$1", out.ID))
+			}
 			return e
 		}
 		if !errors.Is(e, pgx.ErrNoRows) {
