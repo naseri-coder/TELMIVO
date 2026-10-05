@@ -35,10 +35,11 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8080/health/ready
           curl --retry 10 --retry-all-errors --retry-delay 1 -fsS http://127.0.0.1:5173/ | grep 'dir="rtl"'
-          for app in main-bot group-bot downloader-bot customer-bot-runtime; do
+          for app in main-bot group-bot downloader-bot; do
             docker run --rm --network telmivo-dev_default curlimages/curl:8.12.1 -fsS http://$app:8080/health/ready
           done
-          test "$(docker compose ps --status running -q | wc -l)" -eq 11
+          ! docker compose config --services | grep -qx customer-bot-runtime
+          test "$(docker compose ps --status running -q | wc -l)" -eq 10
       - name: Stop isolated Compose
         if: always()
         run: docker compose down
