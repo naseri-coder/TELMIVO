@@ -5,32 +5,144 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type Config struct {
-	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL      string
-	BotToken, WebhookSecret, CredentialKey, StorageEndpoint, StorageBucket string
-	GroupBotToken, DownloaderBotToken                                      string
-	AdminIDs                                                               []int64
-	Synthetic                                                              bool
-	GroupTestAuthority                                                     bool
-	DownloaderTestFixture                                                  bool
-	BotFactoryTestFixture                                                  bool
-	ContentTestFixture                                                     bool
-	SessionTTL, JobTimeout                                                 time.Duration
-	MediaConcurrency, MaxMediaBytes                                        int64
+	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL string
+	BotToken, WebhookSecret, CredentialKey, CredentialKeyID           string
+	WebhookDigestKey, StorageEndpoint, StorageBucket                  string
+	GroupBotToken, DownloaderBotToken                                 string
+	MediaStorageRoot, MediaWorkRoot                                   string
+	CredentialKeys                                                    map[string][]byte
+	AdminIDs                                                          []int64
+	Synthetic                                                         bool
+	GroupTestAuthority                                                bool
+	DownloaderTestFixture                                             bool
+	BotFactoryTestFixture                                             bool
+	ContentTestFixture                                                bool
+	SessionTTL, JobTimeout                                            time.Duration
+	MediaConcurrency, MaxMediaBytes                                   int64
+}
+
+func validKeyID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for i, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || (i > 0 && (r == '.' || r == '_' || r == '-')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func decode32(raw string) ([]byte, error) {
+	b, e := base64.StdEncoding.DecodeString(raw)
+	if e != nil || len(b) != 32 {
+		return nil, errors.New("invalid 256-bit key")
+	}
+	return b, nil
+}
+
+func parseKeyring(raw string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	for _, item := range strings.Split(raw, ";") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		parts := strings.SplitN(item, "=", 2)
+		if len(parts) != 2 || !validKeyID(parts[0]) || out[parts[0]] != nil {
+			return nil, errors.New("invalid credential keyring")
+		}
+		key, e := decode32(parts[1])
+		if e != nil {
+			return nil, errors.New("invalid credential keyring")
+		}
+		out[parts[0]] = key
+	}
+	if len(out) == 0 {
+		return nil, errors.New("invalid credential keyring")
+	}
+	return out, nil
+}
+
+func secureDatabaseURL(raw string) bool {
+	u, e := url.Parse(raw)
+	if e != nil {
+		return false
+	}
+	switch u.Query().Get("sslmode") {
+	case "require", "verify-ca", "verify-full":
+		return true
+	}
+	return false
+}
+
+func productionPath(raw string) bool {
+	if !filepath.IsAbs(raw) {
+		return false
+	}
+	clean := filepath.Clean(raw)
+	return clean != "/" && clean != "/tmp" && !strings.HasPrefix(clean, "/tmp/")
+}
+
+// WebhookDigest returns a copy of the stable customer-webhook HMAC key.
+// Development/test retain the historical active-credential fallback; production
+// requires an independent WEBHOOK_DIGEST_KEY so credential rotation does not
+// silently invalidate customer bot webhook secrets.
+func (c Config) WebhookDigest() []byte {
+	if c.WebhookDigestKey != "" {
+		if b, e := decode32(c.WebhookDigestKey); e == nil {
+			return append([]byte(nil), b...)
+		}
+	}
+	if b := c.CredentialKeys[c.CredentialKeyID]; len(b) == 32 {
+		return append([]byte(nil), b...)
+	}
+	return nil
 }
 
 func Load(get func(string) string) (Config, error) {
-	c := Config{Environment: get("TELMIVO_ENV"), HTTPAddr: get("HTTP_ADDR"), DatabaseURL: get("DATABASE_URL"), RedisURL: get("REDIS_URL"), NATSURL: get("NATS_URL"), MiniAppURL: get("MINIAPP_URL"), BotToken: get("BOT_TOKEN"), GroupBotToken: get("GROUP_BOT_TOKEN"), DownloaderBotToken: get("DOWNLOADER_BOT_TOKEN"), WebhookSecret: get("WEBHOOK_SECRET"), CredentialKey: get("CREDENTIAL_KEY"), StorageEndpoint: get("S3_ENDPOINT"), StorageBucket: get("S3_BUCKET"), SessionTTL: time.Hour, JobTimeout: 5 * time.Minute, MediaConcurrency: 2, MaxMediaBytes: 49 << 20}
+	c := Config{
+		Environment:        get("TELMIVO_ENV"),
+		HTTPAddr:           get("HTTP_ADDR"),
+		DatabaseURL:        get("DATABASE_URL"),
+		RedisURL:           get("REDIS_URL"),
+		NATSURL:            get("NATS_URL"),
+		MiniAppURL:         get("MINIAPP_URL"),
+		BotToken:           get("BOT_TOKEN"),
+		GroupBotToken:      get("GROUP_BOT_TOKEN"),
+		DownloaderBotToken: get("DOWNLOADER_BOT_TOKEN"),
+		WebhookSecret:      get("WEBHOOK_SECRET"),
+		CredentialKey:      get("CREDENTIAL_KEY"),
+		CredentialKeyID:    get("CREDENTIAL_KEY_ID"),
+		WebhookDigestKey:   get("WEBHOOK_DIGEST_KEY"),
+		StorageEndpoint:    get("S3_ENDPOINT"),
+		StorageBucket:      get("S3_BUCKET"),
+		MediaStorageRoot:   get("MEDIA_STORAGE_ROOT"),
+		MediaWorkRoot:      get("MEDIA_WORK_ROOT"),
+		SessionTTL:         time.Hour,
+		JobTimeout:         5 * time.Minute,
+		MediaConcurrency:   2,
+		MaxMediaBytes:      49 << 20,
+	}
 	if c.Environment == "" {
 		c.Environment = "development"
 	}
 	if c.HTTPAddr == "" {
 		c.HTTPAddr = ":8080"
+	}
+	if c.MediaStorageRoot == "" {
+		c.MediaStorageRoot = "/tmp/telmivo-downloader-storage"
+	}
+	if c.MediaWorkRoot == "" {
+		c.MediaWorkRoot = "/tmp/telmivo-downloader-work"
 	}
 	if c.Environment != "development" && c.Environment != "test" && c.Environment != "production" {
 		return c, errors.New("invalid environment")
@@ -100,20 +212,60 @@ func Load(get func(string) string) (Config, error) {
 		}
 		c.MediaConcurrency = n
 	}
-	if c.CredentialKey != "" {
-		if key, e := base64.StdEncoding.DecodeString(c.CredentialKey); e != nil || len(key) != 32 {
+
+	ringRaw := get("CREDENTIAL_KEYRING")
+	if ringRaw != "" && c.CredentialKey != "" {
+		return c, errors.New("ambiguous credential key configuration")
+	}
+	if ringRaw != "" {
+		keys, e := parseKeyring(ringRaw)
+		if e != nil || !validKeyID(c.CredentialKeyID) || keys[c.CredentialKeyID] == nil {
+			return c, errors.New("invalid credential keyring")
+		}
+		c.CredentialKeys = keys
+	} else if c.CredentialKey != "" {
+		key, e := decode32(c.CredentialKey)
+		if e != nil {
 			return c, errors.New("invalid credential key")
 		}
+		if c.CredentialKeyID == "" {
+			c.CredentialKeyID = "primary-v1"
+		}
+		if !validKeyID(c.CredentialKeyID) {
+			return c, errors.New("invalid credential key ID")
+		}
+		c.CredentialKeys = map[string][]byte{c.CredentialKeyID: key}
+	} else {
+		c.CredentialKeys = map[string][]byte{}
 	}
+	if c.WebhookDigestKey != "" {
+		if _, e := decode32(c.WebhookDigestKey); e != nil {
+			return c, errors.New("invalid webhook digest key")
+		}
+	}
+
 	if c.Environment == "production" {
 		if c.Synthetic {
 			return c, errors.New("synthetic mode forbidden in production")
 		}
-		u, e := url.Parse(c.MiniAppURL)
-		if e != nil || u.Scheme != "https" || u.Host == "" || len(c.WebhookSecret) < 32 || c.CredentialKey == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return c, errors.New("production secrets and HTTPS required")
+		mini, e := url.Parse(c.MiniAppURL)
+		redis, redisErr := url.Parse(c.RedisURL)
+		nats, natsErr := url.Parse(c.NATSURL)
+		if e != nil || mini.Scheme != "https" || mini.Host == "" || mini.User != nil || mini.RawQuery != "" || mini.Fragment != "" ||
+			redisErr != nil || redis.Scheme != "rediss" || natsErr != nil || nats.Scheme != "tls" || !secureDatabaseURL(c.DatabaseURL) {
+			return c, errors.New("production transport security required")
+		}
+		if len(c.WebhookSecret) < 32 || c.BotToken == "" || c.GroupBotToken == "" || c.DownloaderBotToken == "" || len(c.AdminIDs) == 0 {
+			return c, errors.New("production bot credentials required")
+		}
+		if ringRaw == "" || c.CredentialKeyID == "" || c.CredentialKeys[c.CredentialKeyID] == nil || c.WebhookDigestKey == "" {
+			return c, errors.New("production credential keyring required")
+		}
+		if !productionPath(c.MediaStorageRoot) || !productionPath(c.MediaWorkRoot) {
+			return c, errors.New("production media paths must be persistent")
 		}
 	}
 	return c, nil
 }
+
 func FromEnv() (Config, error) { return Load(os.Getenv) }
