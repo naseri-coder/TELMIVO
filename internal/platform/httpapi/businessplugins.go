@@ -106,7 +106,6 @@ func (a *API) businessCampaignHistory(w http.ResponseWriter, r *http.Request) {
 	supportReply(w, v, e)
 }
 
-
 func (a *API) businessCheckout(w http.ResponseWriter, r *http.Request) {
 	var in businessplugins.CheckoutRequest
 	if decode(w, r, &in) != nil {
