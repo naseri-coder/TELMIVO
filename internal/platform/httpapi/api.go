@@ -9,6 +9,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/businessplugins"
+	"github.com/naseri-coder/TELMIVO/internal/domains/channels"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
@@ -44,6 +45,7 @@ import (
 
 type API struct {
 	Business     *businessplugins.Service
+	Channels     *channels.Service
 	Intelligence *intelligence.Service
 	DB           *database.Store
 	Factory      *botfactory.Service
@@ -101,6 +103,16 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/chat", a.intelligenceChat)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/threads/{thread}/reset", a.intelligenceReset)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/usage", a.intelligenceUsage)
+
+	protected.HandleFunc("GET /api/v1/channels", a.channelList)
+	protected.HandleFunc("POST /api/v1/channels/connect", a.channelConnect)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/verify", a.channelVerify)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/disconnect", a.channelDisconnect)
+	protected.HandleFunc("GET /api/v1/channels/{channel}/posts", a.channelPosts)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/posts", a.channelPostCreate)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/posts/{post}", a.channelPostEdit)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/posts/{post}/actions", a.channelPostAction)
+	protected.HandleFunc("GET /api/v1/channels/{channel}/posts/{post}/history", a.channelPostHistory)
 
 	protected.HandleFunc("GET /api/v1/support-bots", a.supportBots)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/crm/contacts", a.supportContacts)
@@ -319,6 +331,14 @@ func handleError(w http.ResponseWriter, e error) {
 	}
 	if errors.Is(e, contentplugins.ErrRuntimeNotRunning) {
 		fail(w, 409, "BOT_RUNTIME_NOT_RUNNING")
+		return
+	}
+	if errors.Is(e, channels.ErrAuthority) {
+		fail(w, 503, "CHANNEL_AUTHORITY_UNAVAILABLE")
+		return
+	}
+	if errors.Is(e, channels.ErrBotRights) {
+		fail(w, 403, "CHANNEL_BOT_RIGHT_MISSING")
 		return
 	}
 	if errors.Is(e, groupbot.ErrAuthority) {
