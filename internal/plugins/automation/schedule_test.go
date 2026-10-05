@@ -21,6 +21,14 @@ func TestCronValidationAndNext(t *testing.T) {
 	if !next.Equal(want) {
 		t.Fatalf("next=%s want=%s", next, want)
 	}
+	stepped, err := NextCron("5/10 * * * *", "UTC", time.Date(2026, time.October, 5, 9, 5, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stepWant := time.Date(2026, time.October, 5, 9, 15, 0, 0, time.UTC)
+	if !stepped.Equal(stepWant) {
+		t.Fatalf("stepped=%s want=%s", stepped, stepWant)
+	}
 }
 
 func TestCronDayAndWeekdaySemantics(t *testing.T) {
