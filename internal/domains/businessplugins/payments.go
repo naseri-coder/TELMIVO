@@ -20,15 +20,15 @@ const (
 	RailTelegramStars = "TELEGRAM_STARS"
 	RailExternal      = "EXTERNAL"
 
-	PaymentCreating        = "CREATING"
-	PaymentAwaiting        = "AWAITING_PAYMENT"
-	PaymentPaid            = "PAID"
-	PaymentFailed          = "FAILED"
-	PaymentUnknown         = "UNKNOWN"
-	PaymentCancelled       = "CANCELLED"
-	PaymentRefundPending   = "REFUND_PENDING"
-	PaymentRefundUnknown   = "REFUND_UNKNOWN"
-	PaymentRefunded        = "REFUNDED"
+	PaymentCreating      = "CREATING"
+	PaymentAwaiting      = "AWAITING_PAYMENT"
+	PaymentPaid          = "PAID"
+	PaymentFailed        = "FAILED"
+	PaymentUnknown       = "UNKNOWN"
+	PaymentCancelled     = "CANCELLED"
+	PaymentRefundPending = "REFUND_PENDING"
+	PaymentRefundUnknown = "REFUND_UNKNOWN"
+	PaymentRefunded      = "REFUNDED"
 
 	OutcomeAcknowledged = "ACKNOWLEDGED"
 	OutcomeRejected     = "REJECTED"
@@ -87,12 +87,12 @@ type ExternalCheckoutRequest struct {
 }
 
 type ExternalRefundRequest struct {
-	Key                string
-	OrderID            string
-	PaymentID          string
-	ProviderPaymentID  string
-	Amount             ledger.Money
-	Reason             string
+	Key               string
+	OrderID           string
+	PaymentID         string
+	ProviderPaymentID string
+	Amount            ledger.Money
+	Reason            string
 }
 
 type ExternalReconcileRequest struct {
@@ -481,7 +481,7 @@ func (s *Service) VerifyStars(ctx context.Context, actor string, scope sdk.Scope
 		return Payment{}, database.ErrInvalid
 	}
 	return s.applyVerified(ctx, actor, scope, correlation, VerifiedPayment{
-		Provider: "telegram", EventKey: "telegram:"+charge, PaymentID: strings.TrimPrefix(payload, "telmivo:"),
+		Provider: "telegram", EventKey: "telegram:" + charge, PaymentID: strings.TrimPrefix(payload, "telmivo:"),
 		ExternalReference: charge, Amount: ledger.Money{Asset: ledger.XTR, AmountAtomic: amount}, PayerTelegramID: user,
 	})
 }
@@ -779,7 +779,6 @@ func (s *Service) PaymentHistory(ctx context.Context, actor string, scope sdk.Sc
 	})
 	return out, e
 }
-
 
 func (s *Service) HandlePayment(ctx context.Context, scope sdk.Scope, correlation string, u contentplugins.Update) (bool, error) {
 	if u.PreCheckout == nil && (u.Message == nil || u.Message.SuccessfulPayment == nil) {
