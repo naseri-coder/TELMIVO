@@ -65,5 +65,11 @@
   "factoryIssueACTIVE_DEPENDENT": "پلاگین وابسته باید ابتدا غیرفعال شود",
   "factoryIssueSTALE_REVISION": "وضعیت تغییر کرده؛ صفحه را تازه کنید",
   "factoryIssueLIFECYCLE_INVALID": "عملیات با وضعیت فعلی سازگار نیست",
-  "factoryIssueDEPENDENCY_NOT_INSTALLED": "ابتدا وابستگی نمایش‌داده‌شده را با دسترسی معتبر نصب کنید"
+  "factoryIssueDEPENDENCY_NOT_INSTALLED": "ابتدا وابستگی نمایش‌داده‌شده را با دسترسی معتبر نصب کنید",
+  "factoryRuntimeTitle": "اجرای ربات",
+  "factoryRuntimeIngress": "مسیر امن دریافت آپدیت",
+  "factoryRuntimeRunningHelp": "اتصال تلگرام فعال است و فقط مسیر API مرکزی آپدیت‌ها را پردازش می‌کند.",
+  "factoryRuntimeStoppedHelp": "اجرای ربات متوقف است. تنظیمات و داده‌های پلاگین‌ها حفظ می‌شوند.",
+  "factoryRuntimePause": "توقف اتصال",
+  "factoryRuntimeConnect": "اتصال و فعال‌سازی"
 }

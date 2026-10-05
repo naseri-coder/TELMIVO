@@ -27,11 +27,12 @@ import (
 )
 
 type r3d4Transport struct {
-	states                 map[int64]string
-	state, code            string
-	sends, checks, prompts atomic.Int64
-	outcome                string
-	lastKind, lastFile     string
+	states                              map[int64]string
+	state, code                         string
+	sends, checks, prompts, disconnects atomic.Int64
+	outcome                             string
+	username                            string
+	lastKind, lastFile                  string
 }
 
 func (t *r3d4Transport) Check(_ context.Context, channel int64, _ int64) (string, string) {
@@ -54,7 +55,14 @@ func (t *r3d4Transport) Prompt(context.Context, int64, string, any) error {
 	return nil
 }
 func (t *r3d4Transport) Connect(context.Context, string, string) (string, error) {
+	if t.username != "" {
+		return t.username, nil
+	}
 	return "r3d4_connected_test", nil
+}
+func (t *r3d4Transport) Disconnect(context.Context) error {
+	t.disconnects.Add(1)
+	return nil
 }
 
 type r3d4Provider struct{ transport *r3d4Transport }

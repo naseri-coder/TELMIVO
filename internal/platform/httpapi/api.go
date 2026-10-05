@@ -9,6 +9,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/businessplugins"
+	"github.com/naseri-coder/TELMIVO/internal/domains/channels"
 	"github.com/naseri-coder/TELMIVO/internal/domains/commerce"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
@@ -20,6 +21,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/subscriptions"
 	"github.com/naseri-coder/TELMIVO/internal/domains/supportplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/tickets"
+	"github.com/naseri-coder/TELMIVO/internal/domains/uploads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/wallets"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
@@ -44,6 +46,7 @@ import (
 
 type API struct {
 	Business     *businessplugins.Service
+	Channels     *channels.Service
 	Intelligence *intelligence.Service
 	DB           *database.Store
 	Factory      *botfactory.Service
@@ -56,6 +59,7 @@ type API struct {
 	Requests     atomic.Uint64
 	Groups       *groupbot.Service
 	Storage      *storage.Scoped
+	Uploads      *uploads.Service
 }
 type ctxKey string
 
@@ -84,6 +88,11 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/forms/submissions/{form}", a.businessSubmissions)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/commerce/orders", a.businessOrders)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/commerce/orders/{order}/history", a.businessOrderHistory)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/commerce/orders/{order}/checkout", a.businessCheckout)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/commerce/payments", a.businessPayments)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/business/commerce/payments/{payment}/history", a.businessPaymentHistory)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/commerce/payments/{payment}/refund", a.businessRefund)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/business/commerce/payments/{payment}/reconcile", a.businessReconcile)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/options", a.intelligenceOptions)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflows)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/automation/workflows", a.intelligenceWorkflowSave)
@@ -101,6 +110,27 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/chat", a.intelligenceChat)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/threads/{thread}/reset", a.intelligenceReset)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/usage", a.intelligenceUsage)
+
+	protected.HandleFunc("GET /api/v1/uploader/workflows", a.uploadWorkflows)
+	protected.HandleFunc("POST /api/v1/uploader/workflows", a.uploadWorkflowSave)
+	protected.HandleFunc("POST /api/v1/uploader/workflows/{workflow}", a.uploadWorkflowSave)
+	protected.HandleFunc("GET /api/v1/uploader/uploads", a.uploadList)
+	protected.HandleFunc("POST /api/v1/uploader/uploads", a.uploadCreate)
+	protected.HandleFunc("PUT /api/v1/uploader/uploads/{upload}/content", a.uploadContent)
+	protected.HandleFunc("POST /api/v1/uploader/uploads/{upload}/actions", a.uploadAction)
+	protected.HandleFunc("GET /api/v1/uploader/uploads/{upload}/content", a.uploadOpen)
+	protected.HandleFunc("GET /api/v1/uploader/uploads/{upload}/signed-url", a.uploadSignedURL)
+	protected.HandleFunc("POST /api/v1/uploader/uploads/{upload}/file-manager", a.uploadHandoff)
+
+	protected.HandleFunc("GET /api/v1/channels", a.channelList)
+	protected.HandleFunc("POST /api/v1/channels/connect", a.channelConnect)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/verify", a.channelVerify)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/disconnect", a.channelDisconnect)
+	protected.HandleFunc("GET /api/v1/channels/{channel}/posts", a.channelPosts)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/posts", a.channelPostCreate)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/posts/{post}", a.channelPostEdit)
+	protected.HandleFunc("POST /api/v1/channels/{channel}/posts/{post}/actions", a.channelPostAction)
+	protected.HandleFunc("GET /api/v1/channels/{channel}/posts/{post}/history", a.channelPostHistory)
 
 	protected.HandleFunc("GET /api/v1/support-bots", a.supportBots)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/crm/contacts", a.supportContacts)
@@ -125,7 +155,9 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/managed-files", a.contentFiles)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/managed-files", a.contentFileSave)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/managed-files/{reference}", a.contentFileSave)
+	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/runtime", a.contentRuntime)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/connect", a.contentConnect)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/disconnect", a.contentDisconnect)
 	protected.HandleFunc("GET /api/v1/customer-bots", a.factoryList)
 	protected.HandleFunc("GET /api/v1/customer-bots/catalog", a.factoryCatalog)
 	protected.HandleFunc("POST /api/v1/customer-bots/preview", a.factoryPreview)
@@ -313,6 +345,26 @@ func handleError(w http.ResponseWriter, e error) {
 	}
 	if errors.Is(e, database.ErrForbidden) {
 		fail(w, 403, "forbidden")
+		return
+	}
+	if errors.Is(e, storage.ErrDenied) {
+		fail(w, 403, "forbidden")
+		return
+	}
+	if errors.Is(e, storage.ErrUnavailable) {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if errors.Is(e, contentplugins.ErrRuntimeNotRunning) {
+		fail(w, 409, "BOT_RUNTIME_NOT_RUNNING")
+		return
+	}
+	if errors.Is(e, channels.ErrAuthority) {
+		fail(w, 503, "CHANNEL_AUTHORITY_UNAVAILABLE")
+		return
+	}
+	if errors.Is(e, channels.ErrBotRights) {
+		fail(w, 403, "CHANNEL_BOT_RIGHT_MISSING")
 		return
 	}
 	if errors.Is(e, groupbot.ErrAuthority) {

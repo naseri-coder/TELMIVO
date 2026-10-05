@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 
 	"fmt"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,59 @@ func (s *Service) WebhookSecret(account, bot string) string {
 	h.Write([]byte("telmivo-customer-webhook:" + account + ":" + bot))
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+var ErrRuntimeNotRunning = errors.New("customer bot runtime not running")
+
+type RuntimeStatus struct {
+	BotID       string `json:"bot_id"`
+	Username    string `json:"username"`
+	Status      string `json:"status"`
+	IngressPath string `json:"ingress_path"`
+	Connected   bool   `json:"connected"`
+}
+
+func ingressPath(account, bot string) string {
+	return "/api/v1/customer-bot-updates/" + account + "/" + bot
+}
+
+func (s *Service) RuntimeStatus(ctx context.Context, actor string, scope sdk.Scope) (RuntimeStatus, error) {
+	out := RuntimeStatus{BotID: scope.BotID, IngressPath: ingressPath(scope.AccountID, scope.BotID)}
+	e := s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
+		if !database.Permission(ctx, tx, actor, scope.AccountID, "bots.manage") {
+			return database.ErrForbidden
+		}
+		if e := tx.QueryRow(ctx, "SELECT username,status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID).Scan(&out.Username, &out.Status); e != nil {
+			return e
+		}
+		out.Connected = out.Status == "RUNNING"
+		return nil
+	})
+	return out, e
+}
+
+func (s *Service) AdmitWebhook(ctx context.Context, scope sdk.Scope) error {
+	tx, e := s.DB.Pool.Begin(ctx)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(ctx)
+	if e = database.Scope(ctx, tx, scope.AccountID); e != nil {
+		return e
+	}
+	var status string
+	if e = tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID).Scan(&status); e != nil {
+		return e
+	}
+	if status != "RUNNING" {
+		return ErrRuntimeNotRunning
+	}
+	return nil
+}
+
+type disconnectTransport interface {
+	Disconnect(context.Context) error
+}
+
 func (s *Service) Connect(ctx context.Context, actor string, scope sdk.Scope, origin, corr string) error {
 	u, e := url.Parse(origin)
 	if e != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(s.DigestKey) < 32 {
@@ -34,21 +88,48 @@ func (s *Service) Connect(ctx context.Context, actor string, scope sdk.Scope, or
 		if e := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2 FOR UPDATE", scope.AccountID, scope.BotID).Scan(&status); e != nil {
 			return e
 		}
-		if status == "DISABLED" {
-			return sdk.ErrState
-		}
 		tr, e := s.transport(ctx, tx, scope)
 		if e != nil {
 			return e
 		}
-		name, e := tr.Connect(ctx, u.Scheme+"://"+u.Host+"/api/v1/customer-bot-updates/"+scope.AccountID+"/"+scope.BotID, s.WebhookSecret(scope.AccountID, scope.BotID))
+		name, e := tr.Connect(ctx, u.Scheme+"://"+u.Host+ingressPath(scope.AccountID, scope.BotID), s.WebhookSecret(scope.AccountID, scope.BotID))
 		if e != nil {
 			return e
 		}
 		if _, e = tx.Exec(ctx, "UPDATE customer_bots SET username=$3,status='RUNNING' WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID, name); e != nil {
 			return e
 		}
-		return database.Audit(ctx, tx, actor, scope.AccountID, "bot.telegram.connect", "customer_bot", scope.BotID, corr, map[string]any{}, map[string]any{"status": "RUNNING"})
+		return database.Audit(ctx, tx, actor, scope.AccountID, "bot.telegram.connect", "customer_bot", scope.BotID, corr, map[string]any{"status": status}, map[string]any{"status": "RUNNING", "username": name})
+	})
+}
+
+func (s *Service) Disconnect(ctx context.Context, actor string, scope sdk.Scope, corr string) error {
+	return s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
+		if !database.Permission(ctx, tx, actor, scope.AccountID, "bots.manage") {
+			return database.ErrForbidden
+		}
+		var status string
+		if e := tx.QueryRow(ctx, "SELECT status FROM customer_bots WHERE workspace_id=$1 AND id::text=$2 FOR UPDATE", scope.AccountID, scope.BotID).Scan(&status); e != nil {
+			return e
+		}
+		if status == "DISABLED" {
+			return nil
+		}
+		tr, e := s.transport(ctx, tx, scope)
+		if e != nil {
+			return e
+		}
+		d, ok := tr.(disconnectTransport)
+		if !ok {
+			return sdk.ErrPermission
+		}
+		if e = d.Disconnect(ctx); e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, "UPDATE customer_bots SET status='DISABLED' WHERE workspace_id=$1 AND id::text=$2", scope.AccountID, scope.BotID); e != nil {
+			return e
+		}
+		return database.Audit(ctx, tx, actor, scope.AccountID, "bot.telegram.disconnect", "customer_bot", scope.BotID, corr, map[string]any{"status": status}, map[string]any{"status": "DISABLED"})
 	})
 }
 
@@ -56,6 +137,13 @@ type Media struct {
 	FileID   string `json:"file_id"`
 	UniqueID string `json:"file_unique_id"`
 	Name     string `json:"file_name"`
+}
+type SuccessfulPayment struct {
+	Currency                string `json:"currency"`
+	TotalAmount             int64  `json:"total_amount"`
+	InvoicePayload          string `json:"invoice_payload"`
+	TelegramPaymentChargeID string `json:"telegram_payment_charge_id"`
+	ProviderPaymentChargeID string `json:"provider_payment_charge_id"`
 }
 type Message struct {
 	From struct {
@@ -68,16 +156,26 @@ type Message struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
 	} `json:"chat"`
-	Text     string  `json:"text"`
-	Caption  string  `json:"caption"`
-	Document *Media  `json:"document"`
-	Video    *Media  `json:"video"`
-	Audio    *Media  `json:"audio"`
-	Photos   []Media `json:"photo"`
+	Text              string             `json:"text"`
+	Caption           string             `json:"caption"`
+	Document          *Media             `json:"document"`
+	Video             *Media             `json:"video"`
+	Audio             *Media             `json:"audio"`
+	Photos            []Media            `json:"photo"`
+	SuccessfulPayment *SuccessfulPayment `json:"successful_payment"`
 }
 type Update struct {
-	ID       int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	ID          int64    `json:"update_id"`
+	Message     *Message `json:"message"`
+	PreCheckout *struct {
+		ID   string `json:"id"`
+		From struct {
+			ID int64 `json:"id"`
+		} `json:"from"`
+		Currency       string `json:"currency"`
+		TotalAmount    int64  `json:"total_amount"`
+		InvoicePayload string `json:"invoice_payload"`
+	} `json:"pre_checkout_query"`
 	Callback *struct {
 		From struct {
 			ID int64 `json:"id"`
@@ -100,7 +198,18 @@ func (s *Service) webhookActor(ctx context.Context, scope sdk.Scope) (string, er
 	e = tx.QueryRow(ctx, `SELECT m.user_id::text FROM workspace_members m JOIN role_permissions p ON p.role_key=m.role_key AND p.permission_key='bots.manage' WHERE m.workspace_id=$1 AND m.role_key='OWNER' ORDER BY m.user_id LIMIT 1`, scope.AccountID).Scan(&actor)
 	return actor, e
 }
+
+type PaymentHandler interface {
+	HandlePayment(context.Context, sdk.Scope, string, Update) (bool, error)
+}
+
 func (s *Service) HandleUpdate(ctx context.Context, scope sdk.Scope, corr string, u Update) error {
+	if p, ok := s.Support.(PaymentHandler); ok {
+		handled, e := p.HandlePayment(ctx, scope, corr, u)
+		if handled {
+			return e
+		}
+	}
 	m := u.Message
 	text := ""
 	user := int64(0)

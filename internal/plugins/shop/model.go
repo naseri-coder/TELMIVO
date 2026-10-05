@@ -16,6 +16,7 @@ type Product struct {
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
 	Enabled     bool         `json:"enabled"`
+	Digital     bool         `json:"digital"`
 	Price       ledger.Money `json:"price"`
 	Revision    int64        `json:"revision"`
 }
@@ -34,6 +35,7 @@ type Line struct {
 	Name     string       `json:"name"`
 	Revision int64        `json:"product_revision"`
 	Quantity int64        `json:"quantity"`
+	Digital  bool         `json:"digital"`
 	Price    ledger.Money `json:"price"`
 	Total    ledger.Money `json:"total"`
 }
@@ -70,7 +72,7 @@ func Snapshot(items []Item, products map[string]Product) ([]Line, ledger.Money, 
 			return nil, total, false
 		}
 		total.AmountAtomic += n
-		lines = append(lines, Line{p.ID, p.Name, p.Revision, i.Quantity, p.Price, ledger.Money{Asset: p.Price.Asset, AmountAtomic: n}})
+		lines = append(lines, Line{p.ID, p.Name, p.Revision, i.Quantity, p.Digital, p.Price, ledger.Money{Asset: p.Price.Asset, AmountAtomic: n}})
 	}
 	return lines, total, true
 }
@@ -86,5 +88,5 @@ func Transition(from, to string) bool {
 	return false
 }
 func Manifest() sdk.Manifest {
-	return sdk.Manifest{SchemaVersion: 1, PluginID: ID, Name: "فروشگاه", Description: "محصول و سفارش با قیمت تاریخی؛ بدون درگاه پرداخت", Version: "1.0.0", CoreVersions: sdk.VersionRange{Minimum: "0.3.0", MaximumExclusive: "1.0.0"}, DataVersion: 1, Permissions: []string{"commerce.manage", "commerce.order", "crm.write"}, Dependencies: []sdk.Dependency{{PluginID: crm.ID, Versions: sdk.VersionRange{Minimum: "1.0.0", MaximumExclusive: "2.0.0"}}}, Settings: sdk.SettingsSchema{Properties: map[string]sdk.Setting{}}, Extensions: sdk.Extensions{PricingPolicy: ID, QuotaPolicy: "commerce.orders.monthly"}}
+	return sdk.Manifest{SchemaVersion: 1, PluginID: ID, Name: "فروشگاه", Description: "محصول، سفارش و checkout با قیمت تاریخی و rail پرداخت قابل‌اعتبارسنجی", Version: "1.0.0", CoreVersions: sdk.VersionRange{Minimum: "0.3.0", MaximumExclusive: "1.0.0"}, DataVersion: 1, Permissions: []string{"commerce.manage", "commerce.order", "crm.write"}, Dependencies: []sdk.Dependency{{PluginID: crm.ID, Versions: sdk.VersionRange{Minimum: "1.0.0", MaximumExclusive: "2.0.0"}}}, Settings: sdk.SettingsSchema{Properties: map[string]sdk.Setting{}}, Extensions: sdk.Extensions{PricingPolicy: ID, QuotaPolicy: "commerce.orders.monthly"}}
 }

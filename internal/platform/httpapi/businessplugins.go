@@ -105,3 +105,43 @@ func (a *API) businessCampaignHistory(w http.ResponseWriter, r *http.Request) {
 	v, e := a.BusinessService().CampaignHistory(r.Context(), user(r), contentScope(r, broadcast.ID), r.PathValue("campaign"), r.URL.Query().Get("cursor"))
 	supportReply(w, v, e)
 }
+
+func (a *API) businessCheckout(w http.ResponseWriter, r *http.Request) {
+	var in businessplugins.CheckoutRequest
+	if decode(w, r, &in) != nil {
+		fail(w, 400, "invalid")
+		return
+	}
+	v, e := a.BusinessService().Checkout(r.Context(), user(r), contentScope(r, shop.ID), r.PathValue("order"), correlation(r), in)
+	supportReply(w, v, e)
+}
+
+func (a *API) businessPayments(w http.ResponseWriter, r *http.Request) {
+	v, e := a.BusinessService().Payments(r.Context(), user(r), contentScope(r, shop.ID), r.URL.Query().Get("order"))
+	supportReply(w, v, e)
+}
+
+func (a *API) businessPaymentHistory(w http.ResponseWriter, r *http.Request) {
+	v, e := a.BusinessService().PaymentHistory(r.Context(), user(r), contentScope(r, shop.ID), r.PathValue("payment"))
+	supportReply(w, v, e)
+}
+
+func (a *API) businessRefund(w http.ResponseWriter, r *http.Request) {
+	var in businessplugins.RefundRequest
+	if decode(w, r, &in) != nil {
+		fail(w, 400, "invalid")
+		return
+	}
+	v, e := a.BusinessService().Refund(r.Context(), user(r), contentScope(r, shop.ID), r.PathValue("payment"), correlation(r), in)
+	supportReply(w, v, e)
+}
+
+func (a *API) businessReconcile(w http.ResponseWriter, r *http.Request) {
+	var in struct{}
+	if decode(w, r, &in) != nil {
+		fail(w, 400, "invalid")
+		return
+	}
+	v, e := a.BusinessService().Reconcile(r.Context(), user(r), contentScope(r, shop.ID), r.PathValue("payment"), correlation(r))
+	supportReply(w, v, e)
+}

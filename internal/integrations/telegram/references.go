@@ -92,11 +92,22 @@ func (c *Client) Connect(ctx context.Context, endpoint, secret string) (string, 
 		return "", errors.New("BOT_VERIFICATION_FAILED")
 	}
 	var ok bool
-	if e := c.call(ctx, "setWebhook", map[string]any{"url": endpoint, "secret_token": secret, "allowed_updates": []string{"message", "callback_query"}}, &ok); e != nil {
+	if e := c.call(ctx, "setWebhook", map[string]any{"url": endpoint, "secret_token": secret, "allowed_updates": []string{"message", "callback_query", "pre_checkout_query"}}, &ok); e != nil {
 		return "", e
 	}
 	if !ok {
 		return "", fmt.Errorf("WEBHOOK_NOT_ACKNOWLEDGED")
 	}
 	return me.Name, nil
+}
+
+func (c *Client) Disconnect(ctx context.Context) error {
+	var ok bool
+	if e := c.call(ctx, "deleteWebhook", map[string]any{"drop_pending_updates": false}, &ok); e != nil {
+		return e
+	}
+	if !ok {
+		return fmt.Errorf("WEBHOOK_DELETE_NOT_ACKNOWLEDGED")
+	}
+	return nil
 }
