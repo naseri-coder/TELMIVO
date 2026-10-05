@@ -33,9 +33,9 @@ func ValidState(k Kind, s State) bool {
 	case BusinessConnection:
 		return containsState(s, Requested, Precheck, AppleActionRequired, VerificationPending, Ready, ReconcileRequired, Suspended, Failed, Cancelled, Expired)
 	case DirectoryProvisioning:
-		return containsState(s, Requested, Precheck, AppleActionRequired, SyncPending, Active, ReconcileRequired, Suspended, Failed, Cancelled, Expired)
+		return containsState(s, Requested, IDPCreating, IDPCreated, AppleSyncPending, Active, SyncError, RetryPending, ReconcileRequired, Suspended, Failed, Cancelled, Expired)
 	case ManagedAccount:
-		return containsState(s, Requested, Precheck, SyncPending, Active, ReconcileRequired, Suspended, Failed, Cancelled, Expired)
+		return containsState(s, Requested, IDPCreating, IDPCreated, AppleSyncPending, Active, SyncError, RetryPending, ReconcileRequired, Suspended, Failed, Cancelled, Expired)
 	case Reconciliation:
 		return containsState(s, Requested, Precheck, ReconcileRequired, Ready, Failed, Cancelled, Expired)
 	default:
@@ -62,7 +62,6 @@ func CanTransition(k Kind, from, to State) bool {
 			AppleActionRequired, Cancelled,
 			AppleActionRequired, Expired,
 			AppleCompleted, VerificationPending,
-			AppleCompleted, Ready,
 			AppleCompleted, Failed,
 			VerificationPending, Ready,
 			VerificationPending, Failed,
@@ -103,39 +102,56 @@ func CanTransition(k Kind, from, to State) bool {
 		)
 	case DirectoryProvisioning:
 		return edge(from, to,
-			Requested, Precheck,
-			Precheck, AppleActionRequired,
-			Precheck, Failed,
-			Precheck, Cancelled,
-			AppleActionRequired, SyncPending,
-			AppleActionRequired, Cancelled,
-			AppleActionRequired, Expired,
-			SyncPending, Active,
-			SyncPending, ReconcileRequired,
-			SyncPending, Failed,
+			Requested, IDPCreating,
+			IDPCreating, IDPCreated,
+			IDPCreating, SyncError,
+			IDPCreating, Failed,
+			IDPCreating, Cancelled,
+			IDPCreated, AppleSyncPending,
+			IDPCreated, Failed,
+			AppleSyncPending, Active,
+			AppleSyncPending, SyncError,
+			AppleSyncPending, ReconcileRequired,
+			SyncError, RetryPending,
+			SyncError, ReconcileRequired,
+			SyncError, Failed,
+			RetryPending, AppleSyncPending,
+			RetryPending, Failed,
+			RetryPending, Cancelled,
 			Active, ReconcileRequired,
 			Active, Suspended,
 			ReconcileRequired, Active,
+			ReconcileRequired, RetryPending,
 			ReconcileRequired, Suspended,
 			ReconcileRequired, Failed,
-			Suspended, ReconcileRequired,
+			Suspended, RetryPending,
 			Suspended, Cancelled,
 		)
 	case ManagedAccount:
 		return edge(from, to,
-			Requested, Precheck,
-			Precheck, SyncPending,
-			Precheck, Failed,
-			Precheck, Cancelled,
-			SyncPending, Active,
-			SyncPending, ReconcileRequired,
-			SyncPending, Failed,
+			Requested, IDPCreating,
+			IDPCreating, IDPCreated,
+			IDPCreating, SyncError,
+			IDPCreating, Failed,
+			IDPCreating, Cancelled,
+			IDPCreated, AppleSyncPending,
+			IDPCreated, Failed,
+			AppleSyncPending, Active,
+			AppleSyncPending, SyncError,
+			AppleSyncPending, ReconcileRequired,
+			SyncError, RetryPending,
+			SyncError, ReconcileRequired,
+			SyncError, Failed,
+			RetryPending, AppleSyncPending,
+			RetryPending, Failed,
+			RetryPending, Cancelled,
 			Active, ReconcileRequired,
 			Active, Suspended,
 			ReconcileRequired, Active,
+			ReconcileRequired, RetryPending,
 			ReconcileRequired, Suspended,
 			ReconcileRequired, Failed,
-			Suspended, ReconcileRequired,
+			Suspended, RetryPending,
 			Suspended, Cancelled,
 		)
 	case Reconciliation:
