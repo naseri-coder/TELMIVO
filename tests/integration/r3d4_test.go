@@ -27,11 +27,11 @@ import (
 )
 
 type r3d4Transport struct {
-	states                 map[int64]string
-	state, code            string
+	states                             map[int64]string
+	state, code                        string
 	sends, checks, prompts, disconnects atomic.Int64
-	outcome                string
-	lastKind, lastFile     string
+	outcome                            string
+	lastKind, lastFile                 string
 }
 
 func (t *r3d4Transport) Check(_ context.Context, channel int64, _ int64) (string, string) {
