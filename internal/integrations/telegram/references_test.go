@@ -46,6 +46,12 @@ func TestReferenceTransport(t *testing.T) {
 			t.Fatal(kind, code)
 		}
 	}
+	if e := c.Disconnect(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if methods[len(methods)-1] != "deleteWebhook" {
+		t.Fatal(methods)
+	}
 	c.Enabled = false
 	if _, code = c.SendFile(context.Background(), 10, "document", "ref", "title"); code != "DELIVERY_FAILED" {
 		t.Fatal(code)
