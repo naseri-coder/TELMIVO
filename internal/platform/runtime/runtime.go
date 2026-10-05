@@ -39,6 +39,9 @@ func Main(role string) {
 }
 func Run(role string) error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	if role == "customer-bot-runtime" {
+		return errors.New("CUSTOMER_BOT_RUNTIME_RETIRED_USE_API_INGRESS")
+	}
 	c, e := config.FromEnv()
 	if e != nil {
 		return e
