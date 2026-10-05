@@ -28,11 +28,18 @@ func TestGroupTelegramBoundary(t *testing.T) {
 		if method == "getMe" {
 			result = `{"id":999}`
 		}
+		if method == "getChat" {
+			result = `{"id":-123,"type":"channel","title":"Synthetic Channel"}`
+		}
 		if method == "getChatMember" {
 			result = `{"status":"administrator","can_delete_messages":true,"can_restrict_members":true}`
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":` + result + `}`)), Header: http.Header{}}, nil
 	})}
+	title, e := c.Channel(context.Background(), -123)
+	if e != nil || title != "Synthetic Channel" {
+		t.Fatal(title, e)
+	}
 	id, m, e := c.Bot(context.Background(), -123)
 	if e != nil || id != 999 || !m.Admin() || !m.Delete || !m.Restrict {
 		t.Fatal(id, m, e)
