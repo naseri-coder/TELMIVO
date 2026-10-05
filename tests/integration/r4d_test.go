@@ -54,7 +54,7 @@ func TestR4DStarsCheckoutVerificationRefundAndReplay(t *testing.T) {
 	f, tr := r4dFixture(t)
 	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
 		Definition: shop.Product{Name: "Digital Stars", Enabled: true, Digital: true, Price: ledger.Money{Asset: ledger.XTR, AmountAtomic: 25}},
-		Key: "r4d-stars-product",
+		Key:        "r4d-stars-product",
 	})
 	must(t, e)
 	o, e := f.biz.PlaceTrusted(ctx, f.u.UserID, f.scope(shop.ID), "r4d-stars-order", businessplugins.Customer{User: 10101001, Name: "Stars Customer"}, []shop.Item{{Product: d.ID, Quantity: 2}})
@@ -155,7 +155,7 @@ func TestR4DExternalProviderNeutralUnknownAndReconciliation(t *testing.T) {
 	f.biz.Payments = ext
 	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
 		Definition: shop.Product{Name: "External Product", Enabled: true, Price: ledger.Money{Asset: ledger.USD, AmountAtomic: 500}},
-		Key: "r4d-external-product",
+		Key:        "r4d-external-product",
 	})
 	must(t, e)
 	o, e := f.biz.PlaceTrusted(ctx, f.u.UserID, f.scope(shop.ID), "r4d-external-order", businessplugins.Customer{User: 10101002, Name: "External Customer"}, []shop.Item{{Product: d.ID, Quantity: 1}})
@@ -231,7 +231,7 @@ func TestR4DBrowserFixture(t *testing.T) {
 	scope.PluginID = shop.ID
 	d, e := biz.SaveProduct(ctx, u.UserID, scope, "", businessplugins.Change[shop.Product]{
 		Definition: shop.Product{Name: "محصول ستاره‌ای مرورگر", Enabled: true, Digital: true, Price: ledger.Money{Asset: ledger.XTR, AmountAtomic: 7}},
-		Key: "r4d-browser-product",
+		Key:        "r4d-browser-product",
 	})
 	must(t, e)
 	_, e = biz.PlaceTrusted(ctx, u.UserID, scope, "r4d-browser-order", businessplugins.Customer{User: 98012002, Name: "مشتری مرورگر"}, []shop.Item{{Product: d.ID, Quantity: 1}})
@@ -242,7 +242,7 @@ func TestR4DRecoveryPreparation(t *testing.T) {
 	f, _ := r4dFixture(t)
 	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
 		Definition: shop.Product{Name: "Recovery Stars", Enabled: true, Digital: true, Price: ledger.Money{Asset: ledger.XTR, AmountAtomic: 3}},
-		Key: "r4d-recovery-product",
+		Key:        "r4d-recovery-product",
 	})
 	must(t, e)
 	o, e := f.biz.PlaceTrusted(ctx, f.u.UserID, f.scope(shop.ID), "r4d-recovery-order", businessplugins.Customer{User: 10101999, Name: "Recovery Customer"}, []shop.Item{{Product: d.ID, Quantity: 1}})
