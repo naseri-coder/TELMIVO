@@ -31,6 +31,7 @@ type r3d4Transport struct {
 	state, code                         string
 	sends, checks, prompts, disconnects atomic.Int64
 	outcome                             string
+	username                            string
 	lastKind, lastFile                  string
 }
 
@@ -54,6 +55,9 @@ func (t *r3d4Transport) Prompt(context.Context, int64, string, any) error {
 	return nil
 }
 func (t *r3d4Transport) Connect(context.Context, string, string) (string, error) {
+	if t.username != "" {
+		return t.username, nil
+	}
 	return "r3d4_connected_test", nil
 }
 func (t *r3d4Transport) Disconnect(context.Context) error {
