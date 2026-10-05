@@ -43,6 +43,7 @@ import (
 var ctx = context.Background()
 var db, owner *database.Store
 var sequence atomic.Int64
+var authSequence atomic.Int64
 
 func TestMain(m *testing.M) {
 	for _, key := range []string{"TEST_DATABASE_URL", "TEST_MIGRATION_DATABASE_URL"} {
@@ -151,7 +152,11 @@ func TestMigration(t *testing.T) {
 	})
 }
 func signed(id int64) string {
-	q := url.Values{"auth_date": {strconv.FormatInt(time.Now().Unix(), 10)}, "user": {fmt.Sprintf(`{"id":%d,"first_name":"آزمایش"}`, id)}}
+	q := url.Values{
+		"auth_date": {strconv.FormatInt(time.Now().Unix(), 10)},
+		"query_id":  {fmt.Sprintf("integration-%d-%d", id, authSequence.Add(1))},
+		"user":      {fmt.Sprintf(`{"id":%d,"first_name":"آزمایش"}`, id)},
+	}
 	var lines []string
 	for k := range q {
 		lines = append(lines, k+"="+q.Get(k))
