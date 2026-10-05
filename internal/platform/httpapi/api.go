@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/naseri-coder/TELMIVO/internal/domains/appleservices"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botfactory"
 	"github.com/naseri-coder/TELMIVO/internal/domains/botmodules"
 	"github.com/naseri-coder/TELMIVO/internal/domains/businessplugins"
@@ -45,6 +46,7 @@ import (
 )
 
 type API struct {
+	Apple        *appleservices.Service
 	Business     *businessplugins.Service
 	Channels     *channels.Service
 	Intelligence *intelligence.Service
@@ -111,6 +113,14 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/chat", a.intelligenceChat)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/threads/{thread}/reset", a.intelligenceReset)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/usage", a.intelligenceUsage)
+
+	protected.HandleFunc("GET /api/v1/apple-services/profile", a.appleProfile)
+	protected.HandleFunc("POST /api/v1/apple-services/profile", a.appleProfileEnsure)
+	protected.HandleFunc("POST /api/v1/apple-services/profile/actions", a.appleProfileAction)
+	protected.HandleFunc("GET /api/v1/apple-services/operations", a.appleOperations)
+	protected.HandleFunc("POST /api/v1/apple-services/operations", a.appleOperationCreate)
+	protected.HandleFunc("POST /api/v1/apple-services/operations/{operation}/actions", a.appleOperationAction)
+	protected.HandleFunc("GET /api/v1/apple-services/operations/{operation}/events", a.appleOperationEvents)
 
 	protected.HandleFunc("GET /api/v1/uploader/workflows", a.uploadWorkflows)
 	protected.HandleFunc("POST /api/v1/uploader/workflows", a.uploadWorkflowSave)
