@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
@@ -41,7 +40,7 @@ func (a *API) content() *contentplugins.Service {
 		return a.Content
 	}
 	f := a.factory()
-	key, _ := base64.StdEncoding.DecodeString(a.Config.CredentialKey)
+	key := a.Config.WebhookDigest()
 	var provider contentplugins.Provider = contentProvider{f.Credentials, !a.Config.Synthetic}
 	if a.Config.ContentTestFixture && a.Config.Environment == "test" && a.Config.Synthetic {
 		provider = testfixtures.ContentProvider{}

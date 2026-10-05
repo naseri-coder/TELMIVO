@@ -119,7 +119,7 @@ func Run(role string) error {
 		}()
 	}
 	if role == "media-worker" && !c.Synthetic {
-		local, err := storage.NewLocal("/tmp/telmivo-downloader-storage", c.MaxMediaBytes)
+		local, err := storage.NewLocal(c.MediaStorageRoot, c.MaxMediaBytes)
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func Run(role string) error {
 		if err = local.Cleanup(ctx); err != nil {
 			return err
 		}
-		worker := &downloads.Worker{Product: &downloads.Product{DB: db, MaxBytes: c.MaxMediaBytes}, Adapter: media.Extractor{Python: "/opt/extractor/bin/python", Script: "/app/extract.py", Timeout: time.Minute, MaxFormats: 8}, Delivery: telegramclient.MediaClient{Token: c.DownloaderBotToken, MaxBytes: c.MaxMediaBytes, Timeout: time.Minute}, Storage: storage.Scoped{Provider: local}, Root: "/tmp/telmivo-downloader-work", Owner: "media-worker", Timeout: 5 * time.Minute, MaxBytes: c.MaxMediaBytes}
+		worker := &downloads.Worker{Product: &downloads.Product{DB: db, MaxBytes: c.MaxMediaBytes}, Adapter: media.Extractor{Python: "/opt/extractor/bin/python", Script: "/app/extract.py", Timeout: time.Minute, MaxFormats: 8}, Delivery: telegramclient.MediaClient{Token: c.DownloaderBotToken, MaxBytes: c.MaxMediaBytes, Timeout: time.Minute}, Storage: storage.Scoped{Provider: local}, Root: c.MediaWorkRoot, Owner: "media-worker", Timeout: 5 * time.Minute, MaxBytes: c.MaxMediaBytes}
 		return worker.Poll(ctx, int(c.MediaConcurrency))
 	}
 	if role == "worker" || role == "media-worker" {

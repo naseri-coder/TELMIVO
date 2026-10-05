@@ -1,0 +1,74 @@
+limit_req_zone $binary_remote_addr zone=telmivo_api:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=telmivo_webhooks:10m rate=10r/s;
+
+server {
+    listen 8080;
+    server_name ${TELMIVO_DOMAIN};
+    return 308 https://$host$request_uri;
+}
+
+server {
+    listen 8443 ssl;
+    server_name ${TELMIVO_DOMAIN};
+
+    ssl_certificate /run/telmivo/tls.crt;
+    ssl_certificate_key /run/telmivo/tls.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:TLS:10m;
+    ssl_session_timeout 10m;
+
+    client_max_body_size 2m;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header X-Frame-Options DENY always;
+
+    location /api/ {
+        limit_req zone=telmivo_api burst=40 nodelay;
+        proxy_pass http://api:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /health/ {
+        proxy_pass http://api:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location = /telegram/main/webhook {
+        limit_req zone=telmivo_webhooks burst=20 nodelay;
+        proxy_pass http://main-bot:8080/webhook;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location = /telegram/group/webhook {
+        limit_req zone=telmivo_webhooks burst=20 nodelay;
+        proxy_pass http://group-bot:8080/webhook;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location = /telegram/downloader/webhook {
+        limit_req zone=telmivo_webhooks burst=20 nodelay;
+        proxy_pass http://downloader-bot:8080/webhook;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location = /webhook {
+        return 404;
+    }
+
+    location / {
+        proxy_pass http://miniapp:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
