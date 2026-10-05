@@ -107,6 +107,7 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/platform/ai-models", a.intelligenceModelSave)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/knowledge", a.intelligenceKnowledge)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/knowledge", a.intelligenceKnowledgeSave)
+	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/ingest", a.intelligenceIngest)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/chat", a.intelligenceChat)
 	protected.HandleFunc("POST /api/v1/customer-bots/{bot}/assistant/threads/{thread}/reset", a.intelligenceReset)
 	protected.HandleFunc("GET /api/v1/customer-bots/{bot}/assistant/usage", a.intelligenceUsage)
