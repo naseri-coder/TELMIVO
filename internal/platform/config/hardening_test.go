@@ -29,6 +29,11 @@ func productionEnv() map[string]string {
 		"ADMIN_TELEGRAM_IDS":   "1",
 		"MEDIA_STORAGE_ROOT":   "/var/lib/telmivo/media",
 		"MEDIA_WORK_ROOT":      "/var/lib/telmivo/work",
+		"OBJECT_STORAGE_ENDPOINT":   "https://objects.example",
+		"OBJECT_STORAGE_BUCKET":     "telmivo-private",
+		"OBJECT_STORAGE_REGION":     "eu-test-1",
+		"OBJECT_STORAGE_ACCESS_KEY": "access-key",
+		"OBJECT_STORAGE_SECRET_KEY": "secret-key",
 	}
 }
 
@@ -51,6 +56,8 @@ func TestProductionSecretsFailClosed(t *testing.T) {
 		{"REDIS_URL", "redis://redis.example:6379/0"},
 		{"NATS_URL", "nats://nats.example:4222"},
 		{"MEDIA_STORAGE_ROOT", "/tmp/media"},
+		{"OBJECT_STORAGE_ENDPOINT", "http://objects.example"},
+		{"OBJECT_STORAGE_SECRET_KEY", ""},
 		{"SYNTHETIC_MODE", "true"},
 	} {
 		old := env[change.k]
