@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/ledger"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
@@ -726,4 +727,38 @@ func (s *Service) PaymentHistory(ctx context.Context, actor string, scope sdk.Sc
 		return rows.Err()
 	})
 	return out, e
+}
+
+
+func (s *Service) HandlePayment(ctx context.Context, scope sdk.Scope, correlation string, u contentplugins.Update) (bool, error) {
+	if u.PreCheckout == nil && (u.Message == nil || u.Message.SuccessfulPayment == nil) {
+		return false, nil
+	}
+	tx, e := s.DB.Pool.Begin(ctx)
+	if e != nil {
+		return true, e
+	}
+	defer tx.Rollback(ctx)
+	if e = database.Scope(ctx, tx, scope.AccountID); e != nil {
+		return true, e
+	}
+	actor, e := s.principal(ctx, tx, scope)
+	if e != nil {
+		return true, e
+	}
+	if e = tx.Rollback(ctx); e != nil {
+		return true, e
+	}
+	scope.PluginID = shop.ID
+	if u.PreCheckout != nil {
+		q := u.PreCheckout
+		return true, s.PreCheckoutStars(ctx, actor, scope, q.ID, q.InvoicePayload, q.Currency, q.TotalAmount, q.From.ID)
+	}
+	m := u.Message
+	if m == nil || m.SuccessfulPayment == nil || m.From.ID <= 0 || m.Chat.Type != "private" || m.Chat.ID != m.From.ID {
+		return true, database.ErrInvalid
+	}
+	p := m.SuccessfulPayment
+	_, e = s.VerifyStars(ctx, actor, scope, correlation, p.InvoicePayload, p.TelegramPaymentChargeID, p.TotalAmount, p.Currency, m.From.ID)
+	return true, e
 }
