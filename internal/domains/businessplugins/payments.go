@@ -450,10 +450,15 @@ func (s *Service) PreCheckoutStars(ctx context.Context, actor string, scope sdk.
 			if e != nil {
 				return e
 			}
-			ok = p.Rail == RailTelegramStars && p.Provider == "telegram" && p.State == PaymentAwaiting && p.Amount.Asset == ledger.XTR && p.Amount.AmountAtomic == amount && payer == user
+			ok = p.Rail == RailTelegramStars && p.Provider == "telegram" && (p.State == PaymentAwaiting || p.State == PaymentUnknown) && p.Amount.Asset == ledger.XTR && p.Amount.AmountAtomic == amount && payer == user
 			if ok {
 				value := []any{queryID, payload, currency, amount, user}
-				e = paymentEvent(ctx, tx, scope, p, "precheckout:"+queryID, "PRECHECKOUT_ACCEPTED", queryID, p.Amount, value)
+				if e = paymentEvent(ctx, tx, scope, p, "precheckout:"+queryID, "PRECHECKOUT_ACCEPTED", queryID, p.Amount, value); e != nil {
+					return e
+				}
+				if p.State == PaymentUnknown {
+					_, e = tx.Exec(ctx, "UPDATE commerce_payment_intents SET state='AWAITING_PAYMENT',outcome_code='PRECHECKOUT_VERIFIED',revision=revision+1,updated_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, p.ID, s.now())
+				}
 			}
 			return e
 		})
