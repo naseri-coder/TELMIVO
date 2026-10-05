@@ -15,9 +15,9 @@ type Config struct {
 	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL string
 	BotToken, WebhookSecret, CredentialKey, CredentialKeyID           string
 	WebhookDigestKey, StorageEndpoint, StorageBucket                  string
-	StorageRegion, StorageAccessKey, StorageSecretKey                  string
+	StorageRegion, StorageAccessKey, StorageSecretKey                 string
 	GroupBotToken, DownloaderBotToken                                 string
-	MediaStorageRoot, MediaWorkRoot, UploadStorageRoot                 string
+	MediaStorageRoot, MediaWorkRoot, UploadStorageRoot                string
 	CredentialKeys                                                    map[string][]byte
 	AdminIDs                                                          []int64
 	Synthetic                                                         bool
