@@ -55,6 +55,52 @@ func r4dFixture(t *testing.T) (r3d7Data, *r4dTransport) {
 	return f, tr
 }
 
+func TestR4DStarsPreCheckoutWrongCurrencyRejected(t *testing.T) {
+	f, tr := r4dFixture(t)
+	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
+		Definition: shop.Product{Name: "Wrong currency Stars", Enabled: true, Digital: true, Price: ledger.Money{Asset: ledger.XTR, AmountAtomic: 7}},
+		Key:        "r4d-currency-product",
+	})
+	must(t, e)
+	o, e := f.biz.PlaceTrusted(ctx, f.u.UserID, f.scope(shop.ID), "r4d-currency-order", businessplugins.Customer{User: 10101004, Name: "Currency Customer"}, []shop.Item{{Product: d.ID, Quantity: 1}})
+	must(t, e)
+	p, e := f.biz.Checkout(ctx, f.u.UserID, f.scope(shop.ID), o.ID, "r4d-currency-checkout", businessplugins.CheckoutRequest{Key: "r4d-currency-checkout", Rail: businessplugins.RailTelegramStars})
+	must(t, e)
+	if p.Amount.Asset != ledger.XTR || p.State != businessplugins.PaymentAwaiting {
+		t.Fatal("fixture must expect XTR", p)
+	}
+	for i := 0; i < 2; i++ {
+		must(t, f.biz.PreCheckoutStars(ctx, f.u.UserID, f.scope(shop.ID), "r4d-wrong-currency", "telmivo:"+p.ID, "USD", 7, 10101004))
+		if tr.prechecks.Load() != int64(i+1) || tr.precheckAccepted.Load() {
+			t.Fatal("wrong currency pre-checkout accepted")
+		}
+	}
+	payments, e := f.biz.Payments(ctx, f.u.UserID, f.scope(shop.ID), o.ID)
+	must(t, e)
+	if len(payments) != 1 || payments[0].ID != p.ID || payments[0].State != businessplugins.PaymentAwaiting || payments[0].Revision != p.Revision || payments[0].PaidAt != nil || payments[0].ProviderPaymentID != "" {
+		t.Fatal("rejected currency changed or duplicated payment", payments)
+	}
+	events, e := f.biz.PaymentHistory(ctx, f.u.UserID, f.scope(shop.ID), p.ID)
+	must(t, e)
+	if len(events) != 0 {
+		t.Fatal("rejected currency produced misleading payment history", events)
+	}
+	history, e := f.biz.OrderHistory(ctx, f.u.UserID, f.scope(shop.ID), o.ID, "")
+	must(t, e)
+	if len(history) != 1 || history[0]["state"] != "PLACED" {
+		t.Fatal("rejected currency confirmed or fulfilled order", history)
+	}
+	must(t, f.biz.PreCheckoutStars(ctx, f.u.UserID, f.scope(shop.ID), "r4d-correct-currency", "telmivo:"+p.ID, "XTR", 7, 10101004))
+	if tr.prechecks.Load() != 3 || !tr.precheckAccepted.Load() || tr.invoices.Load() != 1 || tr.refunds.Load() != 0 {
+		t.Fatal("correct XTR path affected or duplicate external effect")
+	}
+	payments, e = f.biz.Payments(ctx, f.u.UserID, f.scope(shop.ID), o.ID)
+	must(t, e)
+	if len(payments) != 1 || payments[0].State != businessplugins.PaymentAwaiting || payments[0].PaidAt != nil {
+		t.Fatal("pre-checkout alone must never grant purchase", payments)
+	}
+}
+
 func TestR4DStarsCheckoutVerificationRefundAndReplay(t *testing.T) {
 	f, tr := r4dFixture(t)
 	d, e := f.biz.SaveProduct(ctx, f.u.UserID, f.scope(shop.ID), "", businessplugins.Change[shop.Product]{
