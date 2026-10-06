@@ -134,10 +134,9 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		t.Fatal("R5B schema contains prohibited secret-bearing columns", sensitiveColumns)
 	}
 
-	var mutationErr error
-	tenant(t, u, func(tx pgx.Tx) error {
-		_, mutationErr = tx.Exec(ctx, "UPDATE apple_consumer_assistance SET completion_source='NONE' WHERE operation_id=$1", flow.Operation.ID)
-		return nil
+	mutationErr := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "UPDATE apple_consumer_assistance SET completion_source='NONE' WHERE operation_id=$1", flow.Operation.ID)
+		return err
 	})
 	pgCode(t, mutationErr, "23514")
 }
