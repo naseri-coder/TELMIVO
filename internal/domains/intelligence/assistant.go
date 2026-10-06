@@ -128,6 +128,9 @@ func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Ch
 		if e != nil {
 			return e
 		}
+		if !modelCompatible(p.Model, p.Config, in.Purpose == "CLASSIFY") {
+			return &provider.Failure{Code: "MODEL_CAPABILITY_MISMATCH"}
+		}
 		if in.Purpose == "CLASSIFY" && !p.Model.Structured {
 			return database.ErrInvalid
 		}

@@ -77,3 +77,7 @@ Native validation covers vector behavior, hybrid retrieval, File Manager and Upl
 cost accounting/ceiling enforcement, browser configuration and backup/restore of the indexed
 corpus. Validation remains isolated and synthetic; this checkpoint does not authorize production
 deployment.
+
+### Post-audit model and ingestion contracts
+
+Each new request validates its saved consumer settings against the currently enabled model's tool, structured-output and token capabilities. Imported-source idempotency uses immutable receipts introduced by forward migration 0026, separate from mutable knowledge versions. A receipt binds source kind/reference and the client-supplied name and returns its original snapshot. Refresh requires a fresh key. Pre-0026 imported keys are reserved as ambiguous and fail closed rather than inventing an original request; use a new key. Manual and imported creation keys cannot collide. Expected provider/cost/context failures use safe classified HTTP errors; raw provider details are never returned.

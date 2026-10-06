@@ -10,6 +10,9 @@ func TestMigrationCheckpointContracts(t *testing.T) {
 	if err = ValidateChain(names, CurrentCheckpoint); err != nil {
 		t.Fatal(err)
 	}
+	if err = ValidateChain(names[:25], "R5B"); err != nil {
+		t.Fatal(err)
+	}
 	if err = ValidateChain(names[:23], "R4G"); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +30,7 @@ func TestMigrationCheckpointContracts(t *testing.T) {
 	order[0], order[1] = order[1], order[0]
 	cases["order"] = order
 	final := append([]string{}, names...)
-	final[24] = "0025_unexpected.sql"
+	final[len(final)-1] = "0026_unexpected.sql"
 	cases["final"] = final
 	for name, files := range cases {
 		t.Run(name, func(t *testing.T) {

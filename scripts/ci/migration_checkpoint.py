@@ -1,6 +1,7 @@
 """Exact version-scoped source migration chains, never an >= count check."""
 CHECKPOINTS = {
     'R4G': (23, '0023_ai_assistant_2.sql'),
+    'R5B_REMEDIATED': (26, '0026_ai_ingestion_receipts.sql'),
     'R5B': (25, '0025_apple_consumer_assistance.sql'),
 }
 

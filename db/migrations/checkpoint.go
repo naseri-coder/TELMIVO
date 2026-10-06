@@ -5,13 +5,15 @@ import (
 	"strings"
 )
 
-const CurrentCheckpoint = "R5B"
+const CurrentCheckpoint = "R5B_REMEDIATED"
 
 // Checkpoint keeps historical release boundaries distinct from the current tree.
 func Checkpoint(name string) (count int, final string, err error) {
 	switch name {
 	case "R4G":
 		return 23, "0023_ai_assistant_2.sql", nil
+	case "R5B_REMEDIATED":
+		return 26, "0026_ai_ingestion_receipts.sql", nil
 	case "R5B":
 		return 25, "0025_apple_consumer_assistance.sql", nil
 	default:
