@@ -121,8 +121,10 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/apple-services/operations", a.appleOperationCreate)
 	protected.HandleFunc("POST /api/v1/apple-services/operations/{operation}/actions", a.appleOperationAction)
 	protected.HandleFunc("GET /api/v1/apple-services/operations/{operation}/events", a.appleOperationEvents)
+	protected.HandleFunc("GET /api/v1/apple-services/consumer", a.appleConsumers)
 	protected.HandleFunc("POST /api/v1/apple-services/consumer", a.appleConsumerStart)
 	protected.HandleFunc("GET /api/v1/apple-services/consumer/{operation}", a.appleConsumer)
+	protected.HandleFunc("GET /api/v1/apple-services/consumer/{operation}/events", a.appleConsumerEvents)
 	protected.HandleFunc("POST /api/v1/apple-services/consumer/{operation}/actions", a.appleConsumerAction)
 
 	protected.HandleFunc("GET /api/v1/uploader/workflows", a.uploadWorkflows)
