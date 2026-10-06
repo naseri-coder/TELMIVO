@@ -70,15 +70,14 @@ type ConsumerStart struct {
 	Locale    string          `json:"locale"`
 	Region    string          `json:"region"`
 	Key       string          `json:"idempotency_key"`
-	ExpiresAt *time.Time      `json:"expires_at,omitempty"`
 }
 
-func (in ConsumerStart) Valid(now time.Time) bool {
+func (in ConsumerStart) Valid(_ time.Time) bool {
 	if !in.Goal.Valid() || !in.Channel.Valid() || !validKey(strings.TrimSpace(in.Key)) ||
 		!validLocale(strings.TrimSpace(in.Locale)) || !validRegion(strings.TrimSpace(in.Region)) {
 		return false
 	}
-	return in.ExpiresAt == nil || in.ExpiresAt.After(now)
+	return true
 }
 
 type ConsumerActionRequest struct {
