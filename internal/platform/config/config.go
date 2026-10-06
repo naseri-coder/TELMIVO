@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"errors"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 )
 
 type Config struct {
+	TrustedProxyCIDRs                                                 []netip.Prefix
 	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL string
 	BotToken, WebhookSecret, CredentialKey, CredentialKeyID           string
 	WebhookDigestKey, StorageEndpoint, StorageBucket                  string
@@ -145,6 +147,17 @@ func Load(get func(string) string) (Config, error) {
 		JobTimeout:         5 * time.Minute,
 		MediaConcurrency:   2,
 		MaxMediaBytes:      49 << 20,
+	}
+	for _, raw := range strings.Split(get("TRUSTED_PROXY_CIDRS"), ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(raw)
+		if err != nil || prefix.Bits() == 0 {
+			return c, errors.New("invalid trusted proxy CIDR")
+		}
+		c.TrustedProxyCIDRs = append(c.TrustedProxyCIDRs, prefix.Masked())
 	}
 	if c.Environment == "" {
 		c.Environment = "development"

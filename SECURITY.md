@@ -43,3 +43,5 @@ for future Sign in with Apple identity verification and account linking.
 The consumer assistance table stores only goal, device/channel, locale, optional region, guidance
 version and completion source. It uses FORCE RLS; identity metadata is immutable and a recorded
 USER_ATTESTED completion cannot be reverted.
+
+Post-audit proxy configuration requires TRUSTED_PROXY_CIDRS to identify the immediate reverse-proxy peer. The proxy overwrites X-Forwarded-For; direct untrusted peers cannot choose the API rate-limit identity. Invalid chains fail closed. Configure an exact private peer CIDR through the existing deployment configuration; the documented TEST-NET address is only a placeholder. Binary uploader content has a separate 49 MiB proxy bound while JSON requests retain the 2 MiB bound. No deployment is implied by these source changes.
