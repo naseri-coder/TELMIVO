@@ -92,7 +92,7 @@ func TestR4FHybridRetrievalIngestionAndCost(t *testing.T) {
 	r4fEnableFileManager(t, f)
 	file, err := f.ai.Content.SaveFile(ctx, f.u.UserID, f.scope(files.ID), "", "r4f", contentplugins.FileChange{
 		File: files.File{FileID: "r4f-file", UniqueID: "r4f-file-unique", Kind: "document", Title: "Course refunds", Description: "refund policy for course access and receipt verification", Category: "Support", Enabled: true},
-		Key: "r4f-file",
+		Key:  "r4f-file",
 	})
 	must(t, err)
 	fileKnowledge, err := f.ai.Ingest(ctx, f.u.UserID, f.scope(assistant.ID), intelligence.IngestRequest{

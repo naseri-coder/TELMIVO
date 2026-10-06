@@ -1,10 +1,10 @@
 name: CodeQL
 on:
   push:
-    branches: [feature/platform-bootstrap-v0.1, develop, main, 'feature/r4*']
+    branches: [feature/platform-bootstrap-v0.1, develop, main, 'feature/r4*', 'feature/r5*']
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
   pull_request:
-    branches: [develop, main, 'feature/r4*']
+    branches: [develop, main, 'feature/r4*', 'feature/r5*']
     paths-ignore: ['docs/**', '*.md', '.github/CODEOWNERS', '.github/ISSUE_TEMPLATE/**']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
