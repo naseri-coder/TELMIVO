@@ -128,6 +128,9 @@ func (s *Store) Tenant(ctx context.Context, user, workspace string, adminAllowed
 	if e = Scope(ctx, tx, workspace); e != nil {
 		return e
 	}
+	if _, e = tx.Exec(ctx, "SELECT set_config('app.user_id',$1,true)", user); e != nil {
+		return e
+	}
 	if e = fn(tx); e != nil {
 		return e
 	}
