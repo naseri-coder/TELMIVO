@@ -21,13 +21,13 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 3)
 
 	if _, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5b-generic-consumer-blocked", apple.CreateRequest{
-		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:"+u.UserID, Key: "generic-consumer-blocked",
+		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:" + u.UserID, Key: "generic-consumer-blocked",
 	}); !errors.Is(err, database.ErrInvalid) {
 		t.Fatal("generic foundation API still creates CONSUMER_ACCOUNT after R5B", err)
 	}
 
 	shared, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5b-shared-key-generic", apple.CreateRequest{
-		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:"+u.UserID, Key: "r5b-shared-key",
+		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:" + u.UserID, Key: "r5b-shared-key",
 	})
 	must(t, err)
 	if shared.Kind != apple.IdentityVerification {
@@ -40,11 +40,11 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	}
 
 	start := apple.ConsumerStart{
-		Goal: apple.ConsumerCreateAccount,
+		Goal:    apple.ConsumerCreateAccount,
 		Channel: apple.ConsumerWeb,
-		Locale: "fa-IR",
-		Region: "DE",
-		Key: "r5b-create",
+		Locale:  "fa-IR",
+		Region:  "DE",
+		Key:     "r5b-create",
 	}
 	flow, err := svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-start", start)
 	must(t, err)

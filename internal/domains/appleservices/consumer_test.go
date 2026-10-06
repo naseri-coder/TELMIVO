@@ -51,10 +51,10 @@ func TestR5BConsumerGuidanceAndActionContracts(t *testing.T) {
 		t.Fatal("R5B completion was confused with verified Apple identity", ready)
 	}
 
-	sequence := []struct{
-		from State
+	sequence := []struct {
+		from   State
 		action ConsumerAction
-		to State
+		to     State
 	}{
 		{Requested, ConsumerConfirmPrecheck, Precheck},
 		{Precheck, ConsumerContinueAtApple, AppleActionRequired},
