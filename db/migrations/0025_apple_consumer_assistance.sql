@@ -2,12 +2,12 @@
 -- This stage stores only TELMIVO workflow metadata. Passwords, OTPs, verification codes,
 -- Apple tokens and account credentials remain exclusively inside Apple-controlled flows.
 
-DO $
+DO $$
 BEGIN
  IF EXISTS (SELECT 1 FROM apple_service_operations WHERE kind='CONSUMER_ACCOUNT') THEN
   RAISE EXCEPTION 'R5B requires zero legacy generic CONSUMER_ACCOUNT operations before migration';
  END IF;
-END $;
+END $$;
 
 CREATE UNIQUE INDEX apple_service_operation_kind_identity
  ON apple_service_operations(id,workspace_id,kind);
@@ -32,7 +32,7 @@ CREATE TABLE apple_consumer_assistance(
 CREATE INDEX apple_consumer_assistance_workspace
  ON apple_consumer_assistance(workspace_id,created_at DESC);
 
-CREATE FUNCTION guard_apple_consumer_assistance() RETURNS trigger LANGUAGE plpgsql AS $ BEGIN
+CREATE FUNCTION guard_apple_consumer_assistance() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
  IF TG_OP='DELETE' THEN
   RAISE EXCEPTION 'consumer assistance history cannot be deleted' USING ERRCODE='23514';
  END IF;
@@ -68,7 +68,7 @@ CREATE FUNCTION guard_apple_consumer_assistance() RETURNS trigger LANGUAGE plpgs
   END IF;
  END IF;
  RETURN NEW;
-END $;
+END $$;
 
 CREATE TRIGGER apple_consumer_assistance_guard
  BEFORE INSERT OR UPDATE OR DELETE ON apple_consumer_assistance
