@@ -12,8 +12,8 @@ import (
 // lockBot serializes the complete graph, not merely the target installation row.
 // Every runtime invocation takes the same lock, preventing disable/uninstall races.
 func lockBot(ctx context.Context, tx pgx.Tx, actor, workspace, bot string) error {
-	if !database.Permission(ctx, tx, actor, workspace, "bots.manage") {
-		return database.ErrForbidden
+	if err := database.RequirePermission(ctx, tx, actor, workspace, "bots.manage"); err != nil {
+		return err
 	}
 	var id string
 	err := tx.QueryRow(ctx, "SELECT id::text FROM customer_bots WHERE workspace_id=$1 AND id::text=$2 FOR UPDATE", workspace, bot).Scan(&id)

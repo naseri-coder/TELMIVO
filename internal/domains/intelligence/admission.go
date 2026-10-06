@@ -13,5 +13,5 @@ import (
 func admissionDenial(err error) bool {
 	var quota *contentplugins.QuotaDenied
 	return errors.As(err, &quota) || errors.Is(err, database.ErrForbidden) ||
-		errors.Is(err, sdk.ErrPermission) || errors.Is(err, sdk.ErrState)
+		errors.Is(err, sdk.ErrPermission) || errors.Is(err, sdk.ErrState) || errors.Is(err, sdk.ErrDependency)
 }

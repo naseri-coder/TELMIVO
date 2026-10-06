@@ -13,7 +13,7 @@ import (
 )
 
 func TestScheduledAdmissionDenialsDoNotSwallowInfrastructureErrors(t *testing.T) {
-	for _, err := range []error{&contentplugins.QuotaDenied{}, database.ErrForbidden, sdk.ErrPermission, sdk.ErrState} {
+	for _, err := range []error{&contentplugins.QuotaDenied{}, database.ErrForbidden, sdk.ErrPermission, sdk.ErrState, sdk.ErrDependency} {
 		if !admissionDenial(fmt.Errorf("wrapped: %w", err)) {
 			t.Fatalf("business denial not recognized: %v", err)
 		}
