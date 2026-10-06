@@ -4,7 +4,9 @@ package integration
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -159,6 +161,32 @@ func TestR5AFoundationPermissionsQuotaAuditIsolation(t *testing.T) {
 	must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM plan_plugin_entitlements WHERE plugin_key='apple-services' AND enabled").Scan(&enabledPlans))
 	if enabledPlans != 0 {
 		t.Fatal("R5A unexpectedly commercialized Apple Services", enabledPlans)
+	}
+
+	raceUser := fixture(t, false)
+	r5aWorkspaceGrant(t, raceUser.UserID, raceUser.WorkspaceID, 10)
+	raceSvc := &apple.Service{DB: db}
+	const profileWorkers = 8
+	profileErrs := make(chan error, profileWorkers)
+	var profileWG sync.WaitGroup
+	for i := 0; i < profileWorkers; i++ {
+		profileWG.Add(1)
+		go func(n int) {
+			defer profileWG.Done()
+			_, err := raceSvc.EnsureProfile(ctx, raceUser.UserID, raceUser.WorkspaceID, fmt.Sprintf("r5a-profile-race-%d", n))
+			profileErrs <- err
+		}(i)
+	}
+	profileWG.Wait()
+	close(profileErrs)
+	for err := range profileErrs {
+		must(t, err)
+	}
+	if n := number(t, raceUser, "SELECT count(*) FROM apple_service_profiles WHERE workspace_id=$1", raceUser.WorkspaceID); n != 1 {
+		t.Fatal("concurrent profile creation produced duplicate rows", n)
+	}
+	if n := number(t, raceUser, "SELECT count(*) FROM audit_logs WHERE workspace_id=$1 AND action='apple.profile.created'", raceUser.WorkspaceID); n != 1 {
+		t.Fatal("concurrent profile creation produced duplicate audits", n)
 	}
 }
 
