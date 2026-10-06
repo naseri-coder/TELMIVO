@@ -141,6 +141,17 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		t.Fatal("same-workspace administrator mutated another user's consumer assistance", err)
 	}
 
+	generic, err := svc.Operations(ctx, peer.UserID, peer.WorkspaceID)
+	must(t, err)
+	for _, op := range generic {
+		if op.Kind == apple.ConsumerAccount {
+			t.Fatal("generic foundation list leaked consumer operation metadata", op)
+		}
+	}
+	if _, err = svc.Events(ctx, peer.UserID, peer.WorkspaceID, flow.Operation.ID); !errors.Is(err, database.ErrForbidden) {
+		t.Fatal("generic foundation events leaked consumer operation history", err)
+	}
+
 	var forcedRLS int
 	must(t, owner.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_class
 		WHERE relname='apple_consumer_assistance' AND relrowsecurity AND relforcerowsecurity`).Scan(&forcedRLS))
