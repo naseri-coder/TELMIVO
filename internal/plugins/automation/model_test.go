@@ -12,7 +12,14 @@ func TestWorkflowBoundaries(t *testing.T) {
 	if !validWorkflow().Valid() {
 		t.Fatal("valid")
 	}
-	for _, mutate := range []func(*Workflow){func(w *Workflow) { w.Trigger = "http" }, func(w *Workflow) { w.Actions[0].Type = "shell" }, func(w *Workflow) { w.Actions = make([]Action, MaxActions+1) }, func(w *Workflow) { w.DelaySeconds = 86401 }, func(w *Workflow) { w.MaxAttempts = 3 }, func(w *Workflow) { w.Name = strings.Repeat("x", 101) }, func(w *Workflow) { w.Conditions.Mode = "eval" }} {
+	for _, delay := range []int{0, 86401, MaxDelaySeconds} {
+		w := validWorkflow()
+		w.DelaySeconds = delay
+		if !w.Valid() {
+			t.Fatalf("supported bounded delay rejected: %d", delay)
+		}
+	}
+	for _, mutate := range []func(*Workflow){func(w *Workflow) { w.Trigger = "http" }, func(w *Workflow) { w.Actions[0].Type = "shell" }, func(w *Workflow) { w.Actions = make([]Action, MaxActions+1) }, func(w *Workflow) { w.DelaySeconds = MaxDelaySeconds + 1 }, func(w *Workflow) { w.DelaySeconds = -1 }, func(w *Workflow) { w.MaxAttempts = 3 }, func(w *Workflow) { w.Name = strings.Repeat("x", 101) }, func(w *Workflow) { w.Conditions.Mode = "eval" }} {
 		w := validWorkflow()
 		mutate(&w)
 		if w.Valid() {
