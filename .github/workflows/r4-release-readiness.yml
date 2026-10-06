@@ -27,5 +27,8 @@ jobs:
           python3 -m unittest discover -s scripts/ci -p 'test_*.py'
 
   native:
+    # Automatic source events already run this suite through CI Go.
+    # A manual release audit remains self-contained.
+    if: github.event_name == 'workflow_dispatch'
     needs: static
     uses: ./.github/workflows/migration-check.yml
