@@ -114,7 +114,7 @@ func (s *Service) StartConsumer(ctx context.Context, actor, workspace, correlati
 		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, plugin.ConsumerSetup, 0); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,7500250))", workspace+":"+in.Key); err != nil {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,7500240))", workspace+":"+in.Key); err != nil {
 			return err
 		}
 		replay, saved, err := s.operationByKey(ctx, tx, workspace, in.Key)
@@ -179,6 +179,79 @@ func (s *Service) StartConsumer(ctx context.Context, actor, workspace, correlati
 			return err
 		}
 		return database.Audit(ctx, tx, actor, workspace, "apple.consumer.started", "apple_consumer_assistance", operationID, correlation, map[string]any{}, map[string]any{"goal": in.Goal, "channel": in.Channel, "locale": in.Locale, "region": in.Region})
+	})
+	return out, err
+}
+
+func (s *Service) Consumers(ctx context.Context, actor, workspace string) ([]ConsumerAssistance, error) {
+	out := []ConsumerAssistance{}
+	if s.DB == nil {
+		return out, database.ErrInvalid
+	}
+	err := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, plugin.ConsumerSetup, 0); err != nil {
+			return err
+		}
+		rows, err := tx.Query(ctx, `SELECT o.id::text,o.kind,o.state,o.subject_ref,o.revision,o.expires_at,o.created_at,o.updated_at,
+			c.goal,c.channel,c.locale,c.region,c.guidance_version,c.completion_source,c.created_at,c.updated_at
+			FROM apple_consumer_assistance c
+			JOIN apple_service_operations o ON o.id=c.operation_id AND o.workspace_id=c.workspace_id
+			WHERE c.workspace_id=$1 AND o.subject_ref=$2
+			ORDER BY c.created_at DESC,c.operation_id DESC LIMIT 100`, workspace, consumerSubject(actor))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item ConsumerAssistance
+			if err = rows.Scan(
+				&item.Operation.ID, &item.Operation.Kind, &item.Operation.State, &item.Operation.SubjectRef,
+				&item.Operation.Revision, &item.Operation.ExpiresAt, &item.Operation.Created, &item.Operation.Updated,
+				&item.Goal, &item.Channel, &item.Locale, &item.Region, &item.GuidanceVersion,
+				&item.CompletionSource, &item.Created, &item.Updated,
+			); err != nil {
+				return err
+			}
+			item.Guidance = consumerGuidance(item.Goal, item.Operation.State)
+			out = append(out, item)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+func (s *Service) ConsumerEvents(ctx context.Context, actor, workspace, operationID string) ([]Event, error) {
+	out := []Event{}
+	if s.DB == nil || operationID == "" {
+		return out, database.ErrInvalid
+	}
+	err := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
+		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, plugin.ConsumerSetup, 0); err != nil {
+			return err
+		}
+		current, err := s.consumerTx(ctx, tx, workspace, operationID, false)
+		if err != nil {
+			return err
+		}
+		if current.Operation.SubjectRef != consumerSubject(actor) {
+			return database.ErrForbidden
+		}
+		rows, err := tx.Query(ctx, `SELECT id::text,sequence,from_state,to_state,reason,correlation_id,created_at
+			FROM apple_service_operation_events
+			WHERE workspace_id=$1 AND operation_id::text=$2
+			ORDER BY sequence`, workspace, operationID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item Event
+			if err = rows.Scan(&item.ID, &item.Sequence, &item.From, &item.To, &item.Reason, &item.Correlation, &item.Created); err != nil {
+				return err
+			}
+			out = append(out, item)
+		}
+		return rows.Err()
 	})
 	return out, err
 }

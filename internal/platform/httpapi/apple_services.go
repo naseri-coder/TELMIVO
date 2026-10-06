@@ -68,6 +68,11 @@ func (a *API) appleOperationEvents(w http.ResponseWriter, r *http.Request) {
 	supportReply(w, v, e)
 }
 
+func (a *API) appleConsumers(w http.ResponseWriter, r *http.Request) {
+	v, e := a.AppleService().Consumers(r.Context(), user(r), workspace(r))
+	supportReply(w, v, e)
+}
+
 func (a *API) appleConsumerStart(w http.ResponseWriter, r *http.Request) {
 	var in appleservices.ConsumerStart
 	if decode(w, r, &in) != nil {
@@ -80,6 +85,11 @@ func (a *API) appleConsumerStart(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) appleConsumer(w http.ResponseWriter, r *http.Request) {
 	v, e := a.AppleService().Consumer(r.Context(), user(r), workspace(r), r.PathValue("operation"))
+	supportReply(w, v, e)
+}
+
+func (a *API) appleConsumerEvents(w http.ResponseWriter, r *http.Request) {
+	v, e := a.AppleService().ConsumerEvents(r.Context(), user(r), workspace(r), r.PathValue("operation"))
 	supportReply(w, v, e)
 }
 

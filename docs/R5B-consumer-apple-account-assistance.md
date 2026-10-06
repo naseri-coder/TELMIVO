@@ -13,7 +13,10 @@ R5B supports three guided intents:
 - `CHECK_EXISTING`
 
 The assistance operation is always bound to the authenticated TELMIVO user. The API does not
-accept an arbitrary subject/user identifier from the client.
+accept an arbitrary subject/user identifier from the client. Consumer discovery and event-history
+endpoints are also self-bound: a workspace administrator cannot enumerate or inspect another
+member's consumer assistance through either the specialized R5B API or the generic R5A operation
+list/history endpoints.
 
 The guided lifecycle is:
 
@@ -74,3 +77,11 @@ of generic-transition bypass, official-link selection, quota accounting, FORCE R
 absence, irreversible user attestation and PostgreSQL backup/restore.
 
 No outbound Apple request is used in tests or runtime R5B code.
+
+
+## API
+
+R5B exposes self-bound endpoints under `/api/v1/apple-services/consumer` for starting and listing
+the authenticated user's assistance flows, reading one flow, reading its append-only event history,
+and applying bounded lifecycle actions. Consumer operations are intentionally hidden from the
+generic R5A operation list/history endpoints.
