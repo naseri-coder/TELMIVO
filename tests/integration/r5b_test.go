@@ -26,6 +26,19 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		t.Fatal("generic foundation API still creates CONSUMER_ACCOUNT after R5B", err)
 	}
 
+	shared, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5b-shared-key-generic", apple.CreateRequest{
+		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:"+u.UserID, Key: "r5b-shared-key",
+	})
+	must(t, err)
+	if shared.Kind != apple.IdentityVerification {
+		t.Fatal("unexpected generic shared-key operation", shared)
+	}
+	if _, err = svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-shared-key-consumer", apple.ConsumerStart{
+		Goal: apple.ConsumerCheckExisting, Channel: apple.ConsumerWeb, Locale: "en-US", Region: "US", Key: "r5b-shared-key",
+	}); !errors.Is(err, database.ErrConflict) {
+		t.Fatal("R5B accepted operation_key already owned by another Apple workflow", err)
+	}
+
 	start := apple.ConsumerStart{
 		Goal: apple.ConsumerCreateAccount,
 		Channel: apple.ConsumerWeb,
@@ -127,7 +140,7 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		return tx.QueryRow(ctx, `SELECT COALESCE(sum(used),0) FROM usage_counters
 			WHERE workspace_id=$1 AND feature_key='apple_services'`, u.WorkspaceID).Scan(&used)
 	})
-	if used != 2 {
+	if used != 3 {
 		t.Fatal("R5B replay or denied paths changed quota", used)
 	}
 
