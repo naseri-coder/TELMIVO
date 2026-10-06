@@ -230,6 +230,20 @@ func (s *S3) SignedURL(ctx context.Context, key string, ttl time.Duration) (stri
 	if ttl <= 0 || ttl > time.Hour {
 		return "", ErrDenied
 	}
+	metadata, e := s.Metadata(ctx, key)
+	if e != nil {
+		return "", e
+	}
+	if !metadata.ExpiresAt.IsZero() {
+		remaining := metadata.ExpiresAt.Sub(s.Now().UTC())
+		if remaining < ttl {
+			ttl = remaining
+		}
+	}
+	ttl = ttl.Truncate(time.Second)
+	if ttl < time.Second {
+		return "", ErrDenied
+	}
 	u, e := s.objectURL(key)
 	if e != nil {
 		return "", e

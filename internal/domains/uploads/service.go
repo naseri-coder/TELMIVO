@@ -285,6 +285,26 @@ func capabilityAllowed(d policies.Decision, capability string) bool {
 	return false
 }
 
+// Reserved quota does not grant authority for future writes or approvals.
+func (s *Service) executionAdmission(ctx context.Context, tx pgx.Tx, actor, workspace string, u Upload) error {
+	wf, err := s.workflow(ctx, tx, workspace, u.WorkflowID)
+	if err != nil {
+		return err
+	}
+	if !wf.Enabled {
+		return database.ErrForbidden
+	}
+	allowed := map[string]bool{}
+	for _, kind := range wf.AllowedTypes {
+		allowed[kind] = true
+	}
+	if err = (Policy{Enabled: true, MaxBytes: wf.MaxBytes, AllowedTypes: allowed}).Validate(u.SizeBytes, u.ContentType); err != nil {
+		return database.ErrForbidden
+	}
+	_, _, err = s.decision(ctx, tx, actor, workspace, "uploader.use", map[string]int64{"uploader.max_file_bytes": u.SizeBytes})
+	return err
+}
+
 func (s *Service) Create(ctx context.Context, actor, workspace, correlation string, in Create) (Upload, error) {
 	var out Upload
 	in.Name = strings.TrimSpace(in.Name)
@@ -304,7 +324,10 @@ func (s *Service) Create(ctx context.Context, actor, workspace, correlation stri
 				return database.ErrConflict
 			}
 			out, _, e = s.upload(ctx, tx, workspace, out.ID, false)
-			return e
+			if e != nil {
+				return e
+			}
+			return s.executionAdmission(ctx, tx, actor, workspace, out)
 		}
 		if !errors.Is(e, pgx.ErrNoRows) {
 			return e
@@ -342,7 +365,7 @@ func (s *Service) Create(ctx context.Context, actor, workspace, correlation stri
 		}
 		var storageBytes, activeFiles int64
 		e = tx.QueryRow(ctx, `SELECT COALESCE(sum(size_bytes),0)::bigint,count(*)::bigint FROM uploads
-			WHERE workspace_id=$1 AND state IN('RECEIVED','VALIDATING','PENDING_APPROVAL','PROCESSING','STORED') AND COALESCE(expires_at,now()+interval '1 second')>now()`, workspace).
+			WHERE workspace_id=$1 AND state IN('RECEIVED','VALIDATING','PENDING_APPROVAL','PROCESSING','STORED','FAILED') `, workspace).
 			Scan(&storageBytes, &activeFiles)
 		if e != nil {
 			return e
@@ -485,6 +508,9 @@ func (s *Service) PutContent(ctx context.Context, actor, workspace, id, correlat
 		if before.State != "RECEIVED" || contentLength != before.SizeBytes || s.Storage.Provider == nil {
 			return database.ErrConflict
 		}
+		if e = s.executionAdmission(ctx, tx, actor, workspace, before); e != nil {
+			return e
+		}
 		wf, e = s.workflow(ctx, tx, workspace, before.WorkflowID)
 		if e != nil {
 			return e
@@ -580,6 +606,9 @@ func (s *Service) Action(ctx context.Context, actor, workspace, id, correlation 
 			if current.Revision != in.ExpectedRevision || current.State != "PENDING_APPROVAL" {
 				return database.ErrConflict
 			}
+			if e = s.executionAdmission(ctx, tx, actor, workspace, current); e != nil {
+				return e
+			}
 			_, e = tx.Exec(ctx, "UPDATE uploads SET state='PROCESSING',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2", workspace, id)
 			if e != nil {
 				return e
@@ -612,14 +641,13 @@ func (s *Service) Action(ctx context.Context, actor, workspace, id, correlation 
 		if (in.Action == "REJECT" && current.State != "PENDING_APPROVAL") || (in.Action == "DELETE" && current.State != "STORED") {
 			return database.ErrConflict
 		}
-		_, e = tx.Exec(ctx, "UPDATE uploads SET state='PROCESSING',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2", workspace, id)
+		_, e = tx.Exec(ctx, "UPDATE uploads SET state='PROCESSING',error_code=$3,revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2", workspace, id, "MANUAL_"+in.Action+"_PENDING")
 		return e
 	})
 	if e != nil {
 		return Upload{}, e
 	}
 	if e = s.Storage.Delete(ctx, workspace, key); e != nil {
-		s.failUpload(ctx, actor, workspace, id, "STORAGE_DELETE_FAILED")
 		return Upload{}, e
 	}
 	terminal := "REJECTED"
@@ -634,7 +662,7 @@ func (s *Service) Action(ctx context.Context, actor, workspace, id, correlation 
 		if u.State != "PROCESSING" {
 			return database.ErrConflict
 		}
-		_, e = tx.Exec(ctx, "UPDATE uploads SET state=$3,revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2", workspace, id, terminal)
+		_, e = tx.Exec(ctx, "UPDATE uploads SET state=$3,error_code='',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2", workspace, id, terminal)
 		if e != nil {
 			return e
 		}
@@ -644,9 +672,6 @@ func (s *Service) Action(ctx context.Context, actor, workspace, id, correlation 
 		}
 		return database.Audit(ctx, tx, actor, workspace, "uploader."+strings.ToLower(in.Action), "upload", id, correlation, map[string]any{"state": "PROCESSING"}, map[string]any{"state": terminal})
 	})
-	if e != nil {
-		s.failUpload(ctx, actor, workspace, id, "TERMINAL_PERSISTENCE_FAILED")
-	}
 	return current, e
 }
 
@@ -655,6 +680,7 @@ func (s *Service) expireOne(ctx context.Context, actor, workspace, id string) (b
 		return false, storage.ErrUnavailable
 	}
 	var key string
+	terminal := "EXPIRED"
 	claimed := false
 	e := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
 		u, k, e := s.upload(ctx, tx, workspace, id, true)
@@ -662,19 +688,22 @@ func (s *Service) expireOne(ctx context.Context, actor, workspace, id string) (b
 			return e
 		}
 		now := s.now()
-		if u.ExpiresAt.IsZero() || u.ExpiresAt.After(now) {
+		if !manualDeletePending(u.ErrorCode) && (u.ExpiresAt.IsZero() || u.ExpiresAt.After(now)) {
 			return nil
 		}
 		if u.State == "PROCESSING" {
-			if (u.ErrorCode != "RETENTION_DELETE_PENDING" && u.ErrorCode != "RETENTION_DELETE_RETRY") || u.UpdatedAt.Add(5*time.Minute).After(now) {
+			if !deletionPending(u.ErrorCode) || u.UpdatedAt.Add(5*time.Minute).After(now) {
 				return nil
+			}
+			if u.ErrorCode == "MANUAL_REJECT_PENDING" {
+				terminal = "REJECTED"
 			}
 			key = k
 			claimed = true
 			return nil
 		}
 		switch u.State {
-		case "RECEIVED", "VALIDATING", "PENDING_APPROVAL", "STORED":
+		case "RECEIVED", "VALIDATING", "PENDING_APPROVAL", "STORED", "FAILED":
 		default:
 			return nil
 		}
@@ -697,10 +726,10 @@ func (s *Service) expireOne(ctx context.Context, actor, workspace, id string) (b
 	if e = s.Storage.Delete(ctx, workspace, key); e != nil {
 		_ = s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
 			u, _, x := s.upload(ctx, tx, workspace, id, true)
-			if x != nil || u.State != "PROCESSING" || (u.ErrorCode != "RETENTION_DELETE_PENDING" && u.ErrorCode != "RETENTION_DELETE_RETRY") {
+			if x != nil || u.State != "PROCESSING" || !deletionPending(u.ErrorCode) {
 				return x
 			}
-			_, x = tx.Exec(ctx, "UPDATE uploads SET error_code='RETENTION_DELETE_RETRY',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2 AND revision=$3", workspace, id, u.Revision)
+			_, x = tx.Exec(ctx, "UPDATE uploads SET error_code=CASE WHEN error_code LIKE 'MANUAL_%' THEN error_code ELSE 'RETENTION_DELETE_RETRY' END,revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2 AND revision=$3", workspace, id, u.Revision)
 			return x
 		})
 		return false, e
@@ -711,20 +740,20 @@ func (s *Service) expireOne(ctx context.Context, actor, workspace, id string) (b
 		if e != nil {
 			return e
 		}
-		if u.State != "PROCESSING" || (u.ErrorCode != "RETENTION_DELETE_PENDING" && u.ErrorCode != "RETENTION_DELETE_RETRY") {
+		if u.State != "PROCESSING" || !deletionPending(u.ErrorCode) {
 			return database.ErrConflict
 		}
 		if e = policies.Settle(ctx, tx, workspace, "upload:"+operationFromUpload(ctx, tx, workspace, id), false); e != nil {
 			return e
 		}
-		tag, e := tx.Exec(ctx, "UPDATE uploads SET state='EXPIRED',error_code='',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2 AND revision=$3", workspace, id, u.Revision)
+		tag, e := tx.Exec(ctx, "UPDATE uploads SET state=$4,error_code='',revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id::text=$2 AND revision=$3", workspace, id, u.Revision, terminal)
 		if e != nil {
 			return e
 		}
 		if tag.RowsAffected() != 1 {
 			return database.ErrConflict
 		}
-		return database.Audit(ctx, tx, actor, workspace, "uploader.expire", "upload", id, "uploader-retention:"+id, map[string]any{"state": "PROCESSING"}, map[string]any{"state": "EXPIRED"})
+		return database.Audit(ctx, tx, actor, workspace, "uploader.expire", "upload", id, "uploader-retention:"+id, map[string]any{"state": "PROCESSING"}, map[string]any{"state": terminal})
 	})
 	return e == nil, e
 }
@@ -737,10 +766,10 @@ func (s *Service) CleanupExpired(ctx context.Context, actor, workspace string, l
 	ids := []string{}
 	e := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
 		rs, e := tx.Query(ctx, `SELECT id::text FROM uploads
-			WHERE workspace_id=$1 AND expires_at<=$2 AND (
-				state IN('RECEIVED','VALIDATING','PENDING_APPROVAL','STORED') OR
-				(state='PROCESSING' AND error_code IN('RETENTION_DELETE_PENDING','RETENTION_DELETE_RETRY') AND updated_at<=$3)
-			)
+			WHERE workspace_id=$1 AND (
+ (expires_at<=$2 AND state IN('RECEIVED','VALIDATING','PENDING_APPROVAL','STORED','FAILED')) OR
+ (state='PROCESSING' AND error_code IN('RETENTION_DELETE_PENDING','RETENTION_DELETE_RETRY','MANUAL_REJECT_PENDING','MANUAL_DELETE_PENDING') AND updated_at<=$3)
+ )
 			ORDER BY expires_at,id LIMIT $4`, workspace, now, now.Add(-5*time.Minute), limit)
 		if e != nil {
 			return e
@@ -852,8 +881,11 @@ func (s *Service) SignedURL(ctx context.Context, actor, workspace, id string, tt
 		if e != nil {
 			return e
 		}
-		if u.State != "STORED" {
+		if u.State != "STORED" || (!u.ExpiresAt.IsZero() && !u.ExpiresAt.After(s.now())) {
 			return database.ErrForbidden
+		}
+		if !u.ExpiresAt.IsZero() && u.ExpiresAt.Sub(s.now()) < ttl {
+			ttl = u.ExpiresAt.Sub(s.now())
 		}
 		key = k
 		return nil
@@ -862,4 +894,11 @@ func (s *Service) SignedURL(ctx context.Context, actor, workspace, id string, tt
 		return "", e
 	}
 	return s.Storage.SignedURL(ctx, workspace, key, ttl)
+}
+
+func manualDeletePending(code string) bool {
+	return code == "MANUAL_REJECT_PENDING" || code == "MANUAL_DELETE_PENDING"
+}
+func deletionPending(code string) bool {
+	return manualDeletePending(code) || code == "RETENTION_DELETE_PENDING" || code == "RETENTION_DELETE_RETRY"
 }
