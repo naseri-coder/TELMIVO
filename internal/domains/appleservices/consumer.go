@@ -89,8 +89,8 @@ type ConsumerGuidance struct {
 	Code                 string `json:"code"`
 	OfficialURL          string `json:"official_url,omitempty"`
 	SupportURL           string `json:"support_url"`
-	ProviderActionOnly   bool   `json:"provider_action_only"`
-	SecretInputAllowed   bool   `json:"secret_input_allowed"`
+	AppleActionOnly      bool   `json:"apple_action_only"`
+	SensitiveInputAllowed bool  `json:"sensitive_input_allowed"`
 	IdentityVerified     bool   `json:"identity_verified"`
 	CompletionMeaning    string `json:"completion_meaning"`
 }
