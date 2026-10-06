@@ -39,7 +39,7 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		flow.Operation.SubjectRef != "telmivo-user:"+u.UserID || flow.CompletionSource != "NONE" {
 		t.Fatal("unexpected R5B start", flow)
 	}
-	if flow.Guidance.SecretInputAllowed || flow.Guidance.IdentityVerified || flow.Guidance.CompletionMeaning != "USER_ATTESTED_ONLY" {
+	if flow.Guidance.SensitiveInputAllowed || flow.Guidance.IdentityVerified || flow.Guidance.CompletionMeaning != "USER_ATTESTED_ONLY" {
 		t.Fatal("unsafe R5B guidance", flow.Guidance)
 	}
 	earlyAttestationErr := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
@@ -154,6 +154,13 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		  AND lower(column_name) ~ '(password|otp|token|secret|credential|verification_code)'`).Scan(&sensitiveColumns))
 	if sensitiveColumns != 0 {
 		t.Fatal("R5B schema contains prohibited secret-bearing columns", sensitiveColumns)
+	}
+
+	if n := number(t, u, "SELECT count(*) FROM audit_logs WHERE workspace_id=$1 AND action='apple.consumer.started'", u.WorkspaceID); n != 2 {
+		t.Fatal("R5B consumer start audit count", n)
+	}
+	if n := number(t, u, "SELECT count(*) FROM audit_logs WHERE workspace_id=$1 AND action='apple.consumer.action'", u.WorkspaceID); n != 7 {
+		t.Fatal("R5B consumer action audit count", n)
 	}
 
 	mutationErr := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
