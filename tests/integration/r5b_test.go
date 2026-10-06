@@ -20,14 +20,12 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	svc := &apple.Service{DB: db, Clock: func() time.Time { return now }}
 	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 3)
 
-	expiry := now.Add(2 * time.Hour)
 	start := apple.ConsumerStart{
 		Goal: apple.ConsumerCreateAccount,
 		Channel: apple.ConsumerWeb,
 		Locale: "fa-IR",
 		Region: "DE",
 		Key: "r5b-create",
-		ExpiresAt: &expiry,
 	}
 	flow, err := svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-start", start)
 	must(t, err)
@@ -38,6 +36,11 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	if flow.Guidance.SecretInputAllowed || flow.Guidance.IdentityVerified || flow.Guidance.CompletionMeaning != "USER_ATTESTED_ONLY" {
 		t.Fatal("unsafe R5B guidance", flow.Guidance)
 	}
+	earlyAttestationErr := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "UPDATE apple_consumer_assistance SET completion_source='USER_ATTESTED' WHERE operation_id=$1", flow.Operation.ID)
+		return err
+	})
+	pgCode(t, earlyAttestationErr, "23514")
 
 	replay, err := svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-replay", start)
 	must(t, err)
