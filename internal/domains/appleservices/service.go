@@ -179,6 +179,9 @@ func (s *Service) CreateOperation(ctx context.Context, actor, workspace, correla
 	if s.DB == nil || !in.Kind.Valid() || !validKey(in.Key) || !validCorrelation(correlation) || len(in.SubjectRef) > 200 {
 		return out, database.ErrInvalid
 	}
+	if in.Kind == ConsumerAccount {
+		return out, database.ErrInvalid
+	}
 	if in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
 		return out, database.ErrInvalid
 	}
@@ -282,13 +285,7 @@ func (s *Service) Transition(ctx context.Context, actor, workspace, operationID,
 			return err
 		}
 		if current.Kind == ConsumerAccount {
-			var guided bool
-			if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM apple_consumer_assistance WHERE workspace_id=$1 AND operation_id=$2)", workspace, operationID).Scan(&guided); err != nil {
-				return err
-			}
-			if guided {
-				return database.ErrInvalid
-			}
+			return database.ErrInvalid
 		}
 		capability := Capability(current.Kind)
 		if capability == "" {
