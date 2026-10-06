@@ -30,15 +30,24 @@ func TestR5BConsumerGuidanceAndActionContracts(t *testing.T) {
 	}
 
 	create := consumerGuidance(ConsumerCreateAccount, AppleActionRequired)
-	if create.OfficialURL != AppleAccountURL || create.Code != "CREATE_ACCOUNT_AT_APPLE" || create.SecretInputAllowed || create.IdentityVerified {
+	if create.OfficialURL != AppleAccountURL || create.Code != "CREATE_ACCOUNT_AT_APPLE" || !create.AppleActionOnly || create.SensitiveInputAllowed || create.IdentityVerified {
 		t.Fatal("create guidance contract drift", create)
 	}
 	recover := consumerGuidance(ConsumerRecoverAccess, AppleActionRequired)
 	if recover.OfficialURL != AppleRecoveryURL || recover.Code != "RECOVER_ACCESS_AT_APPLE" {
 		t.Fatal("recovery guidance contract drift", recover)
 	}
+	verification := consumerGuidance(ConsumerCreateAccount, AppleCompleted)
+	if verification.Code != "COMPLETE_APPLE_REQUIRED_VERIFICATION" || !verification.AppleActionOnly || verification.IdentityVerified {
+		t.Fatal("Apple-required verification guidance drift", verification)
+	}
+	pending := consumerGuidance(ConsumerCreateAccount, VerificationPending)
+	if pending.AppleActionOnly || pending.IdentityVerified {
+		t.Fatal("local completion confirmation guidance drift", pending)
+	}
+
 	ready := consumerGuidance(ConsumerCreateAccount, Ready)
-	if ready.CompletionMeaning != "USER_ATTESTED_ONLY" || ready.IdentityVerified || ready.ProviderActionOnly {
+	if ready.CompletionMeaning != "USER_ATTESTED_ONLY" || ready.IdentityVerified || ready.AppleActionOnly || ready.SensitiveInputAllowed {
 		t.Fatal("R5B completion was confused with verified Apple identity", ready)
 	}
 
