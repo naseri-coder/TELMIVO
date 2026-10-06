@@ -194,15 +194,7 @@ func (s *Service) List(ctx context.Context, tx pgx.Tx, actor, ws string) ([]Chan
 	if e != nil {
 		return nil, e
 	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if e = rows.Scan(&id); e != nil {
-			break
-		}
-		ids = append(ids, id)
-	}
-	rows.Close()
+	ids, e := readChannelIDs(rows)
 	if e != nil {
 		return nil, e
 	}
@@ -216,6 +208,27 @@ func (s *Service) List(ctx context.Context, tx pgx.Tx, actor, ws string) ([]Chan
 	}
 	return out, nil
 }
+
+func readChannelIDs(rows pgx.Rows) ([]string, error) {
+	defer rows.Close()
+	var ids []string
+	var e error
+	for rows.Next() {
+		var id string
+		if e = rows.Scan(&id); e != nil {
+			break
+		}
+		ids = append(ids, id)
+	}
+	if e == nil {
+		e = rows.Err()
+	}
+	if e != nil {
+		return nil, e
+	}
+	return ids, nil
+}
+
 func (s *Service) Verify(ctx context.Context, tx pgx.Tx, actor, ws, id, corr string) (Channel, error) {
 	if e := entitlements.Require(ctx, tx, actor, ws, "channels", "channels.manage", 0); e != nil {
 		return Channel{}, e

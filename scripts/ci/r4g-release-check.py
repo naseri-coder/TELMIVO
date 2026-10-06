@@ -21,14 +21,14 @@ def text(path: str) -> str:
     return require(path).read_text(encoding="utf-8")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--checkpoint', choices=['R4G', 'R5B', 'R5B_REMEDIATED', 'current'], default='R4G')
+parser.add_argument('--checkpoint', choices=['R4G', 'R5B', 'R5B_REMEDIATED', 'R5C', 'current'], default='R4G')
 checkpoint = parser.parse_args().checkpoint
 if checkpoint == 'current':
     match = re.search(r'const CurrentCheckpoint = "([^"]+)"', text('db/migrations/checkpoint.go'))
     if not match:
         fail('current source checkpoint is not declared')
     checkpoint = match[1]
-if checkpoint not in ('R4G', 'R5B', 'R5B_REMEDIATED'):
+if checkpoint not in ('R4G', 'R5B', 'R5B_REMEDIATED', 'R5C'):
     fail('unsupported current checkpoint')
 expected_count, expected_final = CHECKPOINTS[checkpoint]
 
@@ -109,14 +109,14 @@ for workflow in [
         fail(f"R4 stacked branch trigger missing from {workflow}")
 
 readme = text("README.md")
-expected_readme = {'R4G': 'Twenty-three checksummed migrations (0001–0023)', 'R5B': 'Twenty-five checksummed migrations (0001–0025)', 'R5B_REMEDIATED': 'Twenty-six checksummed migrations (0001–0026)'}[checkpoint]
+expected_readme = {'R4G': 'Twenty-three checksummed migrations (0001–0023)', 'R5B': 'Twenty-five checksummed migrations (0001–0025)', 'R5B_REMEDIATED': 'Twenty-six checksummed migrations (0001–0026)', 'R5C': 'Twenty-seven checksummed migrations (0001–0027)'}[checkpoint]
 if expected_readme not in readme:
     fail("README migration count is not synchronized with the selected checkpoint")
 if "R4G v0.2.0 Final Hardening" not in readme:
     fail("README does not link the R4G final-hardening boundary")
 
 require(".github/workflows/r4-release-readiness.yml")
-if checkpoint in ('R5B', 'R5B_REMEDIATED'):
+if checkpoint in ('R5B', 'R5B_REMEDIATED', 'R5C'):
     for path in ['docs/R5A-apple-services-foundation.md', 'docs/R5B-consumer-apple-account-assistance.md']:
         require(path)
     for marker in ['TestWave1(', 'TestWave1MigrationRecovered', 'TestR5A', 'TestR5B']:

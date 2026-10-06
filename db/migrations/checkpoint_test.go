@@ -10,6 +10,9 @@ func TestMigrationCheckpointContracts(t *testing.T) {
 	if err = ValidateChain(names, CurrentCheckpoint); err != nil {
 		t.Fatal(err)
 	}
+	if err = ValidateChain(names[:26], "R5B_REMEDIATED"); err != nil {
+		t.Fatal(err)
+	}
 	if err = ValidateChain(names[:25], "R5B"); err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +24,7 @@ func TestMigrationCheckpointContracts(t *testing.T) {
 	}
 	cases := map[string][]string{
 		"missing": append(append([]string{}, names[:10]...), names[11:]...),
-		"extra":   append(append([]string{}, names...), "0026_unexpected.sql"),
+		"extra":   append(append([]string{}, names...), "0027_unexpected.sql"),
 	}
 	duplicate := append([]string{}, names...)
 	duplicate[10] = names[9]
@@ -30,7 +33,7 @@ func TestMigrationCheckpointContracts(t *testing.T) {
 	order[0], order[1] = order[1], order[0]
 	cases["order"] = order
 	final := append([]string{}, names...)
-	final[len(final)-1] = "0026_unexpected.sql"
+	final[len(final)-1] = "0027_unexpected.sql"
 	cases["final"] = final
 	for name, files := range cases {
 		t.Run(name, func(t *testing.T) {
