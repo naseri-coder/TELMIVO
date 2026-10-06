@@ -59,13 +59,14 @@ func (s *Service) ensureProfileTx(ctx context.Context, tx pgx.Tx, actor, workspa
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return Profile{}, false, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO apple_service_profiles(workspace_id,created_by,created_at,updated_at)
-		VALUES($1,$2,$3,$3)`, workspace, actor, s.now())
+	tag, err := tx.Exec(ctx, `INSERT INTO apple_service_profiles(workspace_id,created_by,created_at,updated_at)
+		VALUES($1,$2,$3,$3)
+		ON CONFLICT (workspace_id) DO NOTHING`, workspace, actor, s.now())
 	if err != nil {
 		return Profile{}, false, err
 	}
 	out, err = s.profile(ctx, tx, workspace)
-	return out, true, err
+	return out, tag.RowsAffected() == 1, err
 }
 
 func (s *Service) Profile(ctx context.Context, actor, workspace string) (Profile, error) {
