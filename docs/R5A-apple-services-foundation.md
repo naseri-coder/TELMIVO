@@ -77,3 +77,7 @@ idempotent replay, invalid-transition rejection, FORCE-RLS isolation, audit/even
 absence of secret-bearing schema columns and PostgreSQL backup/restore.
 
 R5A does not authorize production deployment or any connection to a real Apple organization.
+
+### Foundation deadlines
+
+A non-consumer operation can expire from REQUESTED/PRECHECK before any effect. After its deadline, these states cannot advance except to EXPIRED. An in-flight provisioning/reconciliation state keeps its existing reconciliation edges; a deadline cannot manufacture a successful effect or discard an ambiguous one. Terminal operations cannot reopen.
