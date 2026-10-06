@@ -15,8 +15,10 @@ import (
 )
 
 type Service struct {
-	DB    *database.Store
-	Clock func() time.Time
+	DB               *database.Store
+	Clock            func() time.Time
+	IdentityProvider AppleIdentityProvider
+	IdentityStateKey []byte
 }
 
 func (s *Service) now() time.Time {
