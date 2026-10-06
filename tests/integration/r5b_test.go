@@ -5,6 +5,7 @@ package integration
 import (
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,6 +228,68 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		return err
 	})
 	pgCode(t, mutationErr, "23514")
+}
+
+func TestR5BConcurrentIdempotentStart(t *testing.T) {
+	u := fixture(t, false)
+	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 20)
+	svc := &apple.Service{DB: db}
+	start := apple.ConsumerStart{
+		Goal: apple.ConsumerCheckExisting, Channel: apple.ConsumerWeb, Locale: "en-US", Region: "US", Key: "r5b-concurrent-start",
+	}
+
+	const workers = 8
+	ids := make(chan string, workers)
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			flow, err := svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-concurrent", start)
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- flow.Operation.ID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal("concurrent R5B start failed", err)
+		}
+	}
+	var first string
+	count := 0
+	for id := range ids {
+		count++
+		if first == "" {
+			first = id
+		} else if id != first {
+			t.Fatal("concurrent idempotency created multiple operation ids", first, id)
+		}
+	}
+	if count != workers || first == "" {
+		t.Fatal("concurrent R5B result count", count, first)
+	}
+
+	var used int64
+	tenant(t, u, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT COALESCE(sum(used),0) FROM usage_counters
+			WHERE workspace_id=$1 AND feature_key='apple_services'`, u.WorkspaceID).Scan(&used)
+	})
+	if used != 1 {
+		t.Fatal("concurrent idempotent starts consumed duplicate quota", used)
+	}
+	if n := number(t, u, "SELECT count(*) FROM apple_consumer_assistance WHERE workspace_id=$1", u.WorkspaceID); n != 1 {
+		t.Fatal("concurrent idempotent starts created duplicate assistance rows", n)
+	}
+	if n := number(t, u, "SELECT count(*) FROM apple_service_operation_events WHERE workspace_id=$1", u.WorkspaceID); n != 1 {
+		t.Fatal("concurrent idempotent starts created duplicate initial events", n)
+	}
 }
 
 func TestR5BRecoveryPreparation(t *testing.T) {
