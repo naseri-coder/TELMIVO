@@ -42,7 +42,8 @@ CREATE FUNCTION guard_apple_consumer_assistance() RETURNS trigger LANGUAGE plpgs
   END IF;
   PERFORM 1 FROM apple_service_operations
    WHERE id=NEW.operation_id AND workspace_id=NEW.workspace_id
-     AND kind='CONSUMER_ACCOUNT' AND state='REQUESTED';
+     AND kind='CONSUMER_ACCOUNT' AND state='REQUESTED'
+     AND subject_ref='telmivo-user:' || actor_id::text;
   IF NOT FOUND THEN
    RAISE EXCEPTION 'consumer assistance requires REQUESTED consumer operation' USING ERRCODE='23514';
   END IF;
