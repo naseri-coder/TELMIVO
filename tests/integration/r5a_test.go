@@ -52,19 +52,19 @@ func TestR5AFoundationPermissionsQuotaAuditIsolation(t *testing.T) {
 	}
 
 	expiry := now.Add(time.Hour)
-	op, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5a-create-consumer", apple.CreateRequest{
-		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:consumer-1", Key: "consumer-1", ExpiresAt: &expiry,
+	op, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5a-create-identity", apple.CreateRequest{
+		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:identity-foundation", Key: "identity-foundation", ExpiresAt: &expiry,
 	})
 	must(t, err)
-	replay, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5a-create-consumer-replay", apple.CreateRequest{
-		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:consumer-1", Key: "consumer-1", ExpiresAt: &expiry,
+	replay, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5a-create-identity-replay", apple.CreateRequest{
+		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:identity-foundation", Key: "identity-foundation", ExpiresAt: &expiry,
 	})
 	must(t, err)
 	if replay.ID != op.ID || replay.Revision != op.Revision {
 		t.Fatal("idempotent Apple operation replay changed identity", op, replay)
 	}
 
-	for _, step := range []apple.State{apple.Precheck, apple.AppleActionRequired, apple.AppleCompleted, apple.VerificationPending, apple.Ready} {
+	for _, step := range []apple.State{apple.Precheck, apple.AppleActionRequired, apple.VerificationPending, apple.Ready} {
 		op, err = svc.Transition(ctx, u.UserID, u.WorkspaceID, op.ID, "r5a-transition-"+string(step), apple.TransitionRequest{
 			State: step, Expected: op.Revision, Reason: "integration state transition",
 		})
@@ -78,7 +78,7 @@ func TestR5AFoundationPermissionsQuotaAuditIsolation(t *testing.T) {
 
 	events, err := svc.Events(ctx, u.UserID, u.WorkspaceID, op.ID)
 	must(t, err)
-	if len(events) != 6 || events[0].To != apple.Requested || events[len(events)-1].To != apple.Ready {
+	if len(events) != 5 || events[0].To != apple.Requested || events[len(events)-1].To != apple.Ready {
 		t.Fatal("operation event history drift", events)
 	}
 
@@ -104,7 +104,7 @@ func TestR5AFoundationPermissionsQuotaAuditIsolation(t *testing.T) {
 		t.Fatal("second Apple operation state", second)
 	}
 	if _, err = svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5a-over-quota", apple.CreateRequest{
-		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:identity-1", Key: "identity-1",
+		Kind: apple.Reconciliation, SubjectRef: "workspace-reconcile", Key: "reconcile-over-quota",
 	}); err == nil {
 		t.Fatal("Apple Services quota was not enforced")
 	}
