@@ -307,7 +307,7 @@ func (s *Service) Transition(ctx context.Context, actor, workspace, operationID,
 		if current.Revision != in.Expected {
 			return database.ErrConflict
 		}
-		if current.ExpiresAt != nil && !s.now().Before(*current.ExpiresAt) && in.State != Expired {
+		if expiryBlocks(current.Kind, current.State, in.State, current.ExpiresAt, s.now()) {
 			return database.ErrConflict
 		}
 		if !CanTransition(current.Kind, current.State, in.State) {
@@ -370,4 +370,10 @@ func (s *Service) Events(ctx context.Context, actor, workspace, operationID stri
 		return rows.Err()
 	})
 	return out, err
+}
+
+// A deadline blocks advancement only where the state graph offers safe expiry.
+// States with ambiguous/in-flight effects remain recoverable through their graph.
+func expiryBlocks(kind Kind, from, to State, expires *time.Time, now time.Time) bool {
+	return expires != nil && !now.Before(*expires) && CanTransition(kind, from, Expired) && to != Expired
 }

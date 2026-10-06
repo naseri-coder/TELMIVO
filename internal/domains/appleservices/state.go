@@ -51,6 +51,11 @@ func CanTransition(k Kind, from, to State) bool {
 	if !ValidState(k, from) || !ValidState(k, to) || from == to || Terminal(from) {
 		return false
 	}
+	// Only pre-effect states gain a generic expiry edge. In-flight/reconciliation
+	// states retain their existing graph; a deadline is never proof of failure.
+	if k != ConsumerAccount && to == Expired && (from == Requested || from == Precheck) {
+		return true
+	}
 	switch k {
 	case ConsumerAccount:
 		return edge(from, to,
