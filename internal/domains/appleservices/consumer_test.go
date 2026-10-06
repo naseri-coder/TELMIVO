@@ -59,6 +59,7 @@ func TestR5BConsumerGuidanceAndActionContracts(t *testing.T) {
 		{Requested, ConsumerConfirmPrecheck, Precheck},
 		{Precheck, ConsumerContinueAtApple, AppleActionRequired},
 		{AppleActionRequired, ConsumerAppleFlowCompleted, AppleCompleted},
+		{AppleActionRequired, ConsumerReportFailure, Failed},
 		{AppleCompleted, ConsumerVerificationStarted, VerificationPending},
 		{VerificationPending, ConsumerConfirmCompletion, Ready},
 	}
