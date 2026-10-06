@@ -89,7 +89,7 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		t.Fatal("R5B completion semantics drift", flow)
 	}
 
-	events, err := svc.Events(ctx, u.UserID, u.WorkspaceID, flow.Operation.ID)
+	events, err := svc.ConsumerEvents(ctx, u.UserID, u.WorkspaceID, flow.Operation.ID)
 	must(t, err)
 	if len(events) != 6 || events[0].To != apple.Requested || events[len(events)-1].To != apple.Ready {
 		t.Fatal("R5B event history drift", events)
@@ -109,6 +109,17 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	must(t, err)
 	if recovery.Guidance.OfficialURL != apple.AppleRecoveryURL || recovery.Guidance.IdentityVerified {
 		t.Fatal("R5B recovery guidance drift", recovery.Guidance)
+	}
+
+	mine, err := svc.Consumers(ctx, u.UserID, u.WorkspaceID)
+	must(t, err)
+	if len(mine) != 2 {
+		t.Fatal("R5B self-bound consumer discovery count", len(mine))
+	}
+	for _, item := range mine {
+		if item.Operation.SubjectRef != "telmivo-user:"+u.UserID || item.Operation.Kind != apple.ConsumerAccount {
+			t.Fatal("R5B consumer discovery leaked or misbound operation", item)
+		}
 	}
 
 	var used int64
@@ -151,6 +162,30 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	if _, err = svc.Events(ctx, peer.UserID, peer.WorkspaceID, flow.Operation.ID); !errors.Is(err, database.ErrForbidden) {
 		t.Fatal("generic foundation events leaked consumer operation history", err)
 	}
+	peerFlows, err := svc.Consumers(ctx, peer.UserID, peer.WorkspaceID)
+	must(t, err)
+	if len(peerFlows) != 0 {
+		t.Fatal("same-workspace administrator discovered another user's consumer flows", peerFlows)
+	}
+	if _, err = svc.ConsumerEvents(ctx, peer.UserID, peer.WorkspaceID, flow.Operation.ID); !errors.Is(err, database.ErrForbidden) {
+		t.Fatal("same-workspace administrator read another user's consumer event history", err)
+	}
+
+	dbBindErr := db.Tenant(ctx, u.UserID, u.WorkspaceID, false, func(tx pgx.Tx) error {
+		var rogue string
+		if err := tx.QueryRow(ctx, `INSERT INTO apple_service_operations(
+			workspace_id,kind,state,subject_ref,operation_key,fingerprint,actor_id,created_at,updated_at
+		) VALUES($1,'CONSUMER_ACCOUNT','REQUESTED',$2,'r5b-db-self-bind',
+		  repeat('a',64),$3,now(),now()) RETURNING id::text`,
+			u.WorkspaceID, "telmivo-user:"+other.UserID, u.UserID).Scan(&rogue); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO apple_consumer_assistance(
+			operation_id,workspace_id,goal,channel,locale,region
+		) VALUES($1,$2,'CHECK_EXISTING','WEB','en-US','US')`, rogue, u.WorkspaceID)
+		return err
+	})
+	pgCode(t, dbBindErr, "23514")
 
 	var forcedRLS int
 	must(t, owner.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_class
