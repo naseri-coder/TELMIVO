@@ -29,6 +29,10 @@ jobs:
             gofmt -d $files
             exit 1
           fi
+      - name: Validation definition regressions
+        run: |
+          python3 scripts/ci/check-native-selection.py
+          python3 -m unittest discover -s scripts/ci -p 'test_*.py'
       - run: go vet ./...
       - name: Install media validation dependency
         run: sudo apt-get update && sudo apt-get install -y ffmpeg

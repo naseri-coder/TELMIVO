@@ -308,9 +308,15 @@ func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, scope sdk.Scope, id, e
 	} else if !w.Conditions.Match(event.Fields) {
 		state, code = "SKIPPED", "CONDITIONS_NOT_MATCHED"
 	} else if err := s.validate(ctx, tx, actor, scope, "automation.manage", "workflow.execute", true); err != nil {
+		if !admissionDenial(err) {
+			return "", err
+		}
 		state, code = "SKIPPED", failure(err)
 	} else if err := s.quota(ctx, tx, scope, "automation.executions.monthly", 1, true); err != nil {
-		return "", err
+		if !admissionDenial(err) {
+			return "", err
+		}
+		state, code = "SKIPPED", failure(err)
 	}
 	var out string
 	e = tx.QueryRow(ctx, "INSERT INTO automation_executions(workspace_id,bot_id,workflow_id,event_id,actor_id,snapshot,event,state,code,available_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text", scope.AccountID, scope.BotID, id, eventID, actor, body(w), body(event), state, code, availableAt, s.now()).Scan(&out)

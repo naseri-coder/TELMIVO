@@ -683,6 +683,9 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 	if e != nil {
 		return p, e
 	}
+	if _, _, ok := reconciledTransition(p, result); !ok {
+		return p, database.ErrConflict
+	}
 	if p.State == PaymentUnknown && result.Status == PaymentPaid {
 		if !validReconciledPayment(p, result) {
 			return p, database.ErrConflict
@@ -698,21 +701,8 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 		if e != nil {
 			return e
 		}
-		next := ""
-		refundState := ""
-		switch {
-		case current.State == PaymentUnknown && result.Status == PaymentAwaiting:
-			next = PaymentAwaiting
-		case current.State == PaymentUnknown && result.Status == PaymentFailed:
-			next = PaymentFailed
-		case current.State == PaymentUnknown && result.Status == PaymentRefunded:
-			next = PaymentRefunded
-		case current.State == PaymentRefundUnknown && result.Status == PaymentRefunded:
-			next, refundState = PaymentRefunded, "REFUNDED"
-		case current.State == PaymentRefundUnknown && result.Status == PaymentPaid:
-			next, refundState = PaymentPaid, "FAILED"
-		}
-		if next == "" {
+		next, refundState, ok := reconciledTransition(current, result)
+		if !ok {
 			return database.ErrConflict
 		}
 		now := s.now()

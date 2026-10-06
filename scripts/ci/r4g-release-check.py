@@ -2,6 +2,8 @@
 from pathlib import Path
 import re
 import sys
+import argparse
+from migration_checkpoint import CHECKPOINTS, validate_chain
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,16 +20,24 @@ def require(path: str) -> Path:
 def text(path: str) -> str:
     return require(path).read_text(encoding="utf-8")
 
-migrations = sorted((ROOT / "db/migrations").glob("[0-9][0-9][0-9][0-9]_*.sql"))
-if len(migrations) != 23:
-    fail(f"expected 23 migrations, found {len(migrations)}")
-for index, path in enumerate(migrations, start=1):
-    prefix = f"{index:04d}_"
-    if not path.name.startswith(prefix):
-        fail(f"migration chain gap/order mismatch at {path.name}; expected {prefix}*")
-if migrations[-1].name != "0023_ai_assistant_2.sql":
-    fail(f"unexpected final migration: {migrations[-1].name}")
-if list((ROOT / "db/migrations").glob("0024_*.sql")):
+parser = argparse.ArgumentParser()
+parser.add_argument('--checkpoint', choices=['R4G', 'R5B', 'current'], default='R4G')
+checkpoint = parser.parse_args().checkpoint
+if checkpoint == 'current':
+    match = re.search(r'const CurrentCheckpoint = "([^"]+)"', text('db/migrations/checkpoint.go'))
+    if not match:
+        fail('current source checkpoint is not declared')
+    checkpoint = match[1]
+if checkpoint not in ('R4G', 'R5B'):
+    fail('unsupported current checkpoint')
+expected_count, expected_final = CHECKPOINTS[checkpoint]
+
+migrations = sorted((ROOT / "db/migrations").glob("*.sql"))
+try:
+    validate_chain([p.name for p in migrations], checkpoint)
+except ValueError as error:
+    fail(str(error))
+if checkpoint == "R4G" and list((ROOT / "db/migrations").glob("0024_*.sql")):
     fail("R4G must not introduce migration 0024 without an identified schema defect")
 
 required_docs = [
@@ -99,14 +109,21 @@ for workflow in [
         fail(f"R4 stacked branch trigger missing from {workflow}")
 
 readme = text("README.md")
-if "Twenty-three checksummed migrations (0001–0023)" not in readme:
-    fail("README migration count is not synchronized with v0.2.0")
+expected_readme = {'R4G': 'Twenty-three checksummed migrations (0001–0023)', 'R5B': 'Twenty-five checksummed migrations (0001–0025)'}[checkpoint]
+if expected_readme not in readme:
+    fail("README migration count is not synchronized with the selected checkpoint")
 if "R4G v0.2.0 Final Hardening" not in readme:
     fail("README does not link the R4G final-hardening boundary")
 
 require(".github/workflows/r4-release-readiness.yml")
+if checkpoint == 'R5B':
+    for path in ['docs/R5A-apple-services-foundation.md', 'docs/R5B-consumer-apple-account-assistance.md']:
+        require(path)
+    for marker in ['TestWave1(', 'TestWave1MigrationRecovered', 'TestR5A', 'TestR5B']:
+        if marker not in native:
+            fail(f'current-source native matrix missing {marker}')
 
-print("R4G_RELEASE_CHECK_PASS")
-print("migrations=23")
+print(f"{checkpoint}_RELEASE_CHECK_PASS")
+print(f"migrations={expected_count}")
 print("browser_matrix=R4B,R4C,R4D,R4E,R4F")
 print("release_state=SOURCE_READY_VALIDATION_REQUIRED")

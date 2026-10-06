@@ -1,10 +1,10 @@
-name: R4 v0.2.0 Release Readiness
+name: Version-scoped Source Release Readiness
 
 on:
   push:
-    branches: [feature/r4g-v0.2-final-hardening]
+    branches: [feature/r4g-v0.2-final-hardening, feature/r5b-source-audit-remediation-wave1-v0.3]
   pull_request:
-    branches: [feature/r4f-ai-assistant-2-v0.2, develop, main]
+    branches: [feature/r4f-ai-assistant-2-v0.2, feature/r5b-consumer-apple-account-assistance-v0.3, develop, main]
   workflow_dispatch:
 
 permissions:
@@ -20,8 +20,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Fail-closed R4 source release audit
-        run: python3 scripts/ci/r4g-release-check.py
+      - name: Fail-closed version-scoped source release audit
+        run: |
+          python3 scripts/ci/r4g-release-check.py --checkpoint current
+          python3 scripts/ci/check-native-selection.py
+          python3 -m unittest discover -s scripts/ci -p 'test_*.py'
 
   native:
     needs: static
