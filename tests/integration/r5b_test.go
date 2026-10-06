@@ -128,6 +128,19 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 		t.Fatal("R5B tenant isolation failed")
 	}
 
+	peer := fixture(t, false)
+	_, err = owner.Pool.Exec(ctx, "INSERT INTO workspace_members(workspace_id,user_id,role_key) VALUES($1,$2,'ADMIN')", u.WorkspaceID, peer.UserID)
+	must(t, err)
+	peer.WorkspaceID = u.WorkspaceID
+	if _, err = svc.Consumer(ctx, peer.UserID, peer.WorkspaceID, flow.Operation.ID); !errors.Is(err, database.ErrForbidden) {
+		t.Fatal("same-workspace administrator read another user's consumer assistance", err)
+	}
+	if _, err = svc.ConsumerAction(ctx, peer.UserID, peer.WorkspaceID, flow.Operation.ID, "r5b-peer-action", apple.ConsumerActionRequest{
+		Action: apple.ConsumerConfirmCompletion, Expected: flow.Operation.Revision,
+	}); !errors.Is(err, database.ErrForbidden) {
+		t.Fatal("same-workspace administrator mutated another user's consumer assistance", err)
+	}
+
 	var forcedRLS int
 	must(t, owner.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_class
 		WHERE relname='apple_consumer_assistance' AND relrowsecurity AND relforcerowsecurity`).Scan(&forcedRLS))
