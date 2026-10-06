@@ -22,16 +22,7 @@ func (s *Service) Poll(ctx context.Context) error {
 			if e != nil {
 				return e
 			}
-			type member struct{ actor, account string }
-			members := []member{}
-			for rs.Next() {
-				var m member
-				if e = rs.Scan(&m.actor, &m.account); e != nil {
-					break
-				}
-				members = append(members, m)
-			}
-			rs.Close()
+			members, e := readAutomationMembers(rs)
 			if e != nil {
 				return e
 			}
@@ -72,4 +63,23 @@ func (s *Service) Poll(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// A partial owner scan must never be treated as a successful polling batch.
+type automationMember struct{ actor, account string }
+
+func readAutomationMembers(rows pgx.Rows) ([]automationMember, error) {
+	defer rows.Close()
+	members := []automationMember{}
+	for rows.Next() {
+		var m automationMember
+		if err := rows.Scan(&m.actor, &m.account); err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return members, nil
 }

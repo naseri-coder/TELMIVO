@@ -120,7 +120,7 @@ func (s *Store) Tenant(ctx context.Context, user, workspace string, adminAllowed
 	var member bool
 	e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE user_id=$1 AND workspace_id=$2)", user, workspace).Scan(&member)
 	if e != nil {
-		return ErrForbidden
+		return e
 	}
 	if !member && !(adminAllowed && s.IsAdmin(ctx, user)) {
 		return ErrForbidden
@@ -141,6 +141,20 @@ func Event(ctx context.Context, tx pgx.Tx, workspace, subject, kind, correlation
 	_, e := tx.Exec(ctx, "INSERT INTO outbox_events(workspace_id,subject,event_type,correlation_id,payload) VALUES($1,$2,$3,$4,$5)", workspace, subject, kind, correlation, payload)
 	return e
 }
+
+// RequirePermission separates a proved denial from an infrastructure/query failure.
+func RequirePermission(ctx context.Context, tx pgx.Tx, user, workspace, permission string) error {
+	var yes bool
+	err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM workspace_members m JOIN role_permissions p ON p.role_key=m.role_key WHERE m.user_id=$1 AND m.workspace_id=$2 AND p.permission_key=$3)", user, workspace, permission).Scan(&yes)
+	if err != nil {
+		return err
+	}
+	if !yes {
+		return ErrForbidden
+	}
+	return nil
+}
+
 func Permission(ctx context.Context, tx pgx.Tx, user, workspace, permission string) bool {
 	var yes bool
 	e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM workspace_members m JOIN role_permissions p ON p.role_key=m.role_key WHERE m.user_id=$1 AND m.workspace_id=$2 AND p.permission_key=$3)", user, workspace, permission).Scan(&yes)

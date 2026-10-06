@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/naseri-coder/TELMIVO/db/migrations"
 	"github.com/naseri-coder/TELMIVO/internal/domains/downloads"
 	"github.com/naseri-coder/TELMIVO/internal/domains/entitlements"
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
@@ -114,7 +115,11 @@ func TestMigration(t *testing.T) {
 		must(t, owner.Migrate(ctx))
 		var n int
 		must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&n))
-		if n != 24 {
+		count, _, err := migrations.Checkpoint(migrations.CurrentCheckpoint)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != count {
 			t.Fatalf("migration count %d", n)
 		}
 	})
@@ -183,6 +188,17 @@ func TestIdentityWorkspace(t *testing.T) {
 	}
 	if _, _, e = s.Login(ctx, u, raw); e == nil {
 		t.Fatal("login replay accepted")
+	}
+	pairs := strings.Split(raw, "&")
+	for i, j := 0, len(pairs)-1; i < j; i, j = i+1, j-1 {
+		pairs[i], pairs[j] = pairs[j], pairs[i]
+	}
+	for _, equivalent := range []string{strings.Join(pairs, "&"), strings.ReplaceAll(raw, "%7B", "%7b")} {
+		verified, err := auth.ValidateInitData(equivalent, "synthetic-signing-only", time.Now(), time.Minute)
+		must(t, err)
+		if _, _, err = s.Login(ctx, verified, equivalent); !errors.Is(err, auth.ErrInvalid) {
+			t.Fatal("canonical replay accepted", err)
+		}
 	}
 	tx, e := db.Pool.Begin(ctx)
 	must(t, e)

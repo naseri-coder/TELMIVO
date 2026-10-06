@@ -36,7 +36,6 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -121,6 +120,11 @@ func (a *API) Handler() http.Handler {
 	protected.HandleFunc("POST /api/v1/apple-services/operations", a.appleOperationCreate)
 	protected.HandleFunc("POST /api/v1/apple-services/operations/{operation}/actions", a.appleOperationAction)
 	protected.HandleFunc("GET /api/v1/apple-services/operations/{operation}/events", a.appleOperationEvents)
+	protected.HandleFunc("GET /api/v1/apple-services/consumer", a.appleConsumers)
+	protected.HandleFunc("POST /api/v1/apple-services/consumer", a.appleConsumerStart)
+	protected.HandleFunc("GET /api/v1/apple-services/consumer/{operation}", a.appleConsumer)
+	protected.HandleFunc("GET /api/v1/apple-services/consumer/{operation}/events", a.appleConsumerEvents)
+	protected.HandleFunc("POST /api/v1/apple-services/consumer/{operation}/actions", a.appleConsumerAction)
 
 	protected.HandleFunc("GET /api/v1/uploader/workflows", a.uploadWorkflows)
 	protected.HandleFunc("POST /api/v1/uploader/workflows", a.uploadWorkflowSave)
@@ -307,7 +311,11 @@ func (a *API) secure(next http.Handler) http.Handler {
 			}
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") && a.Cache != nil {
-			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			host, valid := clientIP(r, a.Config.TrustedProxyCIDRs)
+			if !valid {
+				fail(w, 400, "invalid")
+				return
+			}
 			allowed, e := a.Cache.Allow(r.Context(), "ip:"+host, 120, time.Minute)
 			if e != nil {
 				fail(w, 503, "unavailable")

@@ -53,8 +53,8 @@ func (s *Service) AuthorizeTx(ctx context.Context, tx pgx.Tx, in sdk.Admission) 
 	default:
 		return grant, sdk.ErrPermission
 	}
-	if !database.Permission(ctx, tx, in.ActorID, in.Scope.AccountID, "bots.manage") {
-		return grant, database.ErrForbidden
+	if err := database.RequirePermission(ctx, tx, in.ActorID, in.Scope.AccountID, "bots.manage"); err != nil {
+		return grant, err
 	}
 	if e := requireBot(ctx, tx, in.Scope.AccountID, in.Scope.BotID); e != nil {
 		return grant, e

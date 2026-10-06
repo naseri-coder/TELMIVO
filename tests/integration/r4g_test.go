@@ -3,7 +3,6 @@
 package integration
 
 import (
-	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -27,20 +26,16 @@ func TestR4GMigrationChainAndTenantHardening(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	if len(names) != 23 {
-		t.Fatalf("migration count=%d want=23", len(names))
+	must(t, migrations.ValidateChain(names, migrations.CurrentCheckpoint))
+	historicalCount, historicalFinal, err := migrations.Checkpoint("R4G")
+	must(t, err)
+	must(t, migrations.ValidateChain(names[:historicalCount], "R4G"))
+	if names[historicalCount-1] != historicalFinal {
+		t.Fatal("unexpected historical final migration")
 	}
-	for i, name := range names {
-		want := fmt.Sprintf("%04d_", i+1)
-		if !strings.HasPrefix(name, want) {
-			t.Fatalf("migration %d is %q, want prefix %q", i+1, name, want)
-		}
-	}
-	if names[len(names)-1] != "0023_ai_assistant_2.sql" {
-		t.Fatal("unexpected final migration", names[len(names)-1])
-	}
+	assertAppliedCheckpoint(t, owner, migrations.CurrentCheckpoint)
 	var applied int
-	must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&applied))
+	must(t, owner.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations WHERE name<'0024_'").Scan(&applied))
 	if applied != 23 {
 		t.Fatalf("applied migrations=%d want=23", applied)
 	}
@@ -108,8 +103,9 @@ func TestR4GRecovered(t *testing.T) {
 	must(t, err)
 	defer store.Pool.Close()
 
+	assertAppliedCheckpoint(t, store, migrations.CurrentCheckpoint)
 	var migrationsCount int
-	must(t, store.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&migrationsCount))
+	must(t, store.Pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations WHERE name<'0024_'").Scan(&migrationsCount))
 	if migrationsCount != 23 {
 		t.Fatal("restored migration chain incomplete", migrationsCount)
 	}

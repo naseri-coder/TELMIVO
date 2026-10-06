@@ -26,6 +26,9 @@ func (a *API) downloaderSubmit(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) downloaderDetail(w http.ResponseWriter, r *http.Request) {
 	a.tenant(w, r, false, func(tx pgx.Tx) (any, error) {
+		if !database.Permission(r.Context(), tx, user(r), workspace(r), "downloads.read") {
+			return nil, database.ErrForbidden
+		}
 		return a.downloaderProduct().Detail(r.Context(), tx, user(r), workspace(r), r.PathValue("job"), false)
 	})
 }

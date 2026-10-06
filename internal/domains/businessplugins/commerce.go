@@ -123,6 +123,23 @@ func (s *Service) OrderAction(ctx context.Context, actor string, scope sdk.Scope
 		if e != nil {
 			return e
 		}
+		// Lock the same order used by checkout admission before cancellation.
+		if _, e = tx.Exec(ctx, "SELECT id FROM commerce_orders WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3 FOR UPDATE", scope.AccountID, scope.BotID, id); e != nil {
+			return e
+		}
+		out, e = order(ctx, tx, scope, id)
+		if e != nil {
+			return e
+		}
+		if in.Action == "CANCELLED" {
+			var active bool
+			if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM commerce_payment_intents WHERE workspace_id=$1 AND bot_id=$2 AND order_id=$3 AND state IN('CREATING','AWAITING_PAYMENT','PAID','UNKNOWN','REFUND_PENDING','REFUND_UNKNOWN'))", scope.AccountID, scope.BotID, id).Scan(&active); e != nil {
+				return e
+			}
+			if active {
+				return database.ErrConflict
+			}
+		}
 		if out.Revision != in.Expected || !shop.Transition(out.State, in.Action) {
 			return database.ErrConflict
 		}

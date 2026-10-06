@@ -22,3 +22,7 @@ backup/restore of relational upload state. Object bytes are intentionally outsid
 PostgreSQL restore drill and require the separately authorized object-store recovery plan.
 
 R4C does not authorize production storage provisioning or deployment.
+
+### Post-audit admission and cleanup
+
+Replay, content upload and approval recheck current workflow and feature admission without consuming a second reservation. Rejection/deletion remain available for cleanup. Manual deletion persists a pending intent until storage deletion and quota settlement succeed; a bounded sweeper retries cleanup after an interrupted attempt. Failed/pending physical objects remain counted until deletion is confirmed. Download links cannot outlive object retention, including the S3 adapter.

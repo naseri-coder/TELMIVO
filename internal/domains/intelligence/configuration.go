@@ -166,7 +166,7 @@ func (s *Service) SaveConfig(ctx context.Context, actor string, scope sdk.Scope,
 		if e != nil {
 			return e
 		}
-		if len(c.Tools) > 0 && !m.Tools || c.OutputTokens > m.MaxOutput {
+		if !modelCompatible(m, c, false) {
 			return database.ErrInvalid
 		}
 		for _, id := range c.Knowledge {
@@ -244,6 +244,13 @@ func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Sco
 			if expected != 0 {
 				return database.ErrConflict
 			}
+			var importedKey bool
+			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_ingestion_receipts WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3)", scope.AccountID, scope.BotID, keyValue).Scan(&importedKey); err != nil {
+				return err
+			}
+			if importedKey {
+				return database.ErrConflict
+			}
 			var fp string
 			var current Knowledge
 			err := tx.QueryRow(ctx, "SELECT id::text,name,body,enabled,source_kind,source_ref,revision,fingerprint FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, keyValue).
@@ -288,4 +295,8 @@ func (s *Service) SaveKnowledge(ctx context.Context, actor string, scope sdk.Sco
 		return audit(ctx, tx, actor, scope, "ai.knowledge.updated", k.ID, map[string]any{"revision": k.Revision})
 	})
 	return k, e
+}
+
+func modelCompatible(m provider.Model, c assistant.Config, structured bool) bool {
+	return c.OutputTokens > 0 && c.OutputTokens <= m.MaxOutput && (len(c.Tools) == 0 || m.Tools) && (!structured || m.Structured)
 }

@@ -102,6 +102,10 @@ func (s *Service) syncSchedule(ctx context.Context, tx pgx.Tx, scope sdk.Scope, 
 }
 
 func (s *Service) materializeSchedules(ctx context.Context, tx pgx.Tx, account string) error {
+	// Every edit/materialization path takes the tenant lock before row locks.
+	if err := s.lock(ctx, tx, sdk.Scope{AccountID: account}); err != nil {
+		return err
+	}
 	type due struct {
 		workflow   string
 		bot        string

@@ -64,6 +64,7 @@ func CanTransition(k Kind, from, to State) bool {
 			Precheck, Failed,
 			Precheck, Cancelled,
 			AppleActionRequired, AppleCompleted,
+			AppleActionRequired, Failed,
 			AppleActionRequired, Cancelled,
 			AppleActionRequired, Expired,
 			AppleCompleted, VerificationPending,

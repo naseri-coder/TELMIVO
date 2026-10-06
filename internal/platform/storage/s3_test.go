@@ -107,6 +107,19 @@ func TestS3CompatiblePrivateProvider(t *testing.T) {
 	if e != nil || !strings.Contains(u, "X-Amz-Signature=") || !strings.Contains(u, "X-Amz-Credential=") {
 		t.Fatal(u, e)
 	}
+	s.Now = func() time.Time { return expires.Add(-2500 * time.Millisecond) }
+	near, err := scoped.SignedURL(context.Background(), "11111111-1111-1111-1111-111111111111", key, 5*time.Minute)
+	if err != nil || !strings.Contains(near, "X-Amz-Expires=2&") {
+		t.Fatal("retention not capped", near, err)
+	}
+	s.Now = func() time.Time { return expires.Add(-500 * time.Millisecond) }
+	if _, err = scoped.SignedURL(context.Background(), "11111111-1111-1111-1111-111111111111", key, time.Minute); err == nil {
+		t.Fatal("subsecond retention signed")
+	}
+	s.Now = func() time.Time { return expires }
+	if _, err = scoped.SignedURL(context.Background(), "11111111-1111-1111-1111-111111111111", key, time.Minute); err == nil {
+		t.Fatal("expired object signed")
+	}
 	if e = scoped.Delete(context.Background(), "11111111-1111-1111-1111-111111111111", key); e != nil {
 		t.Fatal(e)
 	}

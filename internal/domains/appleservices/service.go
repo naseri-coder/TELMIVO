@@ -180,6 +180,9 @@ func (s *Service) CreateOperation(ctx context.Context, actor, workspace, correla
 	if s.DB == nil || !in.Kind.Valid() || !validKey(in.Key) || !validCorrelation(correlation) || len(in.SubjectRef) > 200 {
 		return out, database.ErrInvalid
 	}
+	if in.Kind == ConsumerAccount {
+		return out, database.ErrInvalid
+	}
 	if in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
 		return out, database.ErrInvalid
 	}
@@ -254,7 +257,9 @@ func (s *Service) Operations(ctx context.Context, actor, workspace string) ([]Op
 			return err
 		}
 		rows, err := tx.Query(ctx, `SELECT id::text,kind,state,subject_ref,revision,expires_at,created_at,updated_at
-			FROM apple_service_operations WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, workspace)
+			FROM apple_service_operations
+			WHERE workspace_id=$1 AND kind<>'CONSUMER_ACCOUNT'
+			ORDER BY created_at DESC,id DESC LIMIT 100`, workspace)
 		if err != nil {
 			return err
 		}
@@ -281,6 +286,9 @@ func (s *Service) Transition(ctx context.Context, actor, workspace, operationID,
 		current, err := s.operation(ctx, tx, workspace, operationID, true)
 		if err != nil {
 			return err
+		}
+		if current.Kind == ConsumerAccount {
+			return database.ErrInvalid
 		}
 		capability := Capability(current.Kind)
 		if capability == "" {
@@ -338,6 +346,13 @@ func (s *Service) Events(ctx context.Context, actor, workspace, operationID stri
 	err := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
 		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, plugin.PermissionAudit, 0); err != nil {
 			return err
+		}
+		var kind Kind
+		if err := tx.QueryRow(ctx, "SELECT kind FROM apple_service_operations WHERE workspace_id=$1 AND id::text=$2", workspace, operationID).Scan(&kind); err != nil {
+			return err
+		}
+		if kind == ConsumerAccount {
+			return database.ErrForbidden
 		}
 		rows, err := tx.Query(ctx, `SELECT id::text,sequence,from_state,to_state,reason,correlation_id,created_at
 			FROM apple_service_operation_events WHERE workspace_id=$1 AND operation_id::text=$2 ORDER BY sequence`, workspace, operationID)

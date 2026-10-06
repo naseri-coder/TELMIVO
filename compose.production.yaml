@@ -23,6 +23,8 @@ services:
   api:
     <<: *app
     command: [/app/api]
+    environment:
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?exact reverse-proxy peer CIDR required}
     healthcheck:
       <<: *http-health
       test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()"]
