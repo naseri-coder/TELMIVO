@@ -22,6 +22,10 @@ The guided lifecycle is:
 Every step is explicit and revision-fenced. A consumer operation created through R5B cannot be
 advanced through the generic R5A transition endpoint.
 
+From R5B onward, generic Foundation creation of `CONSUMER_ACCOUNT` is rejected entirely.
+Migration 0025 also fails closed if legacy generic consumer operations already exist, so an
+older un-guided consumer record cannot survive the upgrade as an alternate workflow path.
+
 ## Apple-controlled actions
 
 When an Apple action is required, TELMIVO only provides an official Apple destination:
