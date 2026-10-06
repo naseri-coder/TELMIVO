@@ -109,7 +109,7 @@ func (s *Service) StartConsumer(ctx context.Context, actor, workspace, correlati
 		return out, database.ErrInvalid
 	}
 	subject := consumerSubject(actor)
-	opInput := CreateRequest{Kind: ConsumerAccount, SubjectRef: subject, Key: in.Key, ExpiresAt: in.ExpiresAt}
+	opInput := CreateRequest{Kind: ConsumerAccount, SubjectRef: subject, Key: in.Key}
 	fp := fingerprint(opInput)
 	err := s.DB.Tenant(ctx, actor, workspace, false, func(tx pgx.Tx) error {
 		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, plugin.ConsumerSetup, 0); err != nil {
@@ -157,7 +157,7 @@ func (s *Service) StartConsumer(ctx context.Context, actor, workspace, correlati
 		if err = tx.QueryRow(ctx, `INSERT INTO apple_service_operations(
 			workspace_id,kind,state,subject_ref,operation_key,fingerprint,actor_id,expires_at,created_at,updated_at
 		) VALUES($1,'CONSUMER_ACCOUNT','REQUESTED',$2,$3,$4,$5,$6,$7,$7) RETURNING id::text`,
-			workspace, subject, in.Key, fp, actor, in.ExpiresAt, s.now()).Scan(&operationID); err != nil {
+			workspace, subject, in.Key, fp, actor, nil, s.now()).Scan(&operationID); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO apple_service_operation_events(
