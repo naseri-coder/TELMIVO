@@ -59,8 +59,8 @@ func (s *Service) lock(ctx context.Context, tx pgx.Tx, scope sdk.Scope) error {
 	return e
 }
 func (s *Service) validate(ctx context.Context, tx pgx.Tx, actor string, scope sdk.Scope, permission, cap string, running bool) error {
-	if !database.Permission(ctx, tx, actor, scope.AccountID, permission) {
-		return database.ErrForbidden
+	if err := database.RequirePermission(ctx, tx, actor, scope.AccountID, permission); err != nil {
+		return err
 	}
 	if e := s.lock(ctx, tx, scope); e != nil {
 		return e
@@ -112,6 +112,8 @@ func failure(e error) string {
 		return "ACCESS_DENIED"
 	case errors.Is(e, database.ErrConflict):
 		return "STALE_OR_CONFLICT"
+	case errors.Is(e, sdk.ErrDependency):
+		return "DEPENDENCY_UNAVAILABLE"
 	case errors.Is(e, sdk.ErrState):
 		return "PLUGIN_UNAVAILABLE"
 	case errors.Is(e, database.ErrInvalid):

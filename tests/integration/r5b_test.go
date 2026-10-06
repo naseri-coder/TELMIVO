@@ -5,6 +5,7 @@ package integration
 import (
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,13 +22,13 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 3)
 
 	if _, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5b-generic-consumer-blocked", apple.CreateRequest{
-		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:"+u.UserID, Key: "generic-consumer-blocked",
+		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:" + u.UserID, Key: "generic-consumer-blocked",
 	}); !errors.Is(err, database.ErrInvalid) {
 		t.Fatal("generic foundation API still creates CONSUMER_ACCOUNT after R5B", err)
 	}
 
 	shared, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5b-shared-key-generic", apple.CreateRequest{
-		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:"+u.UserID, Key: "r5b-shared-key",
+		Kind: apple.IdentityVerification, SubjectRef: "telmivo-user:" + u.UserID, Key: "r5b-shared-key",
 	})
 	must(t, err)
 	if shared.Kind != apple.IdentityVerification {
@@ -40,11 +41,11 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	}
 
 	start := apple.ConsumerStart{
-		Goal: apple.ConsumerCreateAccount,
+		Goal:    apple.ConsumerCreateAccount,
 		Channel: apple.ConsumerWeb,
-		Locale: "fa-IR",
-		Region: "DE",
-		Key: "r5b-create",
+		Locale:  "fa-IR",
+		Region:  "DE",
+		Key:     "r5b-create",
 	}
 	flow, err := svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-start", start)
 	must(t, err)
@@ -229,6 +230,68 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	pgCode(t, mutationErr, "23514")
 }
 
+func TestR5BConcurrentIdempotentStart(t *testing.T) {
+	u := fixture(t, false)
+	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 20)
+	svc := &apple.Service{DB: db}
+	start := apple.ConsumerStart{
+		Goal: apple.ConsumerCheckExisting, Channel: apple.ConsumerWeb, Locale: "en-US", Region: "US", Key: "r5b-concurrent-start",
+	}
+
+	const workers = 8
+	ids := make(chan string, workers)
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			flow, err := svc.StartConsumer(ctx, u.UserID, u.WorkspaceID, "r5b-concurrent", start)
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- flow.Operation.ID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal("concurrent R5B start failed", err)
+		}
+	}
+	var first string
+	count := 0
+	for id := range ids {
+		count++
+		if first == "" {
+			first = id
+		} else if id != first {
+			t.Fatal("concurrent idempotency created multiple operation ids", first, id)
+		}
+	}
+	if count != workers || first == "" {
+		t.Fatal("concurrent R5B result count", count, first)
+	}
+
+	var used int64
+	tenant(t, u, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT COALESCE(sum(used),0) FROM usage_counters
+			WHERE workspace_id=$1 AND feature_key='apple_services'`, u.WorkspaceID).Scan(&used)
+	})
+	if used != 1 {
+		t.Fatal("concurrent idempotent starts consumed duplicate quota", used)
+	}
+	if n := number(t, u, "SELECT count(*) FROM apple_consumer_assistance WHERE workspace_id=$1", u.WorkspaceID); n != 1 {
+		t.Fatal("concurrent idempotent starts created duplicate assistance rows", n)
+	}
+	if n := number(t, u, "SELECT count(*) FROM apple_service_operation_events WHERE workspace_id=$1", u.WorkspaceID); n != 1 {
+		t.Fatal("concurrent idempotent starts created duplicate initial events", n)
+	}
+}
+
 func TestR5BRecoveryPreparation(t *testing.T) {
 	u := fixture(t, false)
 	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 5)
@@ -256,15 +319,15 @@ func TestR5BRecovered(t *testing.T) {
 	must(t, err)
 	defer store.Pool.Close()
 
-	var state, subject, goal, channel, locale, region, completion string
+	var state, subject, goal, channel, locale, region, completion, actor string
 	var revision int64
-	must(t, store.Pool.QueryRow(ctx, `SELECT o.state,o.subject_ref,o.revision,c.goal,c.channel,c.locale,c.region,c.completion_source
+	must(t, store.Pool.QueryRow(ctx, `SELECT o.state,o.subject_ref,o.revision,c.goal,c.channel,c.locale,c.region,c.completion_source,o.actor_id::text
 		FROM apple_service_operations o
 		JOIN apple_consumer_assistance c ON c.operation_id=o.id AND c.workspace_id=o.workspace_id
 		WHERE o.operation_key='r5b-recovery'`).
-		Scan(&state, &subject, &revision, &goal, &channel, &locale, &region, &completion))
+		Scan(&state, &subject, &revision, &goal, &channel, &locale, &region, &completion, &actor))
 	if state != "READY" || revision != 6 || goal != "CHECK_EXISTING" || channel != "ANDROID_WINDOWS" ||
-		locale != "de-DE" || region != "DE" || completion != "USER_ATTESTED" || subject == "" {
+		locale != "de-DE" || region != "DE" || completion != "USER_ATTESTED" || subject != "telmivo-user:"+actor {
 		t.Fatal("R5B restore drift", state, subject, revision, goal, channel, locale, region, completion)
 	}
 	var events int

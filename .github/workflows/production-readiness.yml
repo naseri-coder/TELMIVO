@@ -44,6 +44,7 @@ jobs:
           REDIS_URL=rediss://redis.example:6380/0
           NATS_URL=tls://nats.example:4222
           TELMIVO_DOMAIN=app.example.com
+          TRUSTED_PROXY_CIDRS=192.0.2.1/32
           MINIAPP_URL=https://app.example.com
           BOT_TOKEN=12345:abcdefghijklmnopqrstuvwxyzABCDE
           GROUP_BOT_TOKEN=23456:abcdefghijklmnopqrstuvwxyzABCDE

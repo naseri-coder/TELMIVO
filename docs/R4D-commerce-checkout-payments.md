@@ -85,3 +85,7 @@ charges or contact a real payment provider.
 
 R4D does not authorize production deployment, settlement, merchant onboarding, payout,
 chargeback handling, taxes, FX conversion or a concrete external provider.
+
+### Post-audit concurrency and cancellation contract
+
+Concurrent same-key checkout/refund requests return the durable in-flight receipt without repeating or interrupting the live provider call. Provider calls are bounded to 30 seconds; only an attempt older than five minutes is classified as abandoned UNKNOWN, without a retry. Cancelling an order with an active payment intent is refused. A late verified charge on a previously cancelled order is retained as PAID with PAYMENT_VERIFIED_REFUND_REQUIRED; it does not emit the ordinary fulfillment event.

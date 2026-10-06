@@ -36,7 +36,6 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -312,7 +311,11 @@ func (a *API) secure(next http.Handler) http.Handler {
 			}
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") && a.Cache != nil {
-			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			host, valid := clientIP(r, a.Config.TrustedProxyCIDRs)
+			if !valid {
+				fail(w, 400, "invalid")
+				return
+			}
 			allowed, e := a.Cache.Allow(r.Context(), "ip:"+host, 120, time.Minute)
 			if e != nil {
 				fail(w, 503, "unavailable")

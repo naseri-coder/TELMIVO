@@ -129,6 +129,10 @@ func (s *Service) Connect(ctx context.Context, tx pgx.Tx, actor, ws, corr string
 	if chat >= 0 || !database.Permission(ctx, tx, actor, ws, "channels.manage") {
 		return out, database.ErrForbidden
 	}
+	// Match the entitlement reservation lock before counting resources.
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", ws+":channels"); err != nil {
+		return out, err
+	}
 	var existing string
 	e := tx.QueryRow(ctx, "SELECT id::text FROM channels WHERE workspace_id=$1 AND telegram_chat_id=$2", ws, chat).Scan(&existing)
 	requested := int64(1)

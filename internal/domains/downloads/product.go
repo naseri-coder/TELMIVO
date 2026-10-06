@@ -50,17 +50,6 @@ func (p *Product) Submit(ctx context.Context, tx pgx.Tx, u, w, corr, raw, key st
 	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "download:"+w+":"+key); e != nil {
 		return "", e
 	}
-	var id, source, owner string
-	e = tx.QueryRow(ctx, "SELECT id::text,source_url,creator_id::text FROM download_jobs WHERE workspace_id=$1 AND idempotency_key=$2", w, key).Scan(&id, &source, &owner)
-	if e == nil {
-		if source != s.URL || owner != u {
-			return "", database.ErrConflict
-		}
-		return id, nil
-	}
-	if e != pgx.ErrNoRows {
-		return "", e
-	}
 	r, e := request(ctx, tx, u, w)
 	if e != nil {
 		return "", e
@@ -78,6 +67,17 @@ func (p *Product) Submit(ctx context.Context, tx pgx.Tx, u, w, corr, raw, key st
 		if resource.Unit == "BYTES" {
 			return "", database.ErrForbidden
 		}
+	}
+	var id, source, owner string
+	e = tx.QueryRow(ctx, "SELECT id::text,source_url,creator_id::text FROM download_jobs WHERE workspace_id=$1 AND idempotency_key=$2", w, key).Scan(&id, &source, &owner)
+	if e == nil {
+		if source != s.URL || owner != u {
+			return "", database.ErrConflict
+		}
+		return id, nil
+	}
+	if e != pgx.ErrNoRows {
+		return "", e
 	}
 	mj, e := jobs.Create(ctx, tx, r, key, "downloader", corr)
 	if e != nil {

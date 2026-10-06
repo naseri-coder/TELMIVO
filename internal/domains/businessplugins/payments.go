@@ -215,6 +215,7 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 	}
 	fp := hash([]any{"checkout", actor, orderID, in})
 	var payer int64
+	fresh := false
 	e := s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
 		var saved string
 		e := tx.QueryRow(ctx, "SELECT id::text,fingerprint FROM commerce_payment_intents WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, in.Key).Scan(&out.ID, &saved)
@@ -226,7 +227,7 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 			if e != nil {
 				return e
 			}
-			if out.State == PaymentCreating {
+			if out.State == PaymentCreating && !out.UpdatedAt.Add(5*time.Minute).After(s.now()) {
 				if _, e = tx.Exec(ctx, "UPDATE commerce_payment_intents SET state='UNKNOWN',outcome_code='INTERRUPTED_CHECKOUT',revision=revision+1,updated_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, out.ID, s.now()); e != nil {
 					return e
 				}
@@ -235,6 +236,9 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 			return e
 		}
 		if !errors.Is(e, pgx.ErrNoRows) {
+			return e
+		}
+		if _, e = tx.Exec(ctx, "SELECT id FROM commerce_orders WHERE workspace_id=$1 AND bot_id=$2 AND id::text=$3 FOR UPDATE", scope.AccountID, scope.BotID, orderID); e != nil {
 			return e
 		}
 		o, e := order(ctx, tx, scope, orderID)
@@ -265,18 +269,21 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 			return e
 		}
 		out, payer, e = payment(ctx, tx, scope, out.ID, false)
+		fresh = e == nil
 		return e
 	})
-	if e != nil || out.State != PaymentCreating {
+	if e != nil || !fresh || out.State != PaymentCreating {
 		return out, e
 	}
 
+	effectCtx, cancelEffect := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelEffect()
 	result := ExternalResult{Outcome: OutcomeRejected}
 	if in.Rail == RailTelegramStars {
 		if s.Content == nil {
 			result = ExternalResult{Outcome: OutcomeRejected, Status: "TRANSPORT_UNAVAILABLE"}
 		} else {
-			url, code := s.Content.CreateStarsInvoice(ctx, actor, scope, "TELMIVO", "پرداخت سفارش "+orderID, "telmivo:"+out.ID, out.Amount.AmountAtomic)
+			url, code := s.Content.CreateStarsInvoice(effectCtx, actor, scope, "TELMIVO", "پرداخت سفارش "+orderID, "telmivo:"+out.ID, out.Amount.AmountAtomic)
 			result.URL, result.Reference, result.Status = url, out.ID, code
 			switch code {
 			case "CHECKOUT_CREATED":
@@ -290,7 +297,7 @@ func (s *Service) Checkout(ctx context.Context, actor string, scope sdk.Scope, o
 	} else if s.PaymentProvider == nil {
 		result = ExternalResult{Outcome: OutcomeRejected, Status: "PROVIDER_UNAVAILABLE"}
 	} else {
-		result, e = s.PaymentProvider.Create(ctx, in.Provider, ExternalCheckoutRequest{Key: in.Key, OrderID: orderID, PaymentID: out.ID, Amount: out.Amount})
+		result, e = s.PaymentProvider.Create(effectCtx, in.Provider, ExternalCheckoutRequest{Key: in.Key, OrderID: orderID, PaymentID: out.ID, Amount: out.Amount})
 		if e != nil {
 			result = ExternalResult{Outcome: OutcomeUnknown, Status: "PROVIDER_OUTCOME_UNKNOWN"}
 		}
@@ -421,6 +428,11 @@ func (s *Service) applyVerified(ctx context.Context, actor string, scope sdk.Sco
 		if e != nil {
 			return e
 		}
+		if o.State == "CANCELLED" {
+			if _, e = tx.Exec(ctx, "UPDATE commerce_payment_intents SET outcome_code='PAYMENT_VERIFIED_REFUND_REQUIRED',revision=revision+1,updated_at=$2 WHERE id=$1", p.ID, now); e != nil {
+				return e
+			}
+		}
 		if o.State == "PLACED" {
 			if _, e = tx.Exec(ctx, "UPDATE commerce_orders SET state='CONFIRMED',revision=revision+1,updated_at=$4 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3", scope.AccountID, scope.BotID, o.ID, now); e != nil {
 				return e
@@ -435,7 +447,11 @@ func (s *Service) applyVerified(ctx context.Context, actor string, scope sdk.Sco
 		if e != nil {
 			return e
 		}
-		if e = emit(ctx, tx, actor, scope, "commerce.payment.paid", p.ID, p.ContactID, map[string][]string{"order.id": {p.OrderID}, "payment.id": {p.ID}}); e != nil {
+		eventType := "commerce.payment.paid"
+		if o.State == "CANCELLED" {
+			eventType = "commerce.payment.refund_required"
+		}
+		if e = emit(ctx, tx, actor, scope, eventType, p.ID, p.ContactID, map[string][]string{"order.id": {p.OrderID}, "payment.id": {p.ID}}); e != nil {
 			return e
 		}
 		return database.Audit(ctx, tx, actor, scope.AccountID, "commerce.payment.verified", "commerce_payment", p.ID, correlation, map[string]any{"state": p.State}, map[string]any{"state": out.State})
@@ -460,7 +476,11 @@ func (s *Service) PreCheckoutStars(ctx context.Context, actor string, scope sdk.
 			if e != nil {
 				return e
 			}
-			ok = p.Rail == RailTelegramStars && p.Provider == "telegram" && (p.State == PaymentAwaiting || p.State == PaymentUnknown) && p.Amount.Asset == ledger.XTR && p.Amount.AmountAtomic == amount && payer == user
+			o, e := order(ctx, tx, scope, p.OrderID)
+			if e != nil {
+				return e
+			}
+			ok = o.State == "PLACED" && p.Rail == RailTelegramStars && p.Provider == "telegram" && (p.State == PaymentAwaiting || p.State == PaymentUnknown) && p.Amount.Asset == ledger.XTR && p.Amount.AmountAtomic == amount && payer == user
 			if ok {
 				value := []any{queryID, payload, currency, amount, user}
 				if e = s.paymentEvent(ctx, tx, scope, p, "precheckout:"+queryID, "PRECHECKOUT_ACCEPTED", queryID, p.Amount, value); e != nil {
@@ -518,6 +538,7 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 	fp := hash([]any{"refund", actor, paymentID, in})
 	var p Payment
 	var payer int64
+	fresh := false
 	e := s.tenant(ctx, actor, scope, func(tx pgx.Tx) error {
 		var saved string
 		e := tx.QueryRow(ctx, "SELECT id::text,fingerprint FROM commerce_refunds WHERE payment_id=$1 AND operation_key=$2", paymentID, in.Key).Scan(&out.ID, &saved)
@@ -529,7 +550,7 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 			if e != nil {
 				return e
 			}
-			if out.State == "PROCESSING" {
+			if out.State == "PROCESSING" && !out.UpdatedAt.Add(5*time.Minute).After(s.now()) {
 				p, _, e = payment(ctx, tx, scope, paymentID, true)
 				if e != nil {
 					return e
@@ -568,18 +589,21 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 			return e
 		}
 		out, e = scanRefund(tx.QueryRow(ctx, "SELECT "+refundColumns+" FROM commerce_refunds WHERE id=$1", out.ID))
+		fresh = e == nil
 		return e
 	})
-	if e != nil || out.State != "PROCESSING" {
+	if e != nil || !fresh || out.State != "PROCESSING" {
 		return out, e
 	}
 
+	effectCtx, cancelEffect := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelEffect()
 	result := ExternalResult{Outcome: OutcomeRejected}
 	if p.Rail == RailTelegramStars {
 		if s.Content == nil || p.ProviderPaymentID == "" {
 			result.Status = "REFUND_UNAVAILABLE"
 		} else {
-			code := s.Content.RefundStars(ctx, actor, scope, payer, p.ProviderPaymentID)
+			code := s.Content.RefundStars(effectCtx, actor, scope, payer, p.ProviderPaymentID)
 			result.Status = code
 			switch code {
 			case "REFUND_ACKNOWLEDGED":
@@ -594,7 +618,7 @@ func (s *Service) Refund(ctx context.Context, actor string, scope sdk.Scope, pay
 	} else if s.PaymentProvider == nil {
 		result.Status = "PROVIDER_UNAVAILABLE"
 	} else {
-		result, e = s.PaymentProvider.Refund(ctx, p.Provider, ExternalRefundRequest{Key: in.Key, OrderID: p.OrderID, PaymentID: p.ID, ProviderPaymentID: p.ProviderPaymentID, Amount: p.Amount, Reason: in.Reason})
+		result, e = s.PaymentProvider.Refund(effectCtx, p.Provider, ExternalRefundRequest{Key: in.Key, OrderID: p.OrderID, PaymentID: p.ID, ProviderPaymentID: p.ProviderPaymentID, Amount: p.Amount, Reason: in.Reason})
 		if e != nil {
 			result = ExternalResult{Outcome: OutcomeUnknown, Status: "REFUND_OUTCOME_UNKNOWN"}
 		}
@@ -683,6 +707,9 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 	if e != nil {
 		return p, e
 	}
+	if _, _, ok := reconciledTransition(p, result); !ok {
+		return p, database.ErrConflict
+	}
 	if p.State == PaymentUnknown && result.Status == PaymentPaid {
 		if !validReconciledPayment(p, result) {
 			return p, database.ErrConflict
@@ -698,21 +725,8 @@ func (s *Service) Reconcile(ctx context.Context, actor string, scope sdk.Scope, 
 		if e != nil {
 			return e
 		}
-		next := ""
-		refundState := ""
-		switch {
-		case current.State == PaymentUnknown && result.Status == PaymentAwaiting:
-			next = PaymentAwaiting
-		case current.State == PaymentUnknown && result.Status == PaymentFailed:
-			next = PaymentFailed
-		case current.State == PaymentUnknown && result.Status == PaymentRefunded:
-			next = PaymentRefunded
-		case current.State == PaymentRefundUnknown && result.Status == PaymentRefunded:
-			next, refundState = PaymentRefunded, "REFUNDED"
-		case current.State == PaymentRefundUnknown && result.Status == PaymentPaid:
-			next, refundState = PaymentPaid, "FAILED"
-		}
-		if next == "" {
+		next, refundState, ok := reconciledTransition(current, result)
+		if !ok {
 			return database.ErrConflict
 		}
 		now := s.now()

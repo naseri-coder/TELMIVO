@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/base64"
+	"errors"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/domains/intelligence"
 	platform "github.com/naseri-coder/TELMIVO/internal/domains/pluginplatform"
@@ -145,6 +146,18 @@ func (a *API) intelligenceChat(w http.ResponseWriter, r *http.Request) {
 		in.Purpose = "AGENT_ASSIST"
 	}
 	v, e := a.IntelligenceService().Chat(r.Context(), user(r), contentScope(r, assistant.ID), in)
+	if e != nil {
+		var f *provider.Failure
+		if errors.As(e, &f) {
+			status, code := aiFailureStatus(f)
+			payload := map[string]any{"error": map[string]string{"code": code}}
+			if v.ID != "" && v.State == "UNKNOWN" {
+				payload["request"] = map[string]string{"id": v.ID, "thread": v.Thread, "state": "UNKNOWN", "code": code}
+			}
+			respond(w, status, payload)
+			return
+		}
+	}
 	supportReply(w, v, e)
 }
 func (a *API) intelligenceReset(w http.ResponseWriter, r *http.Request) {
@@ -165,4 +178,21 @@ func (a *API) intelligenceUsage(w http.ResponseWriter, r *http.Request) {
 func (a *API) intelligenceOptions(w http.ResponseWriter, r *http.Request) {
 	v, e := a.IntelligenceService().Options(r.Context(), user(r), contentScope(r, workflow.ID))
 	supportReply(w, v, e)
+}
+
+func aiFailureStatus(f *provider.Failure) (int, string) {
+	switch f.Code {
+	case "AI_COST_LIMIT":
+		return 403, f.Code
+	case "CONTEXT_TOO_LARGE", "MODEL_CAPABILITY_MISMATCH":
+		return 400, f.Code
+	case "PROVIDER_RATE_LIMIT":
+		return 429, f.Code
+	case "MODEL_UNAVAILABLE", "PROVIDER_UNAVAILABLE", "PROVIDER_OUTCOME_UNKNOWN":
+		return 503, f.Code
+	case "PROVIDER_REJECTED":
+		return 400, f.Code
+	default:
+		return 500, "internal"
+	}
 }

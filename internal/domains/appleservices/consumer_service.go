@@ -70,7 +70,7 @@ func consumerTarget(state State, action ConsumerAction) (State, bool) {
 		return Ready, true
 	case (state == Precheck || state == AppleActionRequired) && action == ConsumerCancel:
 		return Cancelled, true
-	case (state == Precheck || state == AppleCompleted || state == VerificationPending) && action == ConsumerReportFailure:
+	case (state == Precheck || state == AppleActionRequired || state == AppleCompleted || state == VerificationPending) && action == ConsumerReportFailure:
 		return Failed, true
 	default:
 		return "", false

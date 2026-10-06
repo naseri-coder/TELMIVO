@@ -94,6 +94,10 @@ type Service struct {
 
 func (s *Service) Login(ctx context.Context, u auth.TelegramUser, raw string) (Result, string, error) {
 	var out Result
+	replayDigest, e := auth.InitDataDigest(raw)
+	if e != nil {
+		return out, "", e
+	}
 	token, e := auth.Token()
 	if e != nil {
 		return out, "", e
@@ -106,14 +110,14 @@ func (s *Service) Login(ctx context.Context, u auth.TelegramUser, raw string) (R
 	if _, e = tx.Exec(ctx, "DELETE FROM auth_replays WHERE expires_at<now()"); e != nil {
 		return out, "", e
 	}
-	if _, e = tx.Exec(ctx, "INSERT INTO auth_replays(digest,expires_at) VALUES($1,$2)", auth.Digest(raw), time.Now().Add(10*time.Minute)); e != nil {
+	if _, e = tx.Exec(ctx, "INSERT INTO auth_replays(digest,expires_at) VALUES($1,$2)", replayDigest, time.Now().Add(10*time.Minute)); e != nil {
 		var pe *pgconn.PgError
 		if errors.As(e, &pe) && pe.Code == "23505" {
 			return out, "", auth.ErrInvalid
 		}
 		return out, "", e
 	}
-	out, e = Enter(ctx, tx, u, s.Admins, "MINIAPP", auth.Digest(raw))
+	out, e = Enter(ctx, tx, u, s.Admins, "MINIAPP", replayDigest)
 	if e != nil {
 		return out, "", e
 	}

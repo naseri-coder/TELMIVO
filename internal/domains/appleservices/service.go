@@ -59,13 +59,14 @@ func (s *Service) ensureProfileTx(ctx context.Context, tx pgx.Tx, actor, workspa
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return Profile{}, false, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO apple_service_profiles(workspace_id,created_by,created_at,updated_at)
-		VALUES($1,$2,$3,$3)`, workspace, actor, s.now())
+	tag, err := tx.Exec(ctx, `INSERT INTO apple_service_profiles(workspace_id,created_by,created_at,updated_at)
+		VALUES($1,$2,$3,$3)
+		ON CONFLICT (workspace_id) DO NOTHING`, workspace, actor, s.now())
 	if err != nil {
 		return Profile{}, false, err
 	}
 	out, err = s.profile(ctx, tx, workspace)
-	return out, true, err
+	return out, tag.RowsAffected() == 1, err
 }
 
 func (s *Service) Profile(ctx context.Context, actor, workspace string) (Profile, error) {
@@ -306,7 +307,7 @@ func (s *Service) Transition(ctx context.Context, actor, workspace, operationID,
 		if current.Revision != in.Expected {
 			return database.ErrConflict
 		}
-		if current.ExpiresAt != nil && !s.now().Before(*current.ExpiresAt) && in.State != Expired {
+		if expiryBlocks(current.Kind, current.State, in.State, current.ExpiresAt, s.now()) {
 			return database.ErrConflict
 		}
 		if !CanTransition(current.Kind, current.State, in.State) {
@@ -369,4 +370,10 @@ func (s *Service) Events(ctx context.Context, actor, workspace, operationID stri
 		return rows.Err()
 	})
 	return out, err
+}
+
+// A deadline blocks advancement only where the state graph offers safe expiry.
+// States with ambiguous/in-flight effects remain recoverable through their graph.
+func expiryBlocks(kind Kind, from, to State, expires *time.Time, now time.Time) bool {
+	return expires != nil && !now.Before(*expires) && CanTransition(kind, from, Expired) && to != Expired
 }

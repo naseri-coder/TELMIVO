@@ -1,0 +1,334 @@
+{
+  "repository": "naseri-coder/TELMIVO",
+  "audited_base_sha": "4599f431a97f212667be022b2ca1afa258a1a2ae",
+  "preserved_wave1_sha": "644ed9ef8e44f594d61d3f4c0019c547565f864e",
+  "branch": "feature/r5b-consumer-apple-account-assistance-v0.3",
+  "findings": [
+    {
+      "id": "TEL-R5-AUDIT-001",
+      "severity": "HIGH",
+      "root_cause": "One tenant's recurring quota denial terminates the shared worker",
+      "source_paths": [
+        "internal/domains/intelligence/schedules.go",
+        "internal/domains/intelligence/worker.go",
+        "internal/domains/intelligence/workflows.go",
+        "internal/platform/runtime/runtime.go"
+      ],
+      "remediation": "Typed quota/permission/state/dependency denial becomes durable SKIPPED; unexpected infrastructure errors propagate. Poll regression now makes a second exhausted and healthy occurrence due before worker start; runtime test COMPILED_NOT_EXECUTED.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-002",
+      "severity": "HIGH",
+      "root_cause": "Ambiguous reconciliation can release the active-payment fence",
+      "source_paths": [
+        "db/migrations/0021_commerce_checkout_payments.sql",
+        "internal/domains/businessplugins/payments.go"
+      ],
+      "remediation": "Explicit trustworthy reconciliation evidence matrix preserves UNKNOWN and active fence.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-003",
+      "severity": "HIGH",
+      "root_cause": "Native Playwright selector excludes the R4E and R4F files invoked by the workflow",
+      "source_paths": [
+        ".github/workflows/migration-check.yml",
+        "scripts/ci/r4g-release-check.py",
+        "web/miniapp/playwright.native.config.ts"
+      ],
+      "remediation": "Preserved native selector admits all 14 intended specs.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-004",
+      "severity": "HIGH",
+      "root_cause": "A retained release gate and integration tests still require exactly 23 migrations",
+      "source_paths": [
+        ".github/workflows/r4-release-readiness.yml",
+        "README.md",
+        "db/migrations/embed.go",
+        "scripts/ci/r4g-release-check.py",
+        "tests/integration/r4g_test.go"
+      ],
+      "remediation": "Historical 23/25 checkpoint contracts retained; current source requires 26 after forward receipt migration.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-005",
+      "severity": "MEDIUM",
+      "root_cause": "Telegram initData replay identity differs from signed-data identity",
+      "source_paths": [
+        "internal/domains/identity/service.go",
+        "internal/platform/auth/telegram.go"
+      ],
+      "remediation": "Canonical verified initData replay digest.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-006",
+      "severity": "MEDIUM",
+      "root_cause": "Concurrent checkout/refund replay seals a still-running attempt as interrupted",
+      "source_paths": [
+        "internal/domains/businessplugins/payments.go"
+      ],
+      "remediation": "Fresh intent flag and bounded provider lease prevent live replay interruption or duplicate effect.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-007",
+      "severity": "MEDIUM",
+      "root_cause": "Cancelled order can still pass Stars pre-checkout and become paid",
+      "source_paths": [
+        "internal/domains/businessplugins/commerce.go",
+        "internal/domains/businessplugins/payments.go",
+        "internal/plugins/shop/model.go"
+      ],
+      "remediation": "Order/payment cancellation serialization; late verified cancelled-order charge retains refund-required evidence without fulfillment event.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-008",
+      "severity": "MEDIUM",
+      "root_cause": "Channel resource-count admission is a check-then-insert race",
+      "source_paths": [
+        "internal/domains/channels/service.go",
+        "internal/domains/entitlements/service.go",
+        "internal/domains/policies/resolve.go",
+        "internal/platform/database/database.go"
+      ],
+      "remediation": "Feature lock serializes channel count admission and insertion.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-009",
+      "severity": "MEDIUM",
+      "root_cause": "Uploader execution does not recheck current feature/workflow admission",
+      "source_paths": [
+        "internal/domains/uploads/service.go"
+      ],
+      "remediation": "Current uploader admission rechecked for replay, write and approval.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-010",
+      "severity": "MEDIUM",
+      "root_cause": "Manual uploader deletion failures/crashes fall outside retention recovery",
+      "source_paths": [
+        "internal/domains/uploads/service.go"
+      ],
+      "remediation": "Durable manual deletion intent and bounded sweeper recovery; physical capacity retained until deletion.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-011",
+      "severity": "MEDIUM",
+      "root_cause": "S3 signed download bypasses object expiry enforced by normal reads",
+      "source_paths": [
+        "internal/domains/uploads/service.go",
+        "internal/platform/storage/s3.go"
+      ],
+      "remediation": "Signed links cannot exceed retention; expired/sub-second links denied.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-012",
+      "severity": "MEDIUM",
+      "root_cause": "AI source refresh mutates the fingerprint of an old operation and never records the new one",
+      "source_paths": [
+        "docs/R4F-ai-assistant-2.md",
+        "internal/domains/intelligence/knowledge.go"
+      ],
+      "remediation": "Immutable per-request ingestion receipts, source/name conflict checks, cross-path key collision rejection and fail-closed legacy backfill.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-013",
+      "severity": "MEDIUM",
+      "root_cause": "Expected AI domain failures are mapped to generic HTTP 500",
+      "source_paths": [
+        "internal/domains/intelligence/assistant.go",
+        "internal/platform/httpapi/api.go",
+        "internal/platform/httpapi/intelligence.go",
+        "internal/platform/httpapi/supportplugins.go"
+      ],
+      "remediation": "Safe classified AI HTTP errors retain durable UNKNOWN identity.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-014",
+      "severity": "MEDIUM",
+      "root_cause": "Production proxy rejects files that the uploader advertises and admits",
+      "source_paths": [
+        "internal/platform/config/config.go",
+        "internal/platform/httpapi/uploads.go"
+      ],
+      "remediation": "Bounded binary-only proxy limit, ordinary JSON limit preserved.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-015",
+      "severity": "MEDIUM",
+      "root_cause": "All proxied users share one API IP rate-limit bucket",
+      "source_paths": [
+        "internal/platform/httpapi/api.go"
+      ],
+      "remediation": "Trusted proxy peer configuration and spoof-resistant client rate-limit identity.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-016",
+      "severity": "MEDIUM",
+      "root_cause": "Cron materialization and workflow edits acquire tenant/row locks in opposite order",
+      "source_paths": [
+        "internal/domains/intelligence/schedules.go",
+        "internal/domains/intelligence/service.go",
+        "internal/domains/intelligence/workflows.go"
+      ],
+      "remediation": "Workspace lock precedes schedule row lock.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-017",
+      "severity": "MEDIUM",
+      "root_cause": "Recovered-state tests prove snapshots but omit critical service replay and exact consumer identity assertions",
+      "source_paths": [
+        "scripts/ci/restore-manifest.sql",
+        "tests/integration/r4d_test.go",
+        "tests/integration/r4g_test.go",
+        "tests/integration/r5a_test.go",
+        "tests/integration/r5b_test.go"
+      ],
+      "remediation": "Recovered service replay and exact consumer identity assertions added.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-018",
+      "severity": "MEDIUM",
+      "root_cause": "An expired Foundation operation can become permanently untransitionable",
+      "source_paths": [
+        "db/migrations/0024_apple_services_foundation.sql",
+        "internal/domains/appleservices/service.go",
+        "internal/domains/appleservices/state.go",
+        "internal/domains/appleservices/state_test.go"
+      ],
+      "remediation": "Safe pre-effect expiry reachable; in-flight reconciliation graph retained.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "TEL-R5-AUDIT-020",
+      "severity": "MEDIUM",
+      "root_cause": "Downloader direct detail and receipt replay omit current permission admission",
+      "source_paths": [
+        "assistant.go",
+        "commerce/quota.go",
+        "internal/domains/downloads/product.go",
+        "internal/platform/database/database.go",
+        "internal/platform/httpapi/downloader.go",
+        "payments.go"
+      ],
+      "remediation": "Downloader current permission on replay and direct read.",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "Unit/static gates executed; PostgreSQL/browser/recovery runtime pending where relevant",
+      "residual_risk": "Disposable runtime acceptance required; no production use"
+    },
+    {
+      "id": "POST-AUDIT-NEW-001",
+      "severity": "HIGH",
+      "source_paths": [
+        ".github/workflows/migration-check.yml"
+      ],
+      "root_cause": "Repository-relative checker path used after cd web/miniapp",
+      "remediation": "Use ../../scripts/ci/check-native-selection.py; path regression and 14-spec real enumeration",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "PASS static/path/enumeration; browser NOT_EXECUTED",
+      "residual_risk": "Browser runtime blocked"
+    },
+    {
+      "id": "POST-AUDIT-NEW-002",
+      "severity": "MEDIUM",
+      "source_paths": [
+        "internal/domains/intelligence/configuration.go",
+        "internal/domains/intelligence/assistant.go"
+      ],
+      "root_cause": "Model updates invalidate previously admitted consumer tool/token/structured capabilities",
+      "remediation": "Revalidate current capabilities at new request admission",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "TestConsumerUsesCurrentModelCapabilities PASS",
+      "residual_risk": "DB request-admission runtime pending"
+    },
+    {
+      "id": "POST-AUDIT-NEW-003",
+      "severity": "MEDIUM",
+      "source_paths": [
+        "internal/domains/intelligence/worker.go"
+      ],
+      "root_cause": "Owner query iteration error ignored after partial rows",
+      "remediation": "Return iterator error and reject partial batch",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "TestWorkerRejectsPartialOwnerBatch PASS (unit/race)",
+      "residual_risk": "Real DB interruption validation pending"
+    },
+    {
+      "id": "POST-AUDIT-NEW-004",
+      "severity": "MEDIUM",
+      "source_paths": [
+        "internal/platform/database/database.go",
+        "internal/domains/intelligence/service.go",
+        "internal/domains/pluginplatform/store.go",
+        "internal/domains/commerce/admission.go"
+      ],
+      "root_cause": "Boolean permission helper conflates query failure with proved admission denial; tenant membership query discards original failure",
+      "remediation": "Checked permission API used on automation admission dependency chain; preserve membership query error",
+      "status": "SOURCE_REPAIR_IMPLEMENTED",
+      "validation": "TestPermissionPreservesInfrastructureFailure PASS (unit/race)",
+      "residual_risk": "DB failure injection runtime pending"
+    }
+  ],
+  "needs_verification": {
+    "NV-01": "PostgreSQL 17 grammar SQL/PLpgSQL parse PASS for 0001\u20130026; fresh/upgrade/checksum/RLS runtime NOT_EXECUTED",
+    "NV-02": "Intentional populated-R5A consumer guard requires owner upgrade policy; no fabricated conversion",
+    "NV-03": "Apple feature vs plugin grant precedence remains contract question",
+    "NV-04": "Stars ambiguous refund resolution remains capability question; no blind retry",
+    "NV-05": "Conservative admitted AI budget vs actual usage quota remains metering policy question",
+    "NV-06": "Go compilation/internal/contract/race/vet/build and Mini App gates now executed; integration compiled only",
+    "NV-07": "PostgreSQL/browser/container/recovery runtime remains blocked",
+    "NV-08": "Concurrent profile suspension policy remains owner contract question"
+  }
+}

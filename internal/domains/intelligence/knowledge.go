@@ -203,25 +203,42 @@ func (s *Service) sourceKnowledge(ctx context.Context, tx pgx.Tx, scope sdk.Scop
 
 func (s *Service) saveImported(ctx context.Context, actor string, scope sdk.Scope, in IngestRequest, name, bodyText string) (Knowledge, error) {
 	var out Knowledge
-	fp := hash([]any{in.SourceKind, in.Reference, name, bodyText})
-	err := s.tenant(ctx, actor, scope, "ai.manage", "ai.invoke", func(tx pgx.Tx) error {
+	fp := hash([]any{in.SourceKind, in.Reference, in.Name})
+	contentFP := hash([]any{in.SourceKind, in.Reference, name, bodyText})
+	err := s.tenant(ctx, actor, scope, "ai.manage", "ai.invoke", func(tx pgx.Tx) (resultErr error) {
 		var savedFP string
-		err := tx.QueryRow(ctx, "SELECT id::text,revision,fingerprint,name,body,enabled,source_kind,source_ref FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3",
-			scope.AccountID, scope.BotID, in.Key).Scan(&out.ID, &out.Revision, &savedFP, &out.Name, &out.Body, &out.Enabled, &out.SourceKind, &out.SourceRef)
+		var snapshot []byte
+		var legacy bool
+		err := tx.QueryRow(ctx, "SELECT fingerprint,result,legacy_ambiguous FROM ai_ingestion_receipts WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3", scope.AccountID, scope.BotID, in.Key).Scan(&savedFP, &snapshot, &legacy)
 		if err == nil {
-			if savedFP != fp || out.SourceKind != in.SourceKind || out.SourceRef != in.Reference {
+			if legacy || savedFP != fp {
 				return database.ErrConflict
 			}
-			return s.reindexKnowledge(ctx, tx, scope, out)
+			return json.Unmarshal(snapshot, &out)
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		var manualKey bool
+		if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ai_knowledge WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3 AND source_kind='MANUAL')", scope.AccountID, scope.BotID, in.Key).Scan(&manualKey); err != nil {
+			return err
+		}
+		if manualKey {
+			return database.ErrConflict
+		}
+		// Receipt insert and version mutation commit together; the existing tenant
+		// lock serializes both same-key and same-source refresh operations.
+		defer func() {
+			if resultErr != nil {
+				return
+			}
+			_, resultErr = tx.Exec(ctx, "INSERT INTO ai_ingestion_receipts(workspace_id,bot_id,operation_key,fingerprint,knowledge_id,result) VALUES($1,$2,$3,$4,$5,$6)", scope.AccountID, scope.BotID, in.Key, fp, out.ID, body(out))
+		}()
 		existing, err := s.sourceKnowledge(ctx, tx, scope, in.SourceKind, in.Reference)
 		if err == nil {
-			if hash([]any{existing.SourceKind, existing.SourceRef, existing.Name, existing.Body}) != fp {
+			if hash([]any{existing.SourceKind, existing.SourceRef, existing.Name, existing.Body}) != contentFP {
 				tag, updateErr := tx.Exec(ctx, "UPDATE ai_knowledge SET name=$4,body=$5,enabled=true,fingerprint=$6,revision=revision+1 WHERE workspace_id=$1 AND bot_id=$2 AND id=$3 AND revision=$7",
-					scope.AccountID, scope.BotID, existing.ID, name, bodyText, fp, existing.Revision)
+					scope.AccountID, scope.BotID, existing.ID, name, bodyText, contentFP, existing.Revision)
 				if updateErr != nil {
 					return updateErr
 				}
@@ -250,7 +267,7 @@ func (s *Service) saveImported(ctx context.Context, actor string, scope sdk.Scop
 		}
 		err = tx.QueryRow(ctx, `INSERT INTO ai_knowledge(workspace_id,bot_id,name,body,enabled,operation_key,fingerprint,source_kind,source_ref)
 			VALUES($1,$2,$3,$4,true,$5,$6,$7,$8) RETURNING id::text,revision`,
-			scope.AccountID, scope.BotID, name, bodyText, in.Key, fp, in.SourceKind, in.Reference).Scan(&out.ID, &out.Revision)
+			scope.AccountID, scope.BotID, name, bodyText, in.Key, contentFP, in.SourceKind, in.Reference).Scan(&out.ID, &out.Revision)
 		if err != nil {
 			return err
 		}

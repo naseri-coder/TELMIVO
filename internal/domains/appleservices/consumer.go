@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	AppleAccountURL = "https://account.apple.com/"
+	AppleAccountURL  = "https://account.apple.com/"
 	AppleRecoveryURL = "https://iforgot.apple.com/"
-	AppleSupportURL = "https://support.apple.com/apple-account"
+	AppleSupportURL  = "https://support.apple.com/apple-account"
 )
 
 type ConsumerGoal string
@@ -45,13 +45,13 @@ func (c ConsumerChannel) Valid() bool {
 type ConsumerAction string
 
 const (
-	ConsumerConfirmPrecheck      ConsumerAction = "CONFIRM_PRECHECK"
-	ConsumerContinueAtApple      ConsumerAction = "CONTINUE_AT_APPLE"
-	ConsumerAppleFlowCompleted   ConsumerAction = "APPLE_FLOW_COMPLETED"
-	ConsumerVerificationStarted  ConsumerAction = "VERIFICATION_STARTED"
-	ConsumerConfirmCompletion    ConsumerAction = "CONFIRM_COMPLETION"
-	ConsumerCancel               ConsumerAction = "CANCEL"
-	ConsumerReportFailure        ConsumerAction = "REPORT_FAILURE"
+	ConsumerConfirmPrecheck     ConsumerAction = "CONFIRM_PRECHECK"
+	ConsumerContinueAtApple     ConsumerAction = "CONTINUE_AT_APPLE"
+	ConsumerAppleFlowCompleted  ConsumerAction = "APPLE_FLOW_COMPLETED"
+	ConsumerVerificationStarted ConsumerAction = "VERIFICATION_STARTED"
+	ConsumerConfirmCompletion   ConsumerAction = "CONFIRM_COMPLETION"
+	ConsumerCancel              ConsumerAction = "CANCEL"
+	ConsumerReportFailure       ConsumerAction = "REPORT_FAILURE"
 )
 
 func (a ConsumerAction) Valid() bool {
@@ -65,11 +65,11 @@ func (a ConsumerAction) Valid() bool {
 }
 
 type ConsumerStart struct {
-	Goal      ConsumerGoal    `json:"goal"`
-	Channel   ConsumerChannel `json:"channel"`
-	Locale    string          `json:"locale"`
-	Region    string          `json:"region"`
-	Key       string          `json:"idempotency_key"`
+	Goal    ConsumerGoal    `json:"goal"`
+	Channel ConsumerChannel `json:"channel"`
+	Locale  string          `json:"locale"`
+	Region  string          `json:"region"`
+	Key     string          `json:"idempotency_key"`
 }
 
 func (in ConsumerStart) Valid(_ time.Time) bool {
@@ -86,26 +86,26 @@ type ConsumerActionRequest struct {
 }
 
 type ConsumerGuidance struct {
-	Code                 string `json:"code"`
-	OfficialURL          string `json:"official_url,omitempty"`
-	SupportURL           string `json:"support_url"`
-	AppleActionOnly      bool   `json:"apple_action_only"`
-	SensitiveInputAllowed bool  `json:"sensitive_input_allowed"`
-	IdentityVerified     bool   `json:"identity_verified"`
-	CompletionMeaning    string `json:"completion_meaning"`
+	Code                  string `json:"code"`
+	OfficialURL           string `json:"official_url,omitempty"`
+	SupportURL            string `json:"support_url"`
+	AppleActionOnly       bool   `json:"apple_action_only"`
+	SensitiveInputAllowed bool   `json:"sensitive_input_allowed"`
+	IdentityVerified      bool   `json:"identity_verified"`
+	CompletionMeaning     string `json:"completion_meaning"`
 }
 
 type ConsumerAssistance struct {
-	Operation        Operation         `json:"operation"`
-	Goal             ConsumerGoal      `json:"goal"`
-	Channel          ConsumerChannel   `json:"channel"`
-	Locale           string            `json:"locale"`
-	Region           string            `json:"region"`
-	GuidanceVersion  string            `json:"guidance_version"`
-	CompletionSource string            `json:"completion_source"`
-	Guidance         ConsumerGuidance  `json:"guidance"`
-	Created          time.Time         `json:"created_at"`
-	Updated          time.Time         `json:"updated_at"`
+	Operation        Operation        `json:"operation"`
+	Goal             ConsumerGoal     `json:"goal"`
+	Channel          ConsumerChannel  `json:"channel"`
+	Locale           string           `json:"locale"`
+	Region           string           `json:"region"`
+	GuidanceVersion  string           `json:"guidance_version"`
+	CompletionSource string           `json:"completion_source"`
+	Guidance         ConsumerGuidance `json:"guidance"`
+	Created          time.Time        `json:"created_at"`
+	Updated          time.Time        `json:"updated_at"`
 }
 
 func validLocale(v string) bool {
