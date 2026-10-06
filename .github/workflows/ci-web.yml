@@ -36,5 +36,6 @@ jobs:
         if: always()
         with:
           name: rtl-smoke
+          retention-days: 7
           path: web/miniapp/test-results/
 
