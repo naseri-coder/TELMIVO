@@ -37,6 +37,13 @@ CREATE FUNCTION guard_apple_consumer_assistance() RETURNS trigger LANGUAGE plpgs
  IF OLD.completion_source='USER_ATTESTED' AND NEW.completion_source<>'USER_ATTESTED' THEN
   RAISE EXCEPTION 'consumer completion attestation is irreversible' USING ERRCODE='23514';
  END IF;
+ IF OLD.completion_source='NONE' AND NEW.completion_source='USER_ATTESTED' THEN
+  PERFORM 1 FROM apple_service_operations
+   WHERE id=NEW.operation_id AND workspace_id=NEW.workspace_id AND state='READY';
+  IF NOT FOUND THEN
+   RAISE EXCEPTION 'consumer completion attestation requires READY operation' USING ERRCODE='23514';
+  END IF;
+ END IF;
  RETURN NEW;
 END $$;
 
