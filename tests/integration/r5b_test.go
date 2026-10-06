@@ -20,6 +20,12 @@ func TestR5BConsumerAssistanceSafetyAndLifecycle(t *testing.T) {
 	svc := &apple.Service{DB: db, Clock: func() time.Time { return now }}
 	r5aWorkspaceGrant(t, u.UserID, u.WorkspaceID, 3)
 
+	if _, err := svc.CreateOperation(ctx, u.UserID, u.WorkspaceID, "r5b-generic-consumer-blocked", apple.CreateRequest{
+		Kind: apple.ConsumerAccount, SubjectRef: "telmivo-user:"+u.UserID, Key: "generic-consumer-blocked",
+	}); !errors.Is(err, database.ErrInvalid) {
+		t.Fatal("generic foundation API still creates CONSUMER_ACCOUNT after R5B", err)
+	}
+
 	start := apple.ConsumerStart{
 		Goal: apple.ConsumerCreateAccount,
 		Channel: apple.ConsumerWeb,
