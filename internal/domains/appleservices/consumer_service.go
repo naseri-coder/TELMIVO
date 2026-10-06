@@ -15,18 +15,20 @@ func consumerSubject(actor string) string { return "telmivo-user:" + actor }
 
 func consumerGuidance(goal ConsumerGoal, state State) ConsumerGuidance {
 	out := ConsumerGuidance{
-		SupportURL:         AppleSupportURL,
-		ProviderActionOnly: true,
-		SecretInputAllowed: false,
-		IdentityVerified:   false,
-		CompletionMeaning:  "USER_ATTESTED_ONLY",
+		SupportURL:            AppleSupportURL,
+		AppleActionOnly:       false,
+		SensitiveInputAllowed: false,
+		IdentityVerified:      false,
+		CompletionMeaning:     "USER_ATTESTED_ONLY",
 	}
 	switch state {
 	case Requested:
 		out.Code = "CONFIRM_PRECHECK"
 	case Precheck:
 		out.Code = "CONTINUE_AT_APPLE"
+		out.AppleActionOnly = true
 	case AppleActionRequired:
+		out.AppleActionOnly = true
 		switch goal {
 		case ConsumerRecoverAccess:
 			out.Code, out.OfficialURL = "RECOVER_ACCESS_AT_APPLE", AppleRecoveryURL
@@ -36,21 +38,18 @@ func consumerGuidance(goal ConsumerGoal, state State) ConsumerGuidance {
 			out.Code, out.OfficialURL = "CREATE_ACCOUNT_AT_APPLE", AppleAccountURL
 		}
 	case AppleCompleted:
-		out.Code = "START_APPLE_VERIFICATION"
+		out.Code = "COMPLETE_APPLE_REQUIRED_VERIFICATION"
+		out.AppleActionOnly = true
 	case VerificationPending:
 		out.Code = "CONFIRM_APPLE_FLOW_COMPLETION"
 	case Ready:
 		out.Code = "COMPLETE_USER_ATTESTED"
-		out.ProviderActionOnly = false
 	case Failed:
 		out.Code = "FAILED"
-		out.ProviderActionOnly = false
 	case Cancelled:
 		out.Code = "CANCELLED"
-		out.ProviderActionOnly = false
 	case Expired:
 		out.Code = "EXPIRED"
-		out.ProviderActionOnly = false
 	default:
 		out.Code = "UNAVAILABLE"
 	}
