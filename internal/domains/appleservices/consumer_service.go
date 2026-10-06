@@ -114,7 +114,7 @@ func (s *Service) StartConsumer(ctx context.Context, actor, workspace, correlati
 		if err := entitlements.Require(ctx, tx, actor, workspace, plugin.Feature, plugin.ConsumerSetup, 0); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,7500250))", workspace+":"+in.Key); err != nil {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,7500240))", workspace+":"+in.Key); err != nil {
 			return err
 		}
 		replay, saved, err := s.operationByKey(ctx, tx, workspace, in.Key)
