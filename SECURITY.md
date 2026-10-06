@@ -28,3 +28,18 @@ Google, Microsoft or generic IdP request.
 Apple operation creation is entitlement- and quota-gated, idempotent, revision-fenced and audited.
 Only OWNER/ADMIN receive Apple permissions in R5A. Existing plans and plugin entitlements remain
 disabled by default; controlled grants are required until later commercialization work.
+
+## R5B consumer Apple Account assistance
+
+R5B binds consumer assistance to the authenticated TELMIVO user and never accepts an arbitrary
+consumer subject from the client. The HTTP decoder rejects unknown fields, so request payloads
+containing password, OTP or verification-code fields fail before reaching the service layer.
+
+TELMIVO never proxies Apple sign-in/account pages, never submits Apple credentials, never handles
+Apple two-factor challenges and never claims that R5B READY state is verified Apple identity.
+R5B READY means only USER_ATTESTED completion of an Apple-controlled flow. R5C remains responsible
+for future Sign in with Apple identity verification and account linking.
+
+The consumer assistance table stores only goal, device/channel, locale, optional region, guidance
+version and completion source. It uses FORCE RLS; identity metadata is immutable and a recorded
+USER_ATTESTED completion cannot be reverted.
