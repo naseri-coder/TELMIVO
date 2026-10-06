@@ -180,7 +180,7 @@ func (s *Service) CreateOperation(ctx context.Context, actor, workspace, correla
 	if s.DB == nil || !in.Kind.Valid() || !validKey(in.Key) || !validCorrelation(correlation) || len(in.SubjectRef) > 200 {
 		return out, database.ErrInvalid
 	}
-	if in.Kind == ConsumerAccount {
+	if in.Kind == ConsumerAccount || in.Kind == IdentityVerification {
 		return out, database.ErrInvalid
 	}
 	if in.ExpiresAt != nil && !in.ExpiresAt.After(s.now()) {
@@ -258,7 +258,7 @@ func (s *Service) Operations(ctx context.Context, actor, workspace string) ([]Op
 		}
 		rows, err := tx.Query(ctx, `SELECT id::text,kind,state,subject_ref,revision,expires_at,created_at,updated_at
 			FROM apple_service_operations
-			WHERE workspace_id=$1 AND kind<>'CONSUMER_ACCOUNT'
+			WHERE workspace_id=$1 AND kind NOT IN('CONSUMER_ACCOUNT','IDENTITY_VERIFICATION')
 			ORDER BY created_at DESC,id DESC LIMIT 100`, workspace)
 		if err != nil {
 			return err
@@ -287,7 +287,7 @@ func (s *Service) Transition(ctx context.Context, actor, workspace, operationID,
 		if err != nil {
 			return err
 		}
-		if current.Kind == ConsumerAccount {
+		if current.Kind == ConsumerAccount || current.Kind == IdentityVerification {
 			return database.ErrInvalid
 		}
 		capability := Capability(current.Kind)
@@ -351,7 +351,7 @@ func (s *Service) Events(ctx context.Context, actor, workspace, operationID stri
 		if err := tx.QueryRow(ctx, "SELECT kind FROM apple_service_operations WHERE workspace_id=$1 AND id::text=$2", workspace, operationID).Scan(&kind); err != nil {
 			return err
 		}
-		if kind == ConsumerAccount {
+		if kind == ConsumerAccount || kind == IdentityVerification {
 			return database.ErrForbidden
 		}
 		rows, err := tx.Query(ctx, `SELECT id::text,sequence,from_state,to_state,reason,correlation_id,created_at
