@@ -80,3 +80,24 @@ func Token() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 func Digest(token string) string { h := sha256.Sum256([]byte(token)); return hex.EncodeToString(h[:]) }
+
+// InitDataDigest is used only after ValidateInitData succeeds. Normalize the
+// verified signature and query encoding so equivalent signed messages share
+// one replay identity (the signature also binds the validating bot token).
+func InitDataDigest(raw string) (string, error) {
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "", ErrInvalid
+	}
+	for _, vs := range values {
+		if len(vs) != 1 {
+			return "", ErrInvalid
+		}
+	}
+	signature, err := hex.DecodeString(values.Get("hash"))
+	if err != nil || len(signature) != sha256.Size {
+		return "", ErrInvalid
+	}
+	values.Set("hash", hex.EncodeToString(signature))
+	return Digest(values.Encode()), nil
+}
