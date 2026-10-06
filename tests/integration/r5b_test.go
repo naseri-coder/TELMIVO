@@ -319,15 +319,15 @@ func TestR5BRecovered(t *testing.T) {
 	must(t, err)
 	defer store.Pool.Close()
 
-	var state, subject, goal, channel, locale, region, completion string
+	var state, subject, goal, channel, locale, region, completion, actor string
 	var revision int64
-	must(t, store.Pool.QueryRow(ctx, `SELECT o.state,o.subject_ref,o.revision,c.goal,c.channel,c.locale,c.region,c.completion_source
+	must(t, store.Pool.QueryRow(ctx, `SELECT o.state,o.subject_ref,o.revision,c.goal,c.channel,c.locale,c.region,c.completion_source,o.actor_id::text
 		FROM apple_service_operations o
 		JOIN apple_consumer_assistance c ON c.operation_id=o.id AND c.workspace_id=o.workspace_id
 		WHERE o.operation_key='r5b-recovery'`).
-		Scan(&state, &subject, &revision, &goal, &channel, &locale, &region, &completion))
+		Scan(&state, &subject, &revision, &goal, &channel, &locale, &region, &completion, &actor))
 	if state != "READY" || revision != 6 || goal != "CHECK_EXISTING" || channel != "ANDROID_WINDOWS" ||
-		locale != "de-DE" || region != "DE" || completion != "USER_ATTESTED" || subject == "" {
+		locale != "de-DE" || region != "DE" || completion != "USER_ATTESTED" || subject != "telmivo-user:"+actor {
 		t.Fatal("R5B restore drift", state, subject, revision, goal, channel, locale, region, completion)
 	}
 	var events int

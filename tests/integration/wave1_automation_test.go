@@ -16,14 +16,18 @@ import (
 func TestWave1AutomationTenantQuotaIsolation(t *testing.T) {
 	a, b := r3d6Fixture(t), r3d6Fixture(t)
 	const metric = "automation.executions.monthly"
-	for _, f := range []r3d6Data{a, b} {
+	for i, f := range []r3d6Data{a, b} {
 		catalog, err := f.s.Catalog(ctx, f.admin.UserID, f.u.WorkspaceID)
 		must(t, err)
 		plan, ok := catalog.Get(commerce.PlanKind, f.plan)
 		if !ok {
 			t.Fatal("fixture plan missing")
 		}
-		plan.Definition.Plan.Limits[metric] = commerce.Limit{Value: 1}
+		limit := int64(1)
+		if i == 1 {
+			limit = 2
+		}
+		plan.Definition.Plan.Limits[metric] = commerce.Limit{Value: limit}
 		f.r3d5FixtureData.save(t, plan, plan.Version)
 	}
 	quota, err := a.s.Consume(ctx, a.u.UserID, a.u.WorkspaceID, a.bot, metric, 1)
@@ -68,6 +72,13 @@ func TestWave1AutomationTenantQuotaIsolation(t *testing.T) {
 			t.Fatal("duplicate occurrence or poisoned recurrence state", occurrence, next)
 		}
 	}
+	// Make a second occurrence due before starting the real poller. Otherwise
+	// the quota-denied schedule has already advanced and Poll never exercises it.
+	var pollDue time.Time
+	tenant(t, a.u, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, "SELECT next_at FROM automation_schedule_state WHERE workflow_id=$1", ids[0]).Scan(&pollDue)
+	})
+	a.clock.at, b.clock.at = pollDue, pollDue
 	// The real shared automation poller must continue; a peer producer using the
 	// same worker context must remain active. All transport is the fixture mock.
 	workerCtx, cancel := context.WithCancel(ctx)
@@ -113,7 +124,8 @@ func TestWave1AutomationTenantQuotaIsolation(t *testing.T) {
 		case <-deadline.C:
 			t.Fatal("healthy execution did not finish while poller remained alive")
 		case <-ticker.C:
-			if healthy := r4eExecution(t, b, ids[1]); healthy.State != "SUCCEEDED" {
+			if number(t, b.u, "SELECT count(*) FROM automation_executions WHERE workflow_id=$1 AND state='SUCCEEDED'", ids[1]) != 2 ||
+				number(t, a.u, "SELECT count(*) FROM automation_executions WHERE workflow_id=$1 AND state='SKIPPED'", ids[0]) != 2 {
 				continue
 			}
 			select {
@@ -121,8 +133,18 @@ func TestWave1AutomationTenantQuotaIsolation(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("peer worker producer stopped")
 			}
-			if workerCtx.Err() != nil || number(t, b.u, "SELECT count(*) FROM automation_executions WHERE workflow_id=$1", ids[1]) != 1 {
+			if workerCtx.Err() != nil || number(t, b.u, "SELECT count(*) FROM automation_executions WHERE workflow_id=$1", ids[1]) != 2 {
 				t.Fatal("worker context cancelled or healthy execution duplicated")
+			}
+			for i, f := range []r3d6Data{a, b} {
+				var occurrence int64
+				var next time.Time
+				tenant(t, f.u, func(tx pgx.Tx) error {
+					return tx.QueryRow(ctx, "SELECT occurrence,next_at FROM automation_schedule_state WHERE workflow_id=$1", ids[i]).Scan(&occurrence, &next)
+				})
+				if occurrence != 2 || !next.After(pollDue) {
+					t.Fatal("poller poisoned recurrence", occurrence, next)
+				}
 			}
 			return
 		}

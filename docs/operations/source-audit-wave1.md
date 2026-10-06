@@ -1,5 +1,7 @@
 # Source audit remediation Wave 1
 
+Historical checkpoint: this document describes commit `644ed9ef8e44f594d61d3f4c0019c547565f864e`. The subsequent full-source remediation uses `R5B_REMEDIATED` (0001–0026); see `post-audit-ledger.json`. Historical R4G and original R5B boundaries below remain unchanged.
+
 Scope: TEL-R5-AUDIT-001 through 004 only, from R5B
 `4599f431a97f212667be022b2ca1afa258a1a2ae`. This is not R5B source-clean approval.
 
