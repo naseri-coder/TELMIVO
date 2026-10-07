@@ -29,6 +29,9 @@ const Unavailable Failure = "FORMAT_UNAVAILABLE"
 type Source struct{ Provider, URL, Reference string }
 type Format struct {
 	SourceContainer string `json:"source_container,omitempty"`
+	VideoSourceID   string `json:"video_source_id,omitempty"`
+	AudioSourceID   string `json:"audio_source_id,omitempty"`
+	ProcessingPlan  string `json:"processing_plan,omitempty"`
 	ID              string `json:"id"`
 	Label           string `json:"label"`
 	Kind            string `json:"kind"`
@@ -45,6 +48,10 @@ type Analysis struct {
 type Adapter interface {
 	Analyze(context.Context, Source) (Analysis, error)
 	Fetch(context.Context, Source, Format, io.Writer, int64) error
+}
+
+type CompositeAdapter interface {
+	FetchComposite(context.Context, Source, Format, io.Writer, io.Writer, int64) error
 }
 
 var youtubeID = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
@@ -205,15 +212,16 @@ type Extractor struct {
 	MaxFormats     int
 }
 type rawFormat struct {
-	ID       string `json:"format_id"`
-	Ext      string `json:"ext"`
-	Protocol string `json:"protocol"`
-	URL      string `json:"url"`
-	VCodec   string `json:"vcodec"`
-	ACodec   string `json:"acodec"`
-	Bytes    int64  `json:"filesize"`
-	Height   int    `json:"height"`
-	DRM      bool   `json:"has_drm"`
+	ID          string `json:"format_id"`
+	Ext         string `json:"ext"`
+	Protocol    string `json:"protocol"`
+	URL         string `json:"url"`
+	VCodec      string `json:"vcodec"`
+	ACodec      string `json:"acodec"`
+	Bytes       int64  `json:"filesize"`
+	ApproxBytes int64  `json:"filesize_approx"`
+	Height      int    `json:"height"`
+	DRM         bool   `json:"has_drm"`
 }
 type rawInfo struct {
 	Title    string      `json:"title"`
@@ -267,31 +275,45 @@ func (x Extractor) info(ctx context.Context, s Source) (rawInfo, error) {
 	return info, nil
 }
 func descriptor(f rawFormat) (Format, bool) {
-	if f.DRM || f.ID == "" || len(f.ID) > 100 || f.Protocol != "https" || (f.Ext != "mp4" && f.Ext != "m4a" && f.Ext != "mp3" && f.Ext != "aac") || f.ACodec == "none" {
+	if f.DRM || f.ID == "" || len(f.ID) > 100 || f.Protocol != "https" || f.ACodec == "none" {
 		return Format{}, false
 	}
 	kind := "video"
+	codec := "h264/aac"
+	container := f.Ext
 	if f.VCodec == "none" {
 		kind = "audio"
-	}
-	if f.Ext == "aac" && kind != "audio" {
-		return Format{}, false
+		codec = "aac"
+		if f.Ext == "mp3" {
+			codec = "mp3"
+		} else if f.Ext != "m4a" && f.Ext != "mp4" && f.Ext != "aac" {
+			return Format{}, false
+		}
+		if f.Ext != "mp3" && !strings.HasPrefix(strings.ToLower(f.ACodec), "mp4a") {
+			return Format{}, false
+		}
+	} else {
+		if f.Ext != "mp4" || !strings.HasPrefix(strings.ToLower(f.VCodec), "avc1") || !strings.HasPrefix(strings.ToLower(f.ACodec), "mp4a") {
+			return Format{}, false
+		}
 	}
 	sum := sha256.Sum256([]byte(f.ID + "\x00" + f.Ext + "\x00" + f.VCodec + "\x00" + f.ACodec))
-	label := kind + " " + f.Ext
-	if f.Height > 0 {
-		label += " " + strings.TrimSpace(jsonNumber(f.Height)) + "p"
+	v := Format{
+		ID:        hex.EncodeToString(sum[:12]),
+		Label:     formatLabel(kind, container, f.Height, f.effectiveBytes()),
+		Kind:      kind,
+		Container: container,
+		Codec:     codec,
+		Bytes:     f.effectiveBytes(),
 	}
-	v := Format{ID: hex.EncodeToString(sum[:12]), Label: label, Kind: kind, Container: f.Ext, Codec: f.VCodec + "/" + f.ACodec, Bytes: f.Bytes}
 	if f.Ext == "aac" {
 		v.SourceContainer = "aac"
 		v.Container = "m4a"
 		v.Processing = true
-		v.Label = "صوت M4A"
+		v.Label = formatLabel("audio", "m4a", 0, f.effectiveBytes())
 	}
 	return v, true
 }
-func jsonNumber(n int) string { b, _ := json.Marshal(n); return string(b) }
 func SafeTitle(s string) string {
 	var out strings.Builder
 	for _, r := range s {
@@ -317,15 +339,19 @@ func (x Extractor) Analyze(ctx context.Context, s Source) (Analysis, error) {
 	if max < 1 || max > 12 {
 		return a, Invalid
 	}
-	seen := map[string]bool{}
-	for _, f := range info.Formats {
-		if len(a.Formats) >= max {
-			break
-		}
-		v, ok := descriptor(f)
-		if ok && !seen[v.ID] && NetworkURL(s.Provider, f.URL) == nil {
-			seen[v.ID] = true
-			a.Formats = append(a.Formats, v)
+	if s.Provider == "youtube" {
+		a.Formats = youtubeFormats(info.Formats, max)
+	} else {
+		seen := map[string]bool{}
+		for _, f := range info.Formats {
+			if len(a.Formats) >= max {
+				break
+			}
+			v, ok := descriptor(f)
+			if ok && !seen[v.ID] && NetworkURL(s.Provider, f.URL) == nil {
+				seen[v.ID] = true
+				a.Formats = append(a.Formats, v)
+			}
 		}
 	}
 	if len(a.Formats) == 0 {
@@ -343,26 +369,7 @@ func (x Extractor) Fetch(ctx context.Context, s Source, selected Format, w io.Wr
 		if !ok || v.ID != selected.ID {
 			continue
 		}
-		if NetworkURL(s.Provider, f.URL) != nil {
-			return Restricted
-		}
-		client := Client(s.Provider, time.Minute, 3)
-		req, e := http.NewRequestWithContext(ctx, "GET", f.URL, nil)
-		if e != nil {
-			return Restricted
-		}
-		resp, e := client.Do(req)
-		if e != nil {
-			return Failure("DOWNLOAD_FAILED")
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			return Restricted
-		}
-		if resp.StatusCode != 200 {
-			return Failure("DOWNLOAD_FAILED")
-		}
-		_, e = CopyBounded(ctx, w, resp.Body, max)
+		_, e = fetchRaw(ctx, s.Provider, f, w, max)
 		return e
 	}
 	return Unavailable
