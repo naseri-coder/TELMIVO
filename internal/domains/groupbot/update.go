@@ -62,7 +62,10 @@ func (s *Service) Handle(ctx context.Context, u Update, corr string) error {
 		}
 		fields := strings.Fields(u.Message.Text)
 		if len(fields) == 0 || strings.Split(fields[0], "@")[0] != "/start" {
-			return database.ErrInvalid
+			// Unsupported private messages are valid Telegram updates. ACK them
+			// without creating state so Telegram does not retry user input as a
+			// webhook transport failure.
+			return nil
 		}
 		update, e := identity.DecodeUpdate([]byte(fmt.Sprintf(`{"update_id":%d,"message":{"chat":{"id":%d,"type":"private"},"from":{"id":%d,"first_name":%q},"text":"/start"}}`, *u.ID, u.Message.Chat.ID, u.Message.From.ID, u.Message.From.FirstName)))
 		if e != nil {
@@ -231,7 +234,11 @@ func (s *Service) Handle(ctx context.Context, u Update, corr string) error {
 				body = "قوانین گروه غیرفعال است"
 			}
 		case "/settings":
-			body = "مدیریت گروه در پنل: " + s.MiniAppURL + "/groups/" + id
+			// A raw HTTPS link opens Telegram's ordinary in-app browser and does
+			// not provide WebApp initData. The official Mini App entry for the
+			// Group Bot is the private-chat /start flow, which returns the
+			// WebApp button signed by Telegram.
+			body = "مدیریت گروه فقط از Mini App رسمی انجام می‌شود.\nدر چت خصوصی همین ربات /start را بزنید و سپس «ورود به پنل حرفه‌ای» را انتخاب کنید."
 		case "/help":
 			body = "/status /rules /settings /warnings\nبرای هشدار به پیام عضو پاسخ دهید: /warn دلیل"
 		case "/warnings":
@@ -245,8 +252,13 @@ func (s *Service) Handle(ctx context.Context, u Update, corr string) error {
 			}
 			body = "هشدارهای فعال: " + strconv.Itoa(n)
 		case "/warn", "/mute", "/unmute", "/ban", "/unban", "/clearwarnings":
-			if u.Message.Reply == nil || len(fields) < 2 {
-				return database.ErrInvalid
+			if u.Message.Reply == nil {
+				body = "برای اجرای دستور، روی پیام عضو Reply کنید و سپس دستور را بفرستید. مثال: /warn دلیل"
+				break
+			}
+			if len(fields) < 2 {
+				body = "برای این دستور یک دلیل کوتاه بنویسید. مثال: /warn اسپم"
+				break
 			}
 			a := map[string]Action{"/warn": Warn, "/mute": Restrict, "/unmute": Unmute, "/ban": Ban, "/unban": Unban, "/clearwarnings": Clear}[command]
 			if e = s.Moderate(ctx, tx, actor, ws, id, key, corr, u.Message.Reply.From.ID, u.Message.Reply.ID, a, strings.Join(fields[1:], " ")); e != nil {
@@ -254,7 +266,10 @@ func (s *Service) Handle(ctx context.Context, u Update, corr string) error {
 			}
 			body = "درخواست مدیریت ثبت شد"
 		default:
-			return database.ErrInvalid
+			// Unknown user commands are valid Telegram updates. Reply with usage
+			// instead of returning 4xx, otherwise Telegram retries the same
+			// update and can create webhook backpressure.
+			body = "دستور شناخته نشد. برای راهنما /help را بفرستید."
 		}
 		if body == "" {
 			body = "هنوز قانونی ثبت نشده است"
