@@ -65,11 +65,19 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 	}
 	return nil
 }
+func messagePayload(m telegram.Message) map[string]any {
+	payload := map[string]any{"chat_id": m.ChatID, "text": m.Text}
+	if m.Markup != nil {
+		payload["reply_markup"] = m.Markup
+	}
+	return payload
+}
+
 func (c *Client) Send(ctx context.Context, m telegram.Message) (int64, error) {
 	var out struct {
 		ID int64 `json:"message_id"`
 	}
-	e := c.call(ctx, "sendMessage", map[string]any{"chat_id": m.ChatID, "text": m.Text, "reply_markup": m.Markup}, &out)
+	e := c.call(ctx, "sendMessage", messagePayload(m), &out)
 	if e == nil && out.ID <= 0 {
 		e = errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}

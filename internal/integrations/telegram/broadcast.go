@@ -17,11 +17,7 @@ func (c *Client) SendClassified(ctx context.Context, message transport.Message) 
 	var out struct {
 		ID int64 `json:"message_id"`
 	}
-	e := c.call(ctx, "sendMessage", map[string]any{
-		"chat_id":      message.ChatID,
-		"text":         message.Text,
-		"reply_markup": message.Markup,
-	}, &out)
+	e := c.call(ctx, "sendMessage", messagePayload(message), &out)
 	if e != nil {
 		var api *APIError
 		if errors.As(e, &api) {
