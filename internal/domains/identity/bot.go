@@ -22,7 +22,7 @@ type Update struct {
 	} `json:"message"`
 }
 
-func MainMenu(admin bool, url string) any {
+func MainMenu(admin bool, _ string) any {
 	keys := []string{"dashboard", "channels", "groups", "bots", "tickets", "wallet", "plans", "settings"}
 	rows := [][]map[string]any{}
 	for i := 0; i < len(keys); i += 2 {
@@ -31,10 +31,17 @@ func MainMenu(admin bool, url string) any {
 	if admin {
 		rows = append(rows, []map[string]any{{"text": localization.Text("menu.admin")}})
 	}
-	if url != "" {
-		rows = append(rows, []map[string]any{{"text": localization.Text("menu.open"), "web_app": map[string]string{"url": url}}})
-	}
 	return map[string]any{"keyboard": rows, "resize_keyboard": true}
+}
+
+func PanelMarkup(url string) any {
+	if url == "" {
+		return nil
+	}
+	return map[string]any{"inline_keyboard": [][]map[string]any{{{
+		"text":    localization.Text("menu.open"),
+		"web_app": map[string]string{"url": url},
+	}}}}
 }
 func (s *Service) Start(ctx context.Context, bot, url, correlation string, u Update, membership accessgates.MembershipService) (Result, error) {
 	var out Result
@@ -84,6 +91,17 @@ func (s *Service) Start(ctx context.Context, bot, url, correlation string, u Upd
 	payload := map[string]any{"user_id": out.UserID, "body": message, "markup": markup, "idempotency_key": bot + ":" + UpdateKey(u.ID)}
 	if e = database.Event(ctx, tx, out.WorkspaceID, "telmivo.jobs.notification", "bot.menu", correlation, payload); e != nil {
 		return out, e
+	}
+	if allowed && url != "" {
+		panel := map[string]any{
+			"user_id":         out.UserID,
+			"body":            localization.Text("menu.open"),
+			"markup":          PanelMarkup(url),
+			"idempotency_key": bot + ":panel:" + UpdateKey(u.ID),
+		}
+		if e = database.Event(ctx, tx, out.WorkspaceID, "telmivo.jobs.notification", "bot.menu", correlation, panel); e != nil {
+			return out, e
+		}
 	}
 	e = tx.Commit(ctx)
 	return out, e
