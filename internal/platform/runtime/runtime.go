@@ -226,14 +226,24 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 			}
 			if e.Type == "group.reply" && !c.Synthetic {
 				var p struct {
-					Chat int64  `json:"chat_id"`
-					Body string `json:"body"`
+					Chat   int64  `json:"chat_id"`
+					UserID string `json:"user_id"`
+					Body   string `json:"body"`
+					Key    string `json:"idempotency_key"`
 				}
-				if json.Unmarshal(e.Payload, &p) != nil || p.Chat >= 0 {
+				if json.Unmarshal(e.Payload, &p) != nil || p.Chat >= 0 || p.UserID == "" || p.Key == "" {
 					return database.ErrInvalid
 				}
-				_, err := telegramclient.New(c.GroupBotToken, true).Send(ctx, telegramtransport.Message{ChatID: p.Chat, Text: p.Body})
-				return err
+				messageID, code, retryAfter := telegramclient.New(c.GroupBotToken, true).SendClassified(
+					ctx,
+					telegramtransport.Message{ChatID: p.Chat, Text: p.Body},
+				)
+				return persistNotificationOutcome(ctx, tx, e.WorkspaceID, e.Type, notificationOutcome{
+					UserID: p.UserID,
+					Key:    p.Key,
+					Body:   p.Body,
+					ChatID: p.Chat,
+				}, messageID, code, retryAfter)
 			}
 			var payload struct {
 				UserID        string `json:"user_id"`
@@ -259,7 +269,7 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 				if err != nil {
 					return err
 				}
-				_, err = telegramclient.New(func() string {
+				messageID, code, retryAfter := telegramclient.New(func() string {
 					if strings.HasPrefix(payload.Key, "downloader-bot:") {
 						return c.DownloaderBotToken
 					}
@@ -267,8 +277,14 @@ func worker(ctx context.Context, role string, db *database.Store, q *queue.Clien
 						return c.GroupBotToken
 					}
 					return c.BotToken
-				}(), true).Send(ctx, telegramtransport.Message{ChatID: chat, Text: payload.Body, Markup: payload.Markup})
-				return err
+				}(), true).SendClassified(ctx, telegramtransport.Message{ChatID: chat, Text: payload.Body, Markup: payload.Markup})
+				return persistNotificationOutcome(ctx, tx, e.WorkspaceID, e.Type, notificationOutcome{
+					UserID: payload.UserID,
+					Key:    payload.Key,
+					Body:   payload.Body,
+					Markup: payload.Markup,
+					ChatID: chat,
+				}, messageID, code, retryAfter)
 			}
 			_, err := tx.Exec(ctx, "INSERT INTO notifications(workspace_id,user_id,message_key,parameters,status,idempotency_key) VALUES($1,$2,$3,$4,'SIMULATED',$5) ON CONFLICT(workspace_id,idempotency_key) DO NOTHING", e.WorkspaceID, payload.UserID, e.Type, map[string]any{"body": payload.Body, "markup": payload.Markup}, payload.Key)
 			return err

@@ -2,9 +2,12 @@ package queue
 
 import (
 	"context"
+	"errors"
 
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 )
+
+var ErrExternalOutcomeUnknown = errors.New("external outcome unknown")
 
 // Process preserves atomic inbox/business writes for ordinary handlers. External
 // handlers instead commit an attempt fence and scrubbed uncertainty evidence
@@ -52,6 +55,17 @@ func Process(ctx context.Context, db *database.Store, durable string, event Enve
 		}
 	}
 	if e = handler(ctx, tx, event); e != nil {
+		if external && errors.Is(e, ErrExternalOutcomeUnknown) {
+			// The handler has durably classified the attempt as UNKNOWN. Commit
+			// that domain evidence, preserve the pre-transport uncertainty
+			// record and ACK the broker message. The inbox fence still makes
+			// any automatic resend impossible.
+			if e = tx.Commit(ctx); e != nil {
+				return e
+			}
+			tx = nil
+			return nil
+		}
 		return e
 	}
 	if external {
@@ -61,5 +75,9 @@ func Process(ctx context.Context, db *database.Store, durable string, event Enve
 			return e
 		}
 	}
-	return tx.Commit(ctx)
+	e = tx.Commit(ctx)
+	if e == nil {
+		tx = nil
+	}
+	return e
 }
