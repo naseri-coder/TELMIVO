@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
+	transport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 )
 
 // APIError carries an actionable category without Telegram's text or token-bearing URL.
@@ -77,7 +79,7 @@ func (c *Client) Prompt(ctx context.Context, user int64, text string, markup any
 	var out struct {
 		ID int64 `json:"message_id"`
 	}
-	return c.call(ctx, "sendMessage", map[string]any{"chat_id": user, "text": text, "reply_markup": markup}, &out)
+	return c.call(ctx, "sendMessage", messagePayload(transport.Message{ChatID: user, Text: text, Markup: markup}), &out)
 }
 func (c *Client) Connect(ctx context.Context, endpoint, secret string) (string, error) {
 	var me struct {

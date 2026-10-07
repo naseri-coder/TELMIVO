@@ -10,6 +10,17 @@ import (
 	transport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 )
 
+func TestMessagePayloadOmitsNilMarkup(t *testing.T) {
+	p := messagePayload(transport.Message{ChatID: -1001, Text: "Synthetic"})
+	if _, ok := p["reply_markup"]; ok {
+		t.Fatal("nil reply_markup must be omitted")
+	}
+	p = messagePayload(transport.Message{ChatID: -1001, Text: "Synthetic", Markup: map[string]any{"inline_keyboard": []any{}}})
+	if _, ok := p["reply_markup"]; !ok {
+		t.Fatal("non-nil reply_markup must be preserved")
+	}
+}
+
 func TestMessageAcknowledgementMustBePositiveAndKnown(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
