@@ -138,15 +138,22 @@ func TestR3ASharedEntry(t *testing.T) {
 		out := identity.Result{UserID: userID, WorkspaceID: ws}
 		var markup string
 		tenant(t, out, func(tx pgx.Tx) error {
-			return tx.QueryRow(ctx, "SELECT (payload->'markup')::text FROM outbox_events WHERE workspace_id=$1 AND event_type='bot.menu'", ws).Scan(&markup)
+			return tx.QueryRow(ctx, "SELECT (payload->'markup')::text FROM outbox_events WHERE workspace_id=$1 AND payload->>'idempotency_key'=$2", ws, "main-bot:"+identity.UpdateKey(id)).Scan(&markup)
 		})
-		for _, key := range []string{"dashboard", "channels", "groups", "bots", "tickets", "wallet", "plans", "settings", "open"} {
+		for _, key := range []string{"dashboard", "channels", "groups", "bots", "tickets", "wallet", "plans", "settings"} {
 			if !strings.Contains(markup, localization.Text("menu."+key)) {
 				t.Fatal("missing menu", key)
 			}
 		}
-		if strings.Contains(markup, localization.Text("menu.admin")) {
-			t.Fatal("ordinary owner has admin menu")
+		if strings.Contains(markup, localization.Text("menu.admin")) || strings.Contains(markup, "web_app") {
+			t.Fatal("ordinary owner menu authority/transport")
+		}
+		var panel string
+		tenant(t, out, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, "SELECT (payload->'markup')::text FROM outbox_events WHERE workspace_id=$1 AND payload->>'idempotency_key'=$2", ws, "main-bot:panel:"+identity.UpdateKey(id)).Scan(&panel)
+		})
+		if !strings.Contains(panel, localization.Text("menu.open")) || !strings.Contains(panel, "web_app") {
+			t.Fatal("inline panel entry missing")
 		}
 		service.Admins = []int64{id}
 		_, e := bot.Handle(ctx, r3aUpdate(t, id, id+1, "/start"), "admin-existing-authority")

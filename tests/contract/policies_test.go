@@ -19,6 +19,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/crypto"
 	"github.com/naseri-coder/TELMIVO/internal/platform/entitlement"
 	"github.com/naseri-coder/TELMIVO/internal/platform/ledger"
+	"github.com/naseri-coder/TELMIVO/internal/platform/localization"
 	"github.com/naseri-coder/TELMIVO/internal/platform/payments"
 	"github.com/naseri-coder/TELMIVO/internal/platform/rbac"
 	"math"
@@ -286,11 +287,15 @@ func TestPaymentVerification(t *testing.T) {
 }
 func TestPersianMainMenu(t *testing.T) {
 	b, _ := json.Marshal(identity.MainMenu(false, "https://example.test"))
-	if !strings.Contains(string(b), "داشبورد") || strings.Contains(string(b), "پنل مدیریت") {
+	if !strings.Contains(string(b), "داشبورد") || strings.Contains(string(b), "پنل مدیریت") || strings.Contains(string(b), "web_app") {
 		t.Fatal("main menu authorization/localization")
 	}
 	b, _ = json.Marshal(identity.MainMenu(true, ""))
 	if !strings.Contains(string(b), "پنل مدیریت") {
 		t.Fatal("admin menu")
+	}
+	b, _ = json.Marshal(identity.PanelMarkup("https://example.test"))
+	if !strings.Contains(string(b), localization.Text("menu.open")) || !strings.Contains(string(b), "web_app") || !strings.Contains(string(b), "https://example.test") {
+		t.Fatal("inline panel entry")
 	}
 }
