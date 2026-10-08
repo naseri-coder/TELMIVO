@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/contentplugins"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/broadcast"
 	"time"
@@ -339,7 +340,7 @@ func (s *Service) DeliverOne(ctx context.Context, actor string, scope sdk.Scope,
 	if delay > 24*time.Hour {
 		delay = 24 * time.Hour
 	}
-	final, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	final, cancel := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(ctx)), 5*time.Second)
 	defer cancel()
 	return s.DB.Tenant(final, actor, scope.AccountID, false, func(tx pgx.Tx) error {
 		if _, e := tx.Exec(final, "SELECT pg_advisory_xact_lock(hashtextextended($1,7100213))", scope.AccountID); e != nil {

@@ -8,6 +8,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/supportplugins"
 	provider "github.com/naseri-coder/TELMIVO/internal/platform/ai"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	assistant "github.com/naseri-coder/TELMIVO/internal/plugins/aiassistant"
 	workflow "github.com/naseri-coder/TELMIVO/internal/plugins/automation"
@@ -69,7 +70,7 @@ func (s *Service) Send(ctx context.Context, actor string, scope sdk.Scope, user 
 	} else if code == "DELIVERY_OUTCOME_UNKNOWN" {
 		state = "UNKNOWN"
 	}
-	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	finalCtx, cancel := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(ctx)), 5*time.Second)
 	defer cancel()
 	e = s.DB.Tenant(finalCtx, actor, scope.AccountID, false, func(tx pgx.Tx) error {
 		_, e := tx.Exec(finalCtx, "UPDATE intelligence_deliveries SET state=$4,completed_at=$5 WHERE workspace_id=$1 AND bot_id=$2 AND operation_key=$3 AND state='SENDING'", scope.AccountID, scope.BotID, k, state, s.now())

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/naseri-coder/TELMIVO/db/migrations"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"sort"
 	"strings"
 	"time"
@@ -112,7 +113,16 @@ func (s *Store) Tenant(ctx context.Context, user, workspace string, adminAllowed
 	if user == "" || workspace == "" {
 		return ErrForbidden
 	}
-	tx, e := s.Pool.Begin(ctx)
+	if !installationlicense.IsReadOnly(ctx) && !installationlicense.IsSettlement(ctx) {
+		if e := installationlicense.CheckRuntime(ctx); e != nil {
+			return e
+		}
+	}
+	opts := pgx.TxOptions{}
+	if installationlicense.IsReadOnly(ctx) {
+		opts.AccessMode = pgx.ReadOnly
+	}
+	tx, e := s.Pool.BeginTx(ctx, opts)
 	if e != nil {
 		return e
 	}

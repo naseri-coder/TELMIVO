@@ -3,6 +3,7 @@ package businessplugins
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"log/slog"
 	"time"
@@ -18,6 +19,9 @@ func (s *Service) Poll(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			if installationlicense.CheckRuntime(ctx) != nil {
+				continue
+			}
 			rs, e := s.DB.Pool.Query(ctx, "SELECT user_id::text,workspace_id::text FROM workspace_members WHERE role_key='OWNER' AND workspace_id::text>$1 ORDER BY workspace_id LIMIT 20", cursor)
 			if e != nil {
 				return e

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"net/http"
 	"sort"
@@ -192,7 +193,7 @@ func fetchRaw(ctx context.Context, provider string, f rawFormat, w io.Writer, ma
 	if err != nil {
 		return 0, Restricted
 	}
-	resp, err := client.Do(req)
+	resp, err := installationlicense.HTTP(ctx, client, req)
 	if err != nil {
 		return 0, Failure("DOWNLOAD_FAILED")
 	}

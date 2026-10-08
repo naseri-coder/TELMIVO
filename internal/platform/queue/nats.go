@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"github.com/nats-io/nats.go"
 	"log/slog"
 	"regexp"
@@ -55,6 +56,9 @@ func (c *Client) Publish(ctx context.Context, subject string, event Envelope) er
 	return e
 }
 func (c *Client) Relay(ctx context.Context, db *database.Store) error {
+	if e := installationlicense.CheckRuntime(ctx); e != nil {
+		return e
+	}
 	owner, e := auth.Token()
 	if e != nil {
 		return e
@@ -144,6 +148,14 @@ func (c *Client) consume(ctx context.Context, db *database.Store, subject, durab
 	}
 	defer sub.Unsubscribe()
 	for ctx.Err() == nil {
+		if installationlicense.CheckRuntime(ctx) != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+				continue
+			}
+		}
 		msgs, e := sub.Fetch(1, nats.MaxWait(time.Second))
 		if errors.Is(e, nats.ErrTimeout) {
 			continue

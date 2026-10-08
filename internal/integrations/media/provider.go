@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"net"
 	"net/http"
@@ -258,7 +259,7 @@ func (x Extractor) info(ctx context.Context, s Source) (rawInfo, error) {
 	out := &boundedBuffer{max: 2 << 20}
 	cmd.Stdout = out
 	cmd.Stderr = io.Discard
-	if cmd.Run() != nil {
+	if installationlicense.RuntimeEffect(ctx, cmd.Run) != nil {
 		return info, Failure("ANALYSIS_FAILED")
 	}
 	if json.Unmarshal(out.b, &info) != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/platform/config"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/httpapi"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
@@ -45,6 +46,25 @@ func Run(role string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	license, licenseClient, licenseErr := installationlicense.OpenEnvironment()
+	if licenseErr != nil {
+		license = nil
+		licenseClient = nil
+	}
+	ctx = installationlicense.RequireContext(ctx)
+	installationlicense.InstallRuntime(license)
+	if licenseErr != nil {
+		slog.Warn("installation restricted", "error_code", "LICENSE_CONFIGURATION_INVALID")
+	}
+	if license != nil {
+		ctx = installationlicense.WithManager(ctx, license)
+	}
+	if licenseClient != nil {
+		licenseDone := make(chan struct{})
+		go func() { defer close(licenseDone); licenseClient.Poll(ctx) }()
+		defer func() { stop(); <-licenseDone }()
+	}
+
 	db, e := database.Open(ctx, c.DatabaseURL, true)
 	if e != nil {
 		return e
@@ -124,8 +144,10 @@ func Run(role string) error {
 			return err
 		}
 		defer local.Close()
-		if err = local.Cleanup(ctx); err != nil {
-			return err
+		if installationlicense.CheckRuntime(ctx) == nil {
+			if err = local.Cleanup(ctx); err != nil {
+				return err
+			}
 		}
 		worker := &downloads.Worker{Product: &downloads.Product{DB: db, MaxBytes: c.MaxMediaBytes}, Adapter: media.Extractor{Python: "/opt/extractor/bin/python", Script: "/app/extract.py", Timeout: time.Minute, MaxFormats: 8}, Delivery: telegramclient.MediaClient{Token: c.DownloaderBotToken, MaxBytes: c.MaxMediaBytes, Timeout: time.Minute}, Storage: storage.Scoped{Provider: local}, Root: c.MediaWorkRoot, Owner: "media-worker", Timeout: 5 * time.Minute, MaxBytes: c.MaxMediaBytes}
 		return worker.Poll(ctx, int(c.MediaConcurrency))
@@ -161,7 +183,7 @@ func Run(role string) error {
 		}
 		handler = mux
 	}
-	server := &http.Server{Addr: c.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	server := &http.Server{Addr: c.HTTPAddr, Handler: installationlicense.Middleware(license, handler), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
 	select {

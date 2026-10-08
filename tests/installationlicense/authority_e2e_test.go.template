@@ -1,0 +1,426 @@
+package e2e
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"github.com/jackc/pgx/v5/pgxpool"
+	tg "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
+	l "github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
+	lc "github.com/naseri-coder/TELMIVO/internal/platform/installationlicense/licensecrypto"
+	"github.com/naseri-coder/TELMIVO/lica8-e2e/authority/internal/custody"
+	"github.com/naseri-coder/TELMIVO/lica8-e2e/authority/internal/domain"
+	"github.com/naseri-coder/TELMIVO/lica8-e2e/authority/internal/m2m"
+	"github.com/naseri-coder/TELMIVO/lica8-e2e/authority/internal/store/postgres"
+	f "github.com/naseri-coder/TELMIVO/lica8-e2e/authority/internal/testfixture"
+	ac "github.com/naseri-coder/TELMIVO/lica8-e2e/authority/pkg/licensecrypto"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+type highwater struct{ epoch *atomic.Int64 }
+
+func (h highwater) Check(_ context.Context, _ string, epoch int64) error {
+	if epoch != h.epoch.Load() {
+		return errors.New("TEST_ONLY_EPOCH_MISMATCH")
+	}
+	return nil
+}
+
+type fixture struct {
+	ctx           context.Context
+	store         *postgres.Store
+	water         *atomic.Int64
+	client        *l.Client
+	manager       *l.Manager
+	cfg           l.Config
+	code, license string
+	revision      int64
+	actor         func() domain.Actor
+	outage        *atomic.Bool
+	delta         *atomic.Int64
+}
+
+func setup(t *testing.T, loseFirst bool) *fixture { return setupTerm(t, loseFirst, 30*24*time.Hour) }
+func setupTerm(t *testing.T, loseFirst bool, term time.Duration) *fixture {
+	t.Helper()
+	ctx := context.Background()
+	dsn := os.Getenv("LIC_A8_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Fatal("explicit test database required")
+	}
+	admin, e := postgres.Open(ctx, dsn)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(admin.Close)
+	schema := "lic_a8_" + strings.ReplaceAll(domain.UUID(), "-", "")
+	if _, e = admin.Pool.Exec(ctx, "CREATE SCHEMA "+schema); e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { admin.Pool.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE") })
+	cfg := admin.Pool.Config()
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, e := pgxpool.NewWithConfig(ctx, cfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	water := &atomic.Int64{}
+	water.Store(1)
+	s := &postgres.Store{Pool: pool, HighWater: highwater{water}}
+	t.Cleanup(s.Close)
+	if _, e = s.Pool.Exec(ctx, `CREATE TABLE lic_a8_test_clock(singleton boolean primary key default true, delta_us bigint not null); INSERT INTO lic_a8_test_clock VALUES(true,0); CREATE FUNCTION lic_a8_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$ SELECT clock_timestamp()+delta_us*interval '1 microsecond' FROM lic_a8_test_clock WHERE singleton $$`); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.Migrate(ctx); e != nil {
+		t.Fatal(e)
+	}
+	actor := func() domain.Actor {
+		return domain.Actor{Type: "TEST_OPERATOR", ID: "LIC_A8_TEST_ONLY", CorrelationID: domain.UUID(), Reason: "NON_PRODUCTION_CLIENT_E2E"}
+	}
+	aid, kid := domain.UUID(), domain.UUID()
+	if _, e = s.Pool.Exec(ctx, "INSERT INTO authority_state(singleton,authority_id,current_epoch,authority_mode,environment) VALUES(true,$1,1,'NORMAL','TEST')", aid); e != nil {
+		t.Fatal(e)
+	}
+	now := time.Now().UTC()
+	root := f.Root(now)
+	cert := f.Certificate(now, kid)
+	cert.CertificateID = domain.UUID()
+	cert.AuthorityID = aid
+	payload, sig, e := f.Certify(cert)
+	if e != nil {
+		t.Fatal(e)
+	}
+	roots := ac.Roots{root.ID: root}
+	if _, e = s.RegisterSigner(ctx, payload, sig, roots, actor()); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ChangeSigningKey(ctx, kid, "ACTIVE", actor()); e != nil {
+		t.Fatal(e)
+	}
+	customer := domain.UUID()
+	if _, e = s.Pool.Exec(ctx, "INSERT INTO customers(customer_id,display_label,status,created_at) VALUES($1,'LIC_A8_TEST_ONLY','ACTIVE',clock_timestamp())", customer); e != nil {
+		t.Fatal(e)
+	}
+	lid, e := s.CreateLicense(ctx, postgres.NewLicense{CustomerID: customer, MaxInstances: 1, CommercialExpiry: now.Add(term), Capabilities: []string{"product.use"}}, actor())
+	if e != nil {
+		t.Fatal(e)
+	}
+	revision, e := s.ChangeLicense(ctx, postgres.LicenseMutation{LicenseID: lid, ExpectedRevision: 1, To: "ACTIVE"}, actor())
+	if e != nil {
+		t.Fatal(e)
+	}
+	codes := domain.CodeVerifier{Version: "LIC_A8_TEST_ONLY", Pepper: bytes.Repeat([]byte{0x41}, 32)}
+	code, digest, e := codes.New()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.IssueCode(ctx, postgres.NewCode{LicenseID: lid, Digest: digest, KeyVersion: codes.Version, ExpiresAt: now.Add(time.Hour)}, actor()); e != nil {
+		t.Fatal(e)
+	}
+	api, e := m2m.New(s, f.NewOnline(kid), roots, codes, kid, m2m.DefaultConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if e != nil {
+		t.Fatal(e)
+	}
+	var outage atomic.Bool
+	var lostReply atomic.Bool
+	lostReply.Store(loseFirst)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if outage.Load() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(503)
+			io.WriteString(w, `{"error":{"code":"AUTHORITY_UNAVAILABLE","retryable":true}}`)
+			return
+		}
+		recorder := httptest.NewRecorder()
+		api.ServeHTTP(recorder, r)
+		if r.URL.Path == "/v1/licenses/activate" && lostReply.Swap(false) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(503)
+			io.WriteString(w, `{"error":{"code":"AUTHORITY_UNAVAILABLE","retryable":true}}`)
+			return
+		}
+		for k, v := range recorder.Header() {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(recorder.Code)
+		w.Write(recorder.Body.Bytes())
+	}))
+	t.Cleanup(server.Close)
+	ca := filepath.Join(t.TempDir(), "test-only-ca.pem")
+	if e = os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600); e != nil {
+		t.Fatal(e)
+	}
+	t.Setenv("SSL_CERT_FILE", ca)
+	t.Setenv("SSL_CERT_DIR", t.TempDir())
+	rootJSON, _ := json.Marshal(l.RootSet{Version: 1, Purpose: "TEST_ONLY", Roots: []l.RootRecord{{ID: root.ID, Version: root.Version, PublicKey: base64.StdEncoding.EncodeToString(root.PublicKey), NotBefore: root.NotBefore, NotAfter: root.NotAfter, Status: lc.Active}}})
+	trusted, e := l.ParseRoots(rootJSON, false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	delta := &atomic.Int64{}
+	clientcfg := l.Config{Clock: func() time.Time { return time.Now().UTC().Add(time.Duration(delta.Load())) }, Directory: filepath.Join(t.TempDir(), "identity"), AuthorityID: aid, Environment: "TEST", URL: server.URL, Roots: trusted}
+	manager, e := l.Open(clientcfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	client, e := l.NewClient(manager)
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	return &fixture{ctx: ctx, store: s, water: water, client: client, manager: manager, cfg: clientcfg, code: code, license: lid, revision: revision, actor: actor, outage: &outage, delta: delta}
+}
+
+func (x *fixture) activate(t *testing.T) {
+	t.Helper()
+	if e := x.client.Activate(x.ctx, x.code, x.license, 1); e != nil {
+		t.Fatal("activation", e)
+	}
+	if x.manager.Decision().State != "VALID_ONLINE" {
+		t.Fatal("activation state", x.manager.Decision())
+	}
+}
+func (x *fixture) clock(t *testing.T, d time.Duration) {
+	t.Helper()
+	x.delta.Store(int64(d))
+	if _, e := x.store.Pool.Exec(x.ctx, "UPDATE lic_a8_test_clock SET delta_us=$1", d.Microseconds()); e != nil {
+		t.Fatal(e)
+	}
+}
+func (x *fixture) state(t *testing.T) l.State {
+	t.Helper()
+	raw, e := os.ReadFile(filepath.Join(x.cfg.Directory, "state.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	var s l.State
+	if json.Unmarshal(raw, &s) != nil {
+		t.Fatal("invalid state")
+	}
+	return s
+}
+func TestE2E1(t *testing.T) {
+	x := setup(t, true)
+	if e := x.client.Activate(x.ctx, x.code, x.license, 1); !errors.Is(e, l.ErrUnavailable) {
+		t.Fatal("lost reply", e)
+	}
+	x.activate(t)
+	id, _, _ := x.manager.PublicIdentity()
+	var n int
+	if e := x.store.Pool.QueryRow(x.ctx, "select count(*) from activations where installation_id=$1", id).Scan(&n); e != nil || n != 1 {
+		t.Fatal("duplicate activation", e)
+	}
+	t.Log("E2E-1 PASS: fresh identity, verified activation, durable retry without duplicate allocation")
+}
+func TestE2E2(t *testing.T) {
+	x := setup(t, false)
+	x.activate(t)
+	id, key, _ := x.manager.PublicIdentity()
+	again, e := l.Open(x.cfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	id2, key2, _ := again.PublicIdentity()
+	if id != id2 || !bytes.Equal(key, key2) || again.Decision().State != "VALID_ONLINE" {
+		t.Fatal("restart persistence")
+	}
+	if e = x.client.Refresh(x.ctx); e != nil {
+		t.Fatal(e)
+	}
+	if e = x.client.Status(x.ctx); e != nil {
+		t.Fatal(e)
+	}
+	if e = x.client.Deactivate(x.ctx); e != nil {
+		t.Fatal(e)
+	}
+	if again.Decision().State != "RESTRICTED" {
+		t.Fatal("deactivation")
+	}
+	t.Log("E2E-2 PASS: persistent identity/license, refresh/status, durable deactivation across roles")
+}
+func TestE2E3(t *testing.T) {
+	x := setup(t, false)
+	x.activate(t)
+	original := x.state(t)
+	x.clock(t, 25*time.Hour)
+	x.outage.Store(true)
+	if e := x.client.Refresh(x.ctx); !errors.Is(e, l.ErrUnavailable) {
+		t.Fatal("outage", e)
+	}
+	if x.manager.Decision().State != "VALID_OFFLINE" {
+		t.Fatal("offline transition", x.manager.Decision())
+	}
+	during := x.state(t)
+	if !bytes.Equal(original.Envelope, during.Envelope) {
+		t.Fatal("outage changed signed deadlines")
+	}
+	x.outage.Store(false)
+	if e := x.client.Refresh(x.ctx); e != nil {
+		t.Fatal("reconnect", e)
+	}
+	if x.manager.Decision().State != "VALID_ONLINE" {
+		t.Fatal("reconnect state")
+	}
+	x.clock(t, 100*time.Hour)
+	x.outage.Store(true)
+	if x.manager.Decision().State != "RESTRICTED" {
+		t.Fatal("signed offline deadline extended")
+	}
+	t.Log("E2E-3 PASS: injected 25h/100h clocks, outage/offline, unchanged cached lease, reconnect, exact expiry")
+}
+func TestE2E4(t *testing.T) {
+	x := setup(t, false)
+	x.activate(t)
+	mutate := func(to string) {
+		t.Helper()
+		rev, e := x.store.ChangeLicense(x.ctx, postgres.LicenseMutation{LicenseID: x.license, ExpectedRevision: x.revision, To: to}, x.actor())
+		if e != nil {
+			t.Fatal(to, e)
+		}
+		x.revision = rev
+	}
+	mutate("SUSPENDED")
+	if e := x.client.Refresh(x.ctx); !errors.Is(e, l.ErrRestricted) {
+		t.Fatal("suspension", e)
+	}
+	if x.manager.Decision().State != "RESTRICTED" {
+		t.Fatal("suspended access")
+	}
+	mutate("ACTIVE")
+	if e := x.client.Refresh(x.ctx); e != nil {
+		t.Fatal("resume", e)
+	}
+	mutate("REVOKED")
+	if e := x.client.Status(x.ctx); e != nil {
+		t.Fatal(e)
+	}
+	if x.manager.Decision().State != "RESTRICTED" {
+		t.Fatal("revoked access")
+	}
+	expired := setupTerm(t, false, 7*time.Hour)
+	expired.activate(t)
+	expired.clock(t, 8*time.Hour)
+	if e := expired.client.Refresh(expired.ctx); !errors.Is(e, l.ErrRestricted) {
+		t.Fatal("expiry", e)
+	}
+	if expired.manager.Decision().State != "RESTRICTED" {
+		t.Fatal("expired access")
+	}
+	t.Log("E2E-4 PASS: suspension/resume, commercial expiry, revocation/status restriction")
+}
+
+func TestE2E5(t *testing.T) {
+	x := setup(t, false)
+	x.activate(t)
+	old := x.state(t)
+	x.water.Store(2)
+	admin := x.actor()
+	admin.Type = "LOCAL_ADMIN"
+	if e := x.store.EnterRecovery(x.ctx, custody.EpochStatement{AuthorityID: x.cfg.AuthorityID, Epoch: 2, PreviousEpoch: 1, IssuedAt: time.Now().UnixMicro(), Reason: "LIC_A8_TEST_ONLY_RECOVERY"}, admin); e != nil {
+		t.Fatal(e)
+	}
+	if e := x.client.Status(x.ctx); e != nil {
+		t.Fatal(e)
+	}
+	if x.manager.Decision().State != "RESTRICTED" {
+		t.Fatal("recovery hold")
+	}
+	if e := x.manager.Accept(old.Envelope); e == nil {
+		t.Fatal("old epoch accepted")
+	}
+	y := setup(t, false)
+	y.activate(t)
+	previous := y.state(t)
+	rev, e := y.store.ChangeLicense(y.ctx, postgres.LicenseMutation{LicenseID: y.license, ExpectedRevision: y.revision, To: "SUSPENDED"}, y.actor())
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = y.store.ChangeLicense(y.ctx, postgres.LicenseMutation{LicenseID: y.license, ExpectedRevision: rev, To: "ACTIVE"}, y.actor()); e != nil {
+		t.Fatal(e)
+	}
+	if e = y.client.Refresh(y.ctx); e != nil {
+		t.Fatal(e)
+	}
+	if e = y.manager.Accept(previous.Envelope); e == nil {
+		t.Fatal("old revision accepted")
+	}
+	t.Log("E2E-5 PASS: actual Authority recovery hold/epoch high-water and revision fencing reject authentic cached leases; independent generation proof retained in licensing tests")
+}
+
+func TestE2E6(t *testing.T) {
+	x := setup(t, false)
+	x.activate(t)
+	if e := x.client.Status(x.ctx); e != nil { t.Fatal("strict current Authority status", e) }
+	var calls atomic.Int64
+	effect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(200) }))
+	defer effect.Close()
+	request, _ := http.NewRequestWithContext(l.WithManager(x.ctx, x.manager), "POST", effect.URL, nil)
+	response, e := l.HTTP(request.Context(), effect.Client(), request)
+	if e != nil {
+		t.Fatal(e)
+	}
+	response.Body.Close()
+	if calls.Load() != 1 {
+		t.Fatal("licensed effect not dispatched")
+	}
+	// An earlier valid decision cannot authorize a later expired effect.
+	cached := x.manager.Decision()
+	if cached.State != "VALID_ONLINE" {
+		t.Fatal(cached)
+	}
+	x.clock(t, 100*time.Hour)
+	request, _ = http.NewRequestWithContext(l.WithManager(x.ctx, x.manager), "POST", effect.URL, nil)
+	if _, e = l.HTTP(request.Context(), effect.Client(), request); !errors.Is(e, l.ErrRestricted) {
+		t.Fatal("pre-effect denial", e)
+	}
+	if calls.Load() != 1 {
+		t.Fatal("expired external effect escaped fence")
+	}
+	if e = l.RuntimeEffect(l.Settlement(request.Context()), func() error { calls.Add(1); return nil }); !errors.Is(e, l.ErrRestricted) || calls.Load() != 1 {
+		t.Fatal("settlement bypass")
+	}
+	secret := "LIC_A8_TEST_ONLY_WEBHOOK_SECRET"
+	handlers := []struct {
+		name string
+		h    http.Handler
+		bad  int
+	}{{"main", tg.MainBotWebhook(secret, nil), 401}, {"group", tg.GroupBotWebhook(secret, nil), 403}, {"downloader", tg.DownloaderWebhook(secret, nil), 403}}
+	for _, test := range handlers {
+		h := l.Middleware(x.manager, test.h)
+		bad := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/webhook", strings.NewReader(`{"update_id":1}`))
+		h.ServeHTTP(bad, r)
+		if bad.Code != test.bad {
+			t.Fatalf("%s authentication changed: %d", test.name, bad.Code)
+		}
+		good := httptest.NewRecorder()
+		r = httptest.NewRequest("POST", "/webhook", strings.NewReader(`{"update_id":1}`))
+		r.Header.Set("X-Telegram-Bot-Api-Secret-Token", secret)
+		h.ServeHTTP(good, r)
+		if good.Code != 200 {
+			t.Fatalf("%s restricted ACK: %d", test.name, good.Code)
+		}
+		// A nil manager must be restrictive without relying on process initialization.
+		h = l.Middleware(nil, test.h)
+		nilRecorder := httptest.NewRecorder()
+		r = httptest.NewRequest("POST", "/webhook", strings.NewReader(`{"update_id":1}`))
+		r.Header.Set("X-Telegram-Bot-Api-Secret-Token", secret)
+		h.ServeHTTP(nilRecorder, r)
+		if nilRecorder.Code != 200 {
+			t.Fatal("missing configuration ACK")
+		}
+	}
+	t.Log("E2E-6 PASS: admitted-then-expired effect denied, no network dispatch, settlement cannot authorize effects, authenticated main/group/downloader ACKs, invalid secrets still rejected")
+}

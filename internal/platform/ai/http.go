@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	cred "github.com/naseri-coder/TELMIVO/internal/platform/crypto"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"net"
 	"net/http"
@@ -94,8 +96,11 @@ func (p HTTPProvider) Generate(ctx context.Context, m Model, r Request) (Respons
 	}}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	res, e := client.Do(req)
+	res, e := installationlicense.HTTP(ctx, client, req)
 	if e != nil {
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			return out, &Failure{Code: "INSTALLATION_LICENSE_RESTRICTED"}
+		}
 		return out, &Failure{Code: "PROVIDER_OUTCOME_UNKNOWN", Unknown: true}
 	}
 	defer res.Body.Close()

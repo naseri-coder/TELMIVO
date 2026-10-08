@@ -7,6 +7,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/groupbot"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,11 @@ func GroupBotWebhook(secret string, s *groupbot.Service) http.Handler {
 		var rest any
 		if d.Decode(&u) != nil || d.Decode(&rest) != io.EOF || u.ID == nil {
 			w.WriteHeader(400)
+			return
+		}
+		if installationlicense.CheckRuntime(r.Context()) != nil {
+			w.Header().Set("X-Telmivo-License", "restricted")
+			w.WriteHeader(200)
 			return
 		}
 		id, err := auth.Token()
