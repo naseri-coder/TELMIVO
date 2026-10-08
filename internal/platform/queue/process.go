@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 )
@@ -17,6 +18,9 @@ var ErrExternalOutcomeUnknown = errors.New("external outcome unknown")
 func Process(ctx context.Context, db *database.Store, durable string, event Envelope, external bool, handler Handler) error {
 	if durable == "" || !uuidPattern.MatchString(event.ID) || !uuidPattern.MatchString(event.WorkspaceID) || event.Type == "" || handler == nil {
 		return database.ErrInvalid
+	}
+	if e := installationlicense.CheckRuntime(ctx); e != nil {
+		return e
 	}
 	tx, e := db.Pool.Begin(ctx)
 	if e != nil {
@@ -40,6 +44,9 @@ func Process(ctx context.Context, db *database.Store, durable string, event Enve
 	if external {
 		// Neither the transport payload nor credentials belong in recovery evidence.
 		if _, e = tx.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,'EXTERNAL_OUTCOME_UNCONFIRMED',$3) ON CONFLICT DO NOTHING", durable, event.ID, map[string]any{"workspace_id": event.WorkspaceID}); e != nil {
+			return e
+		}
+		if e = installationlicense.CheckRuntime(ctx); e != nil {
 			return e
 		}
 		if e = tx.Commit(ctx); e != nil {

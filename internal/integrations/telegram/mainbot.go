@@ -7,6 +7,7 @@ import (
 	"github.com/naseri-coder/TELMIVO/internal/domains/identity"
 	"github.com/naseri-coder/TELMIVO/internal/domains/mainbot"
 	"github.com/naseri-coder/TELMIVO/internal/platform/auth"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"log/slog"
 	"net/http"
@@ -42,6 +43,11 @@ func MainBotWebhook(secret string, service *mainbot.Service) http.Handler {
 		var u identity.Update
 		if json.Unmarshal(raw, &metadata) != nil || metadata.ID == nil || json.Unmarshal(raw, &u) != nil {
 			w.WriteHeader(400)
+			return
+		}
+		if installationlicense.CheckRuntime(r.Context()) != nil {
+			w.Header().Set("X-Telmivo-License", "restricted")
+			w.WriteHeader(200)
 			return
 		}
 		correlation, e := auth.Token()

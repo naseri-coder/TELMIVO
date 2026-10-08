@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"time"
 
 	transport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
@@ -19,6 +20,9 @@ func (c *Client) SendClassified(ctx context.Context, message transport.Message) 
 	}
 	e := c.call(ctx, "sendMessage", messagePayload(message), &out)
 	if e != nil {
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			return 0, "DELIVERY_FAILED", 0
+		}
 		var api *APIError
 		if errors.As(e, &api) {
 			if api.Code == 429 {

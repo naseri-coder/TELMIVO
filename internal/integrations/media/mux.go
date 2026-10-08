@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"os"
 	"os/exec"
@@ -52,7 +53,7 @@ func MuxAV(ctx context.Context, videoPath, audioPath, outputPath string, max int
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
-	if err = cmd.Run(); err != nil {
+	if err = installationlicense.RuntimeEffect(ctx, cmd.Run); err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}

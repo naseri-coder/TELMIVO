@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/naseri-coder/TELMIVO/internal/domains/accessgates"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 	"net/http"
 	"time"
@@ -35,8 +36,11 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 		return errors.New("Telegram request invalid")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, e := c.http.Do(req)
+	resp, e := installationlicense.HTTP(ctx, c.http, req)
 	if e != nil {
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			return e
+		}
 		return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}
 	defer resp.Body.Close()

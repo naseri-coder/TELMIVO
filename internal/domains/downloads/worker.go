@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/jobs"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
@@ -163,6 +164,9 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				if installationlicense.CheckRuntime(ctx) != nil {
+					continue
+				}
 				e := w.tx(ctx, heartbeatWork, func(tx pgx.Tx) error {
 					var cancelled bool
 					if e := tx.QueryRow(ctx, "SELECT cancel_requested FROM download_jobs WHERE id=$1", id).Scan(&cancelled); e != nil {
@@ -187,7 +191,7 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 	}()
 	defer func() { cancel(); <-heartbeatDone }()
 	finalize := func(state, code, outcome string, mid int64) error {
-		final, stop := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
+		final, stop := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(parent)), 10*time.Second)
 		defer stop()
 		return w.finish(final, x, state, code, outcome, mid)
 	}
@@ -388,7 +392,7 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
 	}
 	defer func() {
-		clean, stop := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
+		clean, stop := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(parent)), 5*time.Second)
 		defer stop()
 		w.Storage.Delete(clean, workspace, key)
 	}()
@@ -466,9 +470,11 @@ func (w *Worker) Poll(ctx context.Context, concurrency int) (pollErr error) {
 	if concurrency < 1 || concurrency > 32 {
 		return database.ErrInvalid
 	}
-	if e := w.Cleanup(ctx); e != nil {
-		slog.Info("downloader diagnostic", "event", "downloader_cleanup_failed", "result", diagnosticResult(e))
-		return e
+	if installationlicense.CheckRuntime(ctx) == nil {
+		if e := w.Cleanup(ctx); e != nil {
+			slog.Info("downloader diagnostic", "event", "downloader_cleanup_failed", "result", diagnosticResult(e))
+			return e
+		}
 	}
 	lastCleanup := time.Now()
 	var running sync.WaitGroup

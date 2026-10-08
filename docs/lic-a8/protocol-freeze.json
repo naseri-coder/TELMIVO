@@ -1,0 +1,10 @@
+{
+  "authority_head": "392fc89087d8dac001d1709d0f7973c2f28a8515",
+  "source": "pkg/licensecrypto",
+  "files": {
+    "model.go": "537addf525da0e47b32065dad4d297687e26f486654e56cb7a6e7efed3ea5f8c",
+    "codec.go": "46a0150eb09f234f12df2e6ebbd0bfa503ccf20aa33b5b52d15daec59818e03c",
+    "verify.go": "8bf37ec8f809eba11db45f5930df40e615fc14e27db1a1e262f191016eeef595"
+  },
+  "product_parent": "7fc6d5a4cd7f9f66fe259b402d34cb75bd2ab75d"
+}
