@@ -124,7 +124,7 @@ func (cl *Client) request(ctx context.Context, i Identity, op Operation, query s
 }
 func terminal(code string) bool {
 	switch code {
-	case "LICENSE_NOT_ACTIVE", "LICENSE_SUSPENDED", "LICENSE_EXPIRED", "LICENSE_REVOKED", "INSTALLATION_DISABLED", "INSTALLATION_RETIRED", "INSTALLATION_SUPERSEDED", "ACTIVATION_NOT_ACTIVE", "AUTHORITY_RECOVERY_HOLD":
+	case "LICENSE_NOT_ACTIVE", "LICENSE_SUSPENDED", "LICENSE_EXPIRED", "LICENSE_REVOKED", "INSTALLATION_DISABLED", "INSTALLATION_RETIRED", "INSTALLATION_SUPERSEDED", "ACTIVATION_NOT_ACTIVE", "AUTHORITY_RECOVERY_HOLD", "STALE_CONCURRENT_INSTALLATION_STATE", "RECOVERY_GENERATION_MISMATCH":
 		return true
 	}
 	return false
@@ -140,6 +140,13 @@ func (cl *Client) mutate(ctx context.Context, kind string, body []byte) error {
 			key, e := UUID()
 			if e != nil {
 				return e
+			}
+			if kind == "concurrency" {
+				r, e := c.ParseConcurrencyRequest(body)
+				if e != nil {
+					return e
+				}
+				key = r.RequestID
 			}
 			s.Pending = &Operation{kind, key, body}
 			if e = m.write("highwater.json", h); e != nil {
@@ -158,6 +165,9 @@ func (cl *Client) mutate(ctx context.Context, kind string, body []byte) error {
 		if out.Error != nil {
 			if terminal(out.Error.Code) {
 				s.Restricted = out.Error.Code
+				if out.Error.Code == "STALE_CONCURRENT_INSTALLATION_STATE" {
+					s.Restricted = "CONCURRENT_INSTALLATION_CONFLICT"
+				}
 				s.Pending = nil
 				if e = m.write("state.json", s); e != nil {
 					return e
@@ -208,7 +218,13 @@ func (cl *Client) Activate(ctx context.Context, code, license string, epoch int6
 		License string `json:"license_id"`
 		Epoch   int64  `json:"authority_epoch"`
 	}{code, i.ID, base64.RawURLEncoding.EncodeToString(i.PublicKey()), license, epoch})
-	return cl.mutate(ctx, "activate", body)
+	if e := cl.mutate(ctx, "activate", body); e != nil {
+		return e
+	}
+	if cl.manager.cfg.RequireConcurrency {
+		return cl.Concurrency(ctx)
+	}
+	return nil
 }
 func (cl *Client) registered(ctx context.Context, kind string) error {
 	var body []byte
@@ -235,7 +251,26 @@ func (cl *Client) registered(ctx context.Context, kind string) error {
 	}
 	return cl.mutate(ctx, kind, body)
 }
-func (cl *Client) Refresh(ctx context.Context) error    { return cl.registered(ctx, "refresh") }
+func (cl *Client) Refresh(ctx context.Context) error {
+	if !cl.manager.cfg.RequireConcurrency {
+		return cl.registered(ctx, "refresh")
+	}
+	var pending bool
+	if e := cl.manager.lock(func() error {
+		_, s, _, e := cl.manager.load()
+		pending = s.Pending != nil && s.Pending.Kind == "concurrency"
+		return e
+	}); e != nil {
+		return e
+	}
+	if pending {
+		return cl.Concurrency(ctx)
+	}
+	if e := cl.registered(ctx, "refresh"); e != nil {
+		return e
+	}
+	return cl.Concurrency(ctx)
+}
 func (cl *Client) Deactivate(ctx context.Context) error { return cl.registered(ctx, "deactivate") }
 func (cl *Client) Status(ctx context.Context) error {
 	m := cl.manager
@@ -278,6 +313,25 @@ func (cl *Client) Status(ctx context.Context) error {
 	})
 }
 func (cl *Client) Poll(ctx context.Context) {
+	var leader *os.File
+	for {
+		acquired, e := cl.manager.acquireRefreshLeader()
+		if e == nil {
+			leader = acquired
+			break
+		}
+		if !errors.Is(e, ErrPending) {
+			return
+		}
+		timer := time.NewTimer(15 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+	defer leader.Close()
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
@@ -315,7 +369,7 @@ func OpenEnvironment() (*Manager, *Client, error) {
 	if e != nil {
 		return nil, nil, e
 	}
-	cfg := Config{Directory: os.Getenv("TELMIVO_LICENSE_STATE_DIR"), AuthorityID: os.Getenv("TELMIVO_LICENSE_AUTHORITY_ID"), Environment: os.Getenv("TELMIVO_LICENSE_ENVIRONMENT"), URL: os.Getenv("TELMIVO_LICENSE_AUTHORITY_URL"), Roots: roots}
+	cfg := Config{RequireConcurrency: true, Directory: os.Getenv("TELMIVO_LICENSE_STATE_DIR"), AuthorityID: os.Getenv("TELMIVO_LICENSE_AUTHORITY_ID"), Environment: os.Getenv("TELMIVO_LICENSE_ENVIRONMENT"), URL: os.Getenv("TELMIVO_LICENSE_AUTHORITY_URL"), Roots: roots}
 	if os.Getenv("TELMIVO_ENV") == "production" && cfg.Environment != "PRODUCTION" {
 		return nil, nil, ErrState
 	}

@@ -97,7 +97,14 @@ func verifyCertificate(payload, signature []byte, roots Roots, p Policy, registr
 	return c, nil
 }
 func ValidateClaims(c Claims, cert Certificate) error {
-	if c.Version != 1 {
+	if c.Version == 2 {
+		if c.ConcurrencyIssuedAt < c.IssuedAt || c.ConcurrencyExpiresAt <= c.ConcurrencyIssuedAt || c.ConcurrencyExpiresAt > c.OfflineUntil || c.ConcurrencyExpiresAt-c.ConcurrencyIssuedAt > MaximumLease.Microseconds() || c.ConcurrentPolicy != ConcurrentPolicy || !ValidID(c.RuntimeSessionID) || !ValidID(c.ConcurrencyLeaseID) || c.ConcurrencyGeneration < 1 || c.RecoveryGeneration < 0 || (c.ConflictState != "NORMAL" && c.ConflictState != "CLONE_SUSPECTED") {
+			return Malformed
+		}
+	} else if c.ConcurrentPolicy != "" {
+		return Malformed
+	}
+	if c.Version != 1 && c.Version != 2 {
 		return UnsupportedVersion
 	}
 	if c.Algorithm != Algorithm {

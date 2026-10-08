@@ -35,6 +35,8 @@ func run() error {
 		return json.NewEncoder(os.Stdout).Encode(m.Decision())
 	case "authority-status":
 		return c.Status(ctx)
+	case "concurrency-refresh":
+		return c.Concurrency(ctx)
 	case "refresh":
 		return c.Refresh(ctx)
 	case "deactivate":

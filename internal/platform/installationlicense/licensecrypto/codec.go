@@ -200,6 +200,18 @@ func EncodeClaims(c Claims) ([]byte, error) {
 	w.str(c.Environment)
 	w.str(c.CertificateID)
 	w.blob(c.CertificateHash)
+	if c.Version == 2 {
+		w.str(c.ConcurrentPolicy)
+		w.str(c.RuntimeSessionID)
+		w.str(c.ConcurrencyLeaseID)
+		w.i64(c.ConcurrencyGeneration)
+		w.i64(c.RecoveryGeneration)
+		w.str(c.ConflictState)
+		w.i64(c.ConcurrencyIssuedAt)
+		w.i64(c.ConcurrencyExpiresAt)
+	} else if c.ConflictState != "" || c.ConcurrencyIssuedAt != 0 || c.ConcurrencyExpiresAt != 0 || c.ConcurrentPolicy != "" || c.ConcurrencyGeneration != 0 || c.RecoveryGeneration != 0 || c.RuntimeSessionID != "" || c.ConcurrencyLeaseID != "" {
+		return nil, Malformed
+	}
 	return w.finish()
 }
 func DecodeClaims(b []byte) (Claims, error) {
@@ -236,6 +248,16 @@ func DecodeClaims(b []byte) (Claims, error) {
 	c.Environment = r.str()
 	c.CertificateID = r.str()
 	c.CertificateHash = r.blob()
+	if c.Version == 2 {
+		c.ConcurrentPolicy = r.str()
+		c.RuntimeSessionID = r.str()
+		c.ConcurrencyLeaseID = r.str()
+		c.ConcurrencyGeneration = r.i64()
+		c.RecoveryGeneration = r.i64()
+		c.ConflictState = r.str()
+		c.ConcurrencyIssuedAt = r.i64()
+		c.ConcurrencyExpiresAt = r.i64()
+	}
 	if err := r.done(); err != nil {
 		return Claims{}, err
 	}
