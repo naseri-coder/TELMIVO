@@ -16,6 +16,31 @@ import uuid
 
 AUTHORITY_MERGED_SHA = '939d14800c602dd9c31ff23fdf6e0688a440d4c2'
 PRODUCT_MERGED_SHA = 'bc417045ca5e1b91a2377aba6dece348699f7bf4'
+AUTHORITY_ARCHIVE_SHA = '68cdb6996f85981c36dd20ecb7435ec010351e9b'
+EXPECTED_AUTHORITY_NONRUNTIME_DELTA = frozenset({
+    'docs/development/LIC_A9_PHASE2B_AUTHORITY_PG16_CI_BLOCKER_20261014.md',
+    'internal/domain/phase2b_safety_test.go',
+})
+
+
+def validate_authority_archive_provenance(
+    root: Path, archive_sha: str = AUTHORITY_ARCHIVE_SHA,
+    merged_sha: str = AUTHORITY_MERGED_SHA,
+    allowed_delta: frozenset[str] = EXPECTED_AUTHORITY_NONRUNTIME_DELTA,
+) -> None:
+    """Prove archived Authority runtime is identical to merged Authority runtime."""
+    git(root, 'merge-base', '--is-ancestor', archive_sha, merged_sha)
+    changed = frozenset(filter(None, git(
+        root, 'diff', '--name-only', archive_sha, merged_sha).splitlines()))
+    if changed != allowed_delta:
+        raise ValueError(
+            'Authority fixture archive and merged source differ unexpectedly: '
+            + ','.join(sorted(changed.symmetric_difference(allowed_delta))))
+    # A distinct merged commit is allowed only with precisely these nonruntime files.
+    if any(not (name.startswith('docs/') or name.endswith('_test.go'))
+           for name in changed):
+        raise ValueError('Authority runtime source changed since archived commit')
+
 
 
 def git(root: Path, *args: str) -> str:
@@ -92,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
             if os.environ.get(bad):
                 raise ValueError(f'refusing inherited production-like environment variable {bad}')
         check_checkout(authority, AUTHORITY_MERGED_SHA)
+        validate_authority_archive_provenance(authority)
         check_product_checkout(product)
         check_go_version(run(['go', 'version'], output=True).stdout)
         endpoint = run(['docker', 'context', 'inspect', '--format',

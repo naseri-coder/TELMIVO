@@ -104,6 +104,52 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 runner.check_product_checkout(root, baseline)
 
+    def test_actual_git_archive_delta_only_docs_and_tests(self):
+        with tempfile.TemporaryDirectory(prefix='lic-a9-authority-provenance-') as temp:
+            root = Path(temp)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            (root / 'engine.go').write_text('package main\n')
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            commit = ['git', '-C', str(root), '-c', 'user.name=Test',
+                      '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']
+            subprocess.run(commit, check=True)
+            archive = runner.git(root, 'rev-parse', 'HEAD')
+            report = root / 'docs' / 'development' / 'evidence.md'
+            report.parent.mkdir(parents=True)
+            report.write_text('test-only report')
+            tst = root / 'internal' / 'domain' / 'safety_test.go'
+            tst.parent.mkdir(parents=True)
+            tst.write_text('package domain')
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            subprocess.run(commit, check=True)
+            merged = runner.git(root, 'rev-parse', 'HEAD')
+            allowable = frozenset({'docs/development/evidence.md', 'internal/domain/safety_test.go'})
+            runner.validate_authority_archive_provenance(root, archive, merged, allowable)
+            # New runtime source must not silently pass provenance.
+            (root / 'engine.go').write_text('package modified\n')
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            subprocess.run(commit, check=True)
+            unsafe = runner.git(root, 'rev-parse', 'HEAD')
+            with self.assertRaises(ValueError):
+                runner.validate_authority_archive_provenance(root, archive, unsafe, allowable)
+
+    def test_unexpected_test_change_blocks_provenance(self):
+        with mock.patch.object(runner, 'git', side_effect=['',
+                'docs/development/other.md\ninternal/domain/phase2b_safety_test.go\n']):
+            with self.assertRaises(ValueError):
+                runner.validate_authority_archive_provenance(Path('/tmp'))
+
+    def test_mismatched_provenance_never_runs_go_or_docker(self):
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance',
+                                side_effect=ValueError('unsafe runtime changed')),
+              mock.patch.object(runner, 'run') as commands,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(['--authority','/tmp/repo-1','--product','/tmp/repo-2',
+                                  '--acknowledge-disposable-host'])
+        self.assertEqual(status, 3)
+        commands.assert_not_called()
+
     def test_mocked_joint_path_compiles_before_docker_and_always_stops(self):
         calls = []
         def fake_run(argv, **kwargs):
@@ -119,6 +165,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(argv)
             return subprocess.CompletedProcess(argv, 0)
         with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
@@ -151,6 +198,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(argv)
             return subprocess.CompletedProcess(argv, 0)
         with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),

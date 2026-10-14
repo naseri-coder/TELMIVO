@@ -38,3 +38,18 @@ python3 -B -m unittest discover -s tests/installationlicense -p test_joint_runne
 **وضعیت نهایی:** `OFFLINE_RUNNER_PRECHECK_13_OF_13_PASS`؛ `JOINT_GO127_POSTGRES16_E2E_NOT_RUN`؛ `NO_ACTIONS_NO_MAIN_SERVER_NO_DEPLOY`.
 
 پس از دسترسی به یک محیط **واقعاً موقت و جدا از سرور اصلی**، باید همین ابزار را اجرا کرد و بر اساس خروجی واقعی درباره ادغام PR32 به main تصمیم گرفت.
+
+
+## مرحلهٔ بعدی — اصلاح مرجع دقیق Archive در آزمون مشترک
+
+در بازبینی پس از PR48 یک شکاف در انتساب نسخه کشف شد:
+
+- `run_joint_postgres_e2e.py` checkout مرج‌شدهٔ Authority را روی `939d14800c602dd9c31ff23fdf6e0688a440d4c2` پین می‌کرد.
+- `prepare_authority_fixture.py` همچنان کد آزمون E2E را با `git archive` از `68cdb6996f85981c36dd20ecb7435ec010351e9b` استخراج می‌کرد.
+- با `compare_commits` GitHub مشخص شد تنها تغییر بین دو Commit، افزودن گزارش `docs/development/LIC_A9_PHASE2B_AUTHORITY_PG16_CI_BLOCKER_20261014.md` و آزمون `internal/domain/phase2b_safety_test.go` است؛ هیچ فایل runtime یا migration تغییر نکرده است.
+
+**اصلاح اجراشده:** قبل از هر کامپایل یا ساخت کانتینر، تابع `validate_authority_archive_provenance` با Git واقعی بررسی می‌کند که SHA آرشیو جدّ SHA مرج‌شده باشد و فهرست دقیق تغییرات بین آن‌ها **فقط همین دو فایل غیرعملیاتی** باشد. اضافه‌شدن هر فایل دیگر (حتی فایل تست جدید) یا تغییر کد اجرایی باعث خطای `NOT_PASS` می‌شود. در این وضعیت، برابر بودن سورس runtimeِ نسخه آرشیوشده و نسخه مرج‌شده یک فرض تأییدنشده نیست، بلکه شرط اجرای ابزار است.
+
+**نتیجهٔ محلی:** `16/16` آزمون Python شامل Git واقعی موقت، تشخیص تغییر runtime، رد تغییر غیرمنتظره و جلوگیری از Go/Docker در وضعیت ناسازگار موفق شدند. SHA Git blob فایل‌های محلی اجراشده با GitHub تطبیق داده شد.
+
+**گیت باز:** همچنان اجرای `go test` مشترک با Go 1.27 و PostgreSQL 16 انجام نشده است. هیچ تغییر Production، GitHub Actions یا سرور اصلی صورت نگرفته است.
