@@ -136,6 +136,73 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(status, 3)
         self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
 
+    def test_real_go_failure_reports_failing_name_but_never_leaks_raw_logs(self):
+        raw = '\n'.join(json.dumps(event) for event in (
+            {'Action': 'run', 'Test': 'TestLICA9CrossRepoClonedGenerationFenced'},
+            {'Action': 'output', 'Test': 'TestLICA9CrossRepoClonedGenerationFenced',
+             'Output': 'SENSITIVE_TEST_SECRET_SHOULD_NOT_LEAK'},
+            {'Action': 'fail', 'Test': 'TestLICA9CrossRepoClonedGenerationFenced'},
+            {'Action': 'fail', 'Package': 'example/joint'},
+        )) + '\n'
+        err = subprocess.CalledProcessError(1, ['go', 'test', '-json'],
+                                            output=raw,
+                                            stderr='POTENTIALLY_SENSITIVE_ERROR_DETAILS')
+        summary = runner.safe_failed_e2e_summary(err)
+        self.assertIn('failed=TestLICA9CrossRepoClonedGenerationFenced', summary)
+        self.assertIn('package_fail=True', summary)
+        self.assertNotIn('SENSITIVE_TEST_SECRET_SHOULD_NOT_LEAK', summary)
+        self.assertNotIn('POTENTIALLY_SENSITIVE_ERROR_DETAILS', summary)
+        self.assertRegex(summary, r'go_json_sha256=[a-f0-9]{64}')
+        self.assertRegex(summary, r'stderr_sha256=[a-f0-9]{64}')
+        self.assertEqual(summary, runner.safe_failed_e2e_summary(err))
+
+    def test_real_go_failure_summary_ignores_untrusted_names(self):
+        stream = json.dumps({'Action': 'fail', 'Test': 'UNTRUSTED_TOKEN_LOG'})
+        err = subprocess.CalledProcessError(1, ['go'], output=stream)
+        summary = runner.safe_failed_e2e_summary(err)
+        self.assertIn('failed=none', summary)
+        self.assertNotIn('UNTRUSTED_TOKEN_LOG', summary)
+
+    def test_actual_main_surfaces_safe_go_failure_and_always_cleans_up(self):
+        calls = []
+        secret = 'SECRET_OUTPUT_NOT_FOR_CONSOLE'
+        stream = '\n'.join(json.dumps(x) for x in (
+            {'Action': 'run', 'Test': 'TestLICA9CrossRepoRealLeaseAndRestart'},
+            {'Action': 'output', 'Test': 'TestLICA9CrossRepoRealLeaseAndRestart',
+             'Output': secret},
+            {'Action': 'fail', 'Test': 'TestLICA9CrossRepoRealLeaseAndRestart'},
+            {'Action': 'fail', 'Package': 'example/joint'},
+        )) + '\n'
+        def fake_run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[:3] == ['docker', 'context', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
+            if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
+                return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.2 linux/amd64\n')
+            if '-list' in argv:
+                return subprocess.CompletedProcess(argv, 0, stdout=GO_DISCOVERY)
+            if '-json' in argv:
+                raise subprocess.CalledProcessError(1, argv, output=stream, stderr=secret)
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        def fake_subprocess(argv, **kwargs):
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        err = io.StringIO()
+        out = io.StringIO()
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'install_a9_fixture'),
+              mock.patch.object(runner, 'run', side_effect=fake_run),
+              mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
+              contextlib.redirect_stdout(out), contextlib.redirect_stderr(err)):
+            self.assertEqual(runner.main(ARGS), 3)
+        self.assertIn('failed=TestLICA9CrossRepoRealLeaseAndRestart', err.getvalue())
+        self.assertIn('LIC_A9_TEST_FAILURE_SUMMARY:', err.getvalue())
+        self.assertNotIn(secret, err.getvalue() + out.getvalue())
+        self.assertNotIn(runner.A9_TARGETED_SUCCESS, out.getvalue())
+        self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
+
     def test_cleanup_error_never_allows_success_verdict(self):
         for mode in ('nonzero', 'timeout', 'missing'):
             calls = []
