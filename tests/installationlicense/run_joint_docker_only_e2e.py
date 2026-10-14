@@ -67,7 +67,6 @@ def require_six_passed_tests(stdout: str) -> None:
         raise ValueError('duplicate or missing E2E execution evidence')
 
 
-
 def go_docker_command(fixture: Path, product: Path, cache: Path,
                       network: str, command: list[str]) -> list[str]:
     """Never mount host credentials; source product read-only and caches disposable."""
