@@ -139,6 +139,40 @@ def require_combined_passed_tests(stdout: str) -> None:
         raise ValueError('duplicate or missing Go E2E evidence')
 
 
+def safe_failed_e2e_summary(exc: subprocess.CalledProcessError) -> str:
+    """Preserve failure evidence without echoing Go output or fixture secrets.
+
+    Real Go -json output may contain arbitrary test logs and credentials. Never
+    dump it to the console. Report only *approved* test identities, event types
+    and digests so the first failed case is identifiable without a false PASS.
+    """
+    stdout = exc.stdout if isinstance(exc.stdout, str) else ''
+    stderr = exc.stderr if isinstance(exc.stderr, str) else ''
+    fail, skip = set(), set()
+    package_failed = False
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        action = event.get('Action')
+        if action not in ('fail', 'skip'):
+            continue
+        name = event.get('Test')
+        if name is None:
+            if action == 'fail':
+                package_failed = True
+        elif isinstance(name, str) and name in COMBINED_TESTS:
+            (fail if action == 'fail' else skip).add(name)
+    digest = lambda data: hashlib.sha256(data.encode('utf-8', errors='replace')).hexdigest()
+    return (f'exit={exc.returncode}; failed={",".join(sorted(fail)) or "none"}; '
+            f'skipped={",".join(sorted(skip)) or "none"}; '
+            f'package_fail={package_failed}; '
+            f'go_json_sha256={digest(stdout)}; stderr_sha256={digest(stderr)}')
+
+
 def go_docker_command(fixture: Path, product: Path, cache: Path,
                       network: str, command: list[str]) -> list[str]:
     """Never mount host credentials; source product read-only and caches disposable."""
@@ -250,7 +284,12 @@ def main(argv=None) -> int:
                 '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
                 '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
             ]
-            executed = run(cmd, output=True, timeout=600).stdout
+            try:
+                executed = run(cmd, output=True, timeout=600).stdout
+            except subprocess.CalledProcessError as exc:
+                print('LIC_A9_TEST_FAILURE_SUMMARY: ' + safe_failed_e2e_summary(exc),
+                      file=sys.stderr)
+                raise
             require_combined_passed_tests(executed)
         outcome = 0
     except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
