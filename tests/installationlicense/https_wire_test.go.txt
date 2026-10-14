@@ -1,0 +1,98 @@
+package wire
+import (
+ "bytes"; "context"; "crypto/ed25519"; "crypto/rand"; "encoding/base64"
+ "fmt"; "io"; "net/http"; "net/http/httptest"; "strconv"; "sync"; "testing"; "time"
+)
+func fixture(t *testing.T)(Identity,*Client,func(),*[]string){
+ t.Helper(); pub,priv,e:=ed25519.GenerateKey(rand.Reader); if e!=nil{t.Fatal(e)}
+ id:=Identity{ID:"22222222-2222-4222-8222-222222222222",PrivateKey:priv}
+ var mu sync.Mutex
+ seen:=[]string{}
+ server:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  body,_:=io.ReadAll(r.Body)
+  p:=Proof{InstallationID:r.Header.Get("X-Telmivo-Installation-ID"),
+    Timestamp:r.Header.Get("X-Telmivo-Timestamp"),Nonce:r.Header.Get("X-Telmivo-Nonce"),
+    IdempotencyKey:r.Header.Get("Idempotency-Key"),PublicKey:pub}
+  code,nonce:=VerifyProof(r,body,p,time.Now())
+  if code!="" {
+   w.WriteHeader(401)
+   fmt.Fprint(w,`{"error":{"code":"`+code+`","retryable":false}}`)
+   return
+  }
+  mu.Lock();seen=append(seen,base64.RawURLEncoding.EncodeToString(nonce));mu.Unlock()
+  w.Header().Set("Content-Type","application/json")
+  fmt.Fprint(w,`{"state":"SIGNED","request_id":"11111111-1111-4111-8111-111111111111"}`)
+ }))
+ return id,&Client{http:server.Client(),base:server.URL},server.Close,&seen
+}
+func TestHTTPSWireRequests(t *testing.T){
+ cases:=[]struct{name,kind,query string;body []byte}{
+  {"activate","activate","",[]byte(`{"activation_code":"TEST","authority_epoch":1}`)},
+  {"refresh","refresh","",[]byte(`{"activation_id":"11111111-1111-4111-8111-111111111111"}`)},
+  {"deactivate","deactivate","",[]byte(`{"activation_id":"11111111-1111-4111-8111-111111111111"}`)},
+  {"concurrency","concurrency","",[]byte(`{"request_id":"11111111-1111-4111-8111-111111111111"}`)},
+  {"status","status","activation_id=11111111-1111-4111-8111-111111111111",nil},
+ }
+ for _,tc:=range cases{t.Run(tc.name,func(t *testing.T){
+  id,cl,close,_:=fixture(t);defer close()
+  key:="11111111-1111-4111-8111-111111111111"
+  if tc.kind=="status"{key=""}
+  out,status,e:=cl.request(context.Background(),id,Operation{Kind:tc.kind,Key:key,Body:tc.body},tc.query)
+  if e!=nil||status!=200||out.State!="SIGNED"{
+   t.Fatalf("status=%d out=%+v err=%v",status,out,e)
+  }
+ })}
+}
+func TestTamperedRequestRejected(t *testing.T){
+ pub,priv,_:=ed25519.GenerateKey(rand.Reader)
+ id:=Identity{ID:"22222222-2222-4222-8222-222222222222",PrivateKey:priv}
+ timestamp:=strconv.FormatInt(time.Now().UnixMilli(),10)
+ nonce:=base64.RawURLEncoding.EncodeToString(make([]byte,32))
+ body:=[]byte(`{"license_id":"ok"}`)
+ key:="11111111-1111-4111-8111-111111111111"
+ req:=httptest.NewRequest("POST","https://local/v1/licenses/activate",bytes.NewReader(body))
+ req.Header.Set("X-Telmivo-Signature",base64.RawURLEncoding.EncodeToString(
+  ed25519.Sign(priv,proof(id,"POST",req.URL.Path,"",timestamp,nonce,key,body))))
+ p:=Proof{InstallationID:id.ID,Timestamp:timestamp,Nonce:nonce,IdempotencyKey:key,PublicKey:pub}
+ if code,_:=VerifyProof(req,body,p,time.Now());code!=""{t.Fatal("reference proof rejected",code)}
+ altered:=append([]byte(nil),body...);altered[1]^=1
+ if code,_:=VerifyProof(req,altered,p,time.Now());code!="INVALID_SIGNATURE"{
+  t.Fatal("tampered body accepted",code)
+ }
+}
+func TestExpiredSignedTimestampRejected(t *testing.T){
+ pub,priv,_:=ed25519.GenerateKey(rand.Reader)
+ id:=Identity{ID:"22222222-2222-4222-8222-222222222222",PrivateKey:priv}
+ timestamp:=strconv.FormatInt(time.Now().Add(-6*time.Minute).UnixMilli(),10)
+ nonce:=base64.RawURLEncoding.EncodeToString(make([]byte,32))
+ req:=httptest.NewRequest("GET","https://local/v1/licenses/status?activation_id=11111111-1111-4111-8111-111111111111",nil)
+ sig:=ed25519.Sign(priv,proof(id,"GET",req.URL.Path,req.URL.RawQuery,timestamp,nonce,"",nil))
+ req.Header.Set("X-Telmivo-Signature",base64.RawURLEncoding.EncodeToString(sig))
+ p:=Proof{InstallationID:id.ID,Timestamp:timestamp,Nonce:nonce,PublicKey:pub}
+ if code,_:=VerifyProof(req,nil,p,time.Now());code!="REQUEST_TIMESTAMP_INVALID"{
+  t.Fatal("expired signed timestamp not rejected",code)
+ }
+}
+func TestNonceChangesOnRetry(t *testing.T){
+ id,cl,close,seen:=fixture(t);defer close()
+ op:=Operation{Kind:"refresh",Key:"11111111-1111-4111-8111-111111111111",
+  Body:[]byte(`{"authority_epoch":1}`)}
+ for n:=0;n<2;n++{
+  _,status,e:=cl.request(context.Background(),id,op,"")
+  if e!=nil||status!=200{t.Fatal(e,status)}
+ }
+ if len(*seen)!=2||(*seen)[0]==(*seen)[1]{t.Fatalf("nonce reused: %v",*seen)}
+}
+func TestDuplicateJSONResponseRejected(t *testing.T){
+ _,priv,_:=ed25519.GenerateKey(rand.Reader)
+ id:=Identity{ID:"22222222-2222-4222-8222-222222222222",PrivateKey:priv}
+ server:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  fmt.Fprint(w,`{"state":"SIGNED","state":"SIGNED"}`)
+ }));defer server.Close()
+ cl:=&Client{http:server.Client(),base:server.URL}
+ _,status,e:=cl.request(context.Background(),id,Operation{Kind:"status"},
+  "activation_id=11111111-1111-4111-8111-111111111111")
+ if status!=200||e!=ErrUnavailable{
+  t.Fatalf("duplicated response not rejected: status=%d err=%v",status,e)
+ }
+}
