@@ -113,5 +113,6 @@ class SourcePreflightTests(unittest.TestCase):
             (folder / "not-tracked.txt").write_text("injected")
             self.assertFalse(subject.is_clean(folder))
 
+
 if __name__ == "__main__":
     unittest.main()
