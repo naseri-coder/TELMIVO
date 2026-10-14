@@ -39,8 +39,13 @@ def is_owner_device():
         require(not os.environ.get(name),"REMOTE_SSH_SESSION_REFUSED")
     if hasattr(os,"geteuid"):
         require(os.geteuid()!=0,"RUN_AS_PERSONAL_USER_NOT_ROOT")
-    require(sys.platform in ("linux","darwin"),
+    require(sys.platform in ("linux","darwin","android"),
             "OWNER_LINUX_MACOS_OR_ANDROID_TERMUX_REQUIRED")
+    if sys.platform == "android":
+        require(Path.home().resolve() in (
+            Path("/data/data/com.termux/files/home"),
+            Path("/data/user/0/com.termux/files/home")),
+            "ANDROID_PRIVATE_TERMUX_HOME_REQUIRED")
     return True
 
 def owner_private_parents(path):
@@ -56,8 +61,22 @@ def owner_private_parents(path):
         # group or owns the parent, rather than wrongly blocking Termux.
         group_is_ours = (info.st_gid in os.getgroups() or
                          info.st_uid == os.getuid())
+        # Android Termux has an app-private 'files' parent commonly at 0771.
+        # Exempt ONLY that verified app-owned 0771 directory for the default
+        # local recovery path; never exempt arbitrary group-writable parents.
+        home = Path.home().resolve()
+        termux_files = parent in (
+            Path("/data/data/com.termux/files"),
+            Path("/data/user/0/com.termux/files"))
+        allow_android_app_parent = (
+            sys.platform == "android" and termux_files
+            and home == parent / "home"
+            and path == home / "telmivo-offline-recovery"
+            and info.st_uid == os.getuid()
+            and stat.S_IMODE(info.st_mode) == 0o771)
         unsafe_write = bool(info.st_mode & 0o002) or (
-            bool(info.st_mode & 0o020) and group_is_ours)
+            bool(info.st_mode & 0o020) and group_is_ours
+            and not allow_android_app_parent)
         require(stat.S_ISDIR(info.st_mode) and not parent.is_symlink()
                 and not unsafe_write,
                 "UNSAFE_OR_PUBLIC_PARENT_DIRECTORY")
