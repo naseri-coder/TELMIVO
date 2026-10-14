@@ -161,7 +161,7 @@ class DockerOnlyTests(unittest.TestCase):
                       contextlib.redirect_stdout(capture),
                       contextlib.redirect_stderr(io.StringIO())):
                     self.assertEqual(runner.main(ARGS), 3)
-                self.assertNotIn('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS', capture.getvalue())
+                self.assertNotIn(runner.LEGACY_SMOKE_SUCCESS, capture.getvalue())
                 self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
 
     def test_wrong_container_go_never_starts_postgres(self):
@@ -232,6 +232,24 @@ class DockerOnlyTests(unittest.TestCase):
             self.assertEqual(no_tests.returncode, 0)
             with self.assertRaises(ValueError):
                 runner.require_six_passed_tests(no_tests.stdout)
+
+    def test_success_output_is_legacy_smoke_not_A9_certification(self):
+        result = io.StringIO()
+        with contextlib.redirect_stdout(result):
+            runner.emit_legacy_smoke_result()
+        lines = result.getvalue().splitlines()
+        self.assertEqual(lines, [runner.LEGACY_SMOKE_SUCCESS, runner.A9_COVERAGE_GAP])
+        self.assertTrue(lines[0].startswith('LIC_A8_LEGACY_'))
+        self.assertIn('A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED', lines[1])
+        self.assertNotIn('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS', result.getvalue())
+
+    def test_old_host_runner_is_not_an_A9_certification(self):
+        import inspect
+        import run_joint_postgres_e2e as host_runner
+        source = inspect.getsource(host_runner.main)
+        self.assertNotIn('LIC_A9_JOINT_GO127_POSTGRES16_E2E_PASS', source)
+        self.assertIn('LIC_A8_LEGACY_HOST_GO127_PG16_SMOKE_COMMAND_COMPLETED_TEST_COUNT_UNVERIFIED', source)
+        self.assertIn('LIC_A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED', source)
 
     def test_early_argv_check_rejects_same_source(self):
         with (mock.patch.object(runner, 'run') as commands,
