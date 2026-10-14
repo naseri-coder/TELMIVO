@@ -75,7 +75,7 @@ def main(argv=None) -> int:
         check_product_checkout(product)
         endpoint = run(['docker', 'context', 'inspect', '--format',
                         '{{ .Endpoints.docker.Host }}'], output=True).stdout.strip()
-        if not re.fullmatch(r'unix://\/[\w./-]+\.sock', endpoint):
+        if not re.fullmatch(r'unix:///[\w./-]+\.sock', endpoint):
             raise ValueError('only local Unix Docker socket is permitted')
         run(['docker', 'info'], output=True)
         with tempfile.TemporaryDirectory(prefix='lic-a9-docker-only-') as temp:
