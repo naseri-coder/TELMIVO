@@ -5,6 +5,8 @@ No GitHub Actions, on-host Go installation, live database, or production keys.
 All source checkouts must pass the existing pinned Git provenance fences.
 """
 import argparse
+from collections import Counter
+import json
 import os
 from pathlib import Path
 import re
@@ -22,6 +24,47 @@ from run_joint_postgres_e2e import (
 GO_IMAGE = 'golang:1.27.0-bookworm'
 PG_IMAGE = 'postgres:16'
 PG_DATABASE = 'lic_a9_joint_test'
+E2E_TESTS = frozenset(f'TestE2E{i}' for i in range(1, 7))
+
+
+def require_six_discovered_tests(stdout: str) -> None:
+    """A zero-test `go test` returns 0. Enforce complete discovery before DB startup."""
+    found = [line.strip() for line in stdout.splitlines()
+             if re.fullmatch(r'TestE2E[0-9]+', line.strip())]
+    if len(found) != 6 or set(found) != E2E_TESTS:
+        raise ValueError(f'expected exactly six E2E test names, found {found!r}')
+
+
+def require_six_passed_tests(stdout: str) -> None:
+    """Require actual Go -json run+pass events for all six, not package PASS alone."""
+    started = Counter()
+    passed = Counter()
+    package_pass = 0
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError('Go JSON test event stream malformed') from exc
+        if not isinstance(event, dict):
+            raise ValueError('Go JSON event was not an object')
+        action = event.get('Action')
+        name = event.get('Test')
+        if action in ('fail', 'skip'):
+            raise ValueError(f'Go reported a skipped or failed test: {name or "package"}')
+        if name is None:
+            if action == 'pass':
+                package_pass += 1
+        elif name in E2E_TESTS:
+            if action == 'run':
+                started[name] += 1
+            elif action == 'pass':
+                passed[name] += 1
+        elif re.fullmatch(r'TestE2E[0-9]+', name):
+            raise ValueError(f'unexpected joint E2E test: {name}')
+    if package_pass != 1 or set(started) != E2E_TESTS or set(passed) != E2E_TESTS:
+        raise ValueError('six E2E test executions and successes were not proven')
+    if any(started[test] != 1 or passed[test] != 1 for test in E2E_TESTS):
+        raise ValueError('duplicate or missing E2E execution evidence')
 
 
 def go_docker_command(fixture: Path, product: Path, cache: Path,
@@ -94,6 +137,11 @@ def main(argv=None) -> int:
             run(go_docker_command(fixture, product, cache, 'bridge',
                                   ['go', 'test', '-count=1', '-run', '^$', './authority']),
                 timeout=420)
+            discovered = run(go_docker_command(
+                fixture, product, cache, 'bridge',
+                ['go', 'test', '-list', '^TestE2E[1-6]$', './authority']),
+                output=True, timeout=240).stdout
+            require_six_discovered_tests(discovered)
             pg_container = 'lic-a9-joint-' + uuid.uuid4().hex[:12]
             # Postgres is network-isolated: NO -p / exposed host port, even loopback.
             run(['docker', 'run', '-d', '--rm', '--name', pg_container,
@@ -117,14 +165,15 @@ def main(argv=None) -> int:
             # outbound internet access. All dependencies were compiled beforehand.
             cmd = go_docker_command(
                 fixture, product, cache, 'container:' + pg_container,
-                ['go', 'test', '-count=1', '-v', '-timeout', '8m',
+                ['go', 'test', '-count=1', '-json', '-timeout', '8m',
                  '-run', '^TestE2E[1-6]$', './authority'])
             image_index = cmd.index(GO_IMAGE)
             cmd[image_index:image_index] = [
                 '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
                 '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
             ]
-            run(cmd, timeout=600)
+            executed = run(cmd, output=True, timeout=600).stdout
+            require_six_passed_tests(executed)
         outcome = 0
     except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
             subprocess.CalledProcessError) as exc:
