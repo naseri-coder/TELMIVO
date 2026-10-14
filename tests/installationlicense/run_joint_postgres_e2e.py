@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Fail-closed offline LIC-A9 joint test with a disposable loopback PostgreSQL16.
+"""HISTORICAL LIC-A8 host-Go smoke with a disposable loopback PostgreSQL16.
 
+DEPRECATED for LIC-A9 certification: this older path does not prove six test events.
 Run ONLY on an authorized disposable development machine with Docker and Go 1.27.
 No GitHub Actions, production environment, persistent databases or VPS changes.
 """
@@ -163,7 +164,8 @@ def main(argv: list[str] | None = None) -> int:
             run(['go', 'test', '-count=1', '-v', '-timeout', '8m',
                  '-run', '^TestE2E[1-6]$', './authority'],
                 cwd=fixture, env=env, timeout=540)
-            print('LIC_A9_JOINT_GO127_POSTGRES16_E2E_PASS')
+            print('LIC_A8_LEGACY_HOST_GO127_PG16_SMOKE_COMMAND_COMPLETED_TEST_COUNT_UNVERIFIED')
+            print('LIC_A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED')
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired, TimeoutError) as exc:
