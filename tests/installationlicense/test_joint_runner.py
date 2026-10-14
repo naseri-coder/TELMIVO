@@ -98,8 +98,7 @@ class RunnerTests(unittest.TestCase):
             rc = runner.main(['--authority','/tmp/repo-1','--product','/tmp/repo-2',
                               '--acknowledge-disposable-host'])
         self.assertEqual(rc, 0)
-        compile_idx = next(i for i, c in enumerate(calls) if c[:3] == ['go','test','-count=1'] and '-run' in c and '^
- in c)
+        compile_idx = next(i for i, c in enumerate(calls) if c[:3] == ['go','test','-count=1'] and '-run' in c and ('^' + chr(36)) in c)
         docker_run_idx = next(i for i, c in enumerate(calls) if c[:2] == ['docker','run'])
         joint_idx = next(i for i, c in enumerate(calls) if c[:3] == ['go','test','-count=1'] and '-timeout' in c)
         stop_idx = next(i for i, c in enumerate(calls) if c[:2] == ['docker','stop'])
