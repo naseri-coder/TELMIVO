@@ -6,6 +6,7 @@ import contextlib
 import io
 import pathlib
 import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -92,6 +93,25 @@ class SourcePreflightTests(unittest.TestCase):
                                return_value=mock.Mock(stdout="")):
             self.assertTrue(subject.is_clean(pathlib.Path("/tmp/no-repo")))
 
+
+    def test_real_git_checkout_detects_edits_and_untracked(self):
+        with tempfile.TemporaryDirectory(prefix="lic-a9-git-fixture-") as temp:
+            folder = pathlib.Path(temp)
+            subprocess.run(["git", "init", "-q", str(folder)], check=True)
+            tracked = folder / "sample.txt"
+            tracked.write_text("known contents\n")
+            subprocess.run(["git", "-C", str(folder), "add", "sample.txt"], check=True)
+            subprocess.run(["git", "-C", str(folder), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"],
+                           check=True)
+            self.assertRegex(subject.repository_sha(folder), r"^[0-9a-f]{40}$")
+            self.assertTrue(subject.is_clean(folder))
+            tracked.write_text("unexpected change\n")
+            self.assertFalse(subject.is_clean(folder))
+            tracked.write_text("known contents\n")
+            self.assertTrue(subject.is_clean(folder))
+            (folder / "not-tracked.txt").write_text("injected")
+            self.assertFalse(subject.is_clean(folder))
 
 if __name__ == "__main__":
     unittest.main()
