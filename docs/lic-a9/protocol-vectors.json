@@ -1,0 +1,82 @@
+{
+  "protocol_id": "TELMIVO_CONCURRENT_INSTALLATION_LEASE_V1",
+  "fixture_type": "PUBLIC_SYNTHETIC_NO_PRIVATE_KEYS",
+  "canonical_request": "{\"protocol_id\":\"TELMIVO_CONCURRENT_INSTALLATION_LEASE_V1\",\"license_id\":\"00000000-0000-4000-8000-000000000001\",\"installation_id\":\"00000000-0000-4000-8000-000000000002\",\"installation_public_key_hash\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"activation_id\":\"00000000-0000-4000-8000-000000000003\",\"authority_epoch\":1,\"license_revision\":2,\"activation_generation\":1,\"requested_concurrency_generation\":17,\"recovery_generation\":0,\"previous_lease_id\":\"00000000-0000-4000-8000-000000000006\",\"runtime_session_id\":\"00000000-0000-4000-8000-000000000004\",\"request_id\":\"00000000-0000-4000-8000-000000000005\"}",
+  "cases": [
+    {
+      "id": "VALID_REFRESH",
+      "mutation": "none",
+      "expected": "PASS"
+    },
+    {
+      "id": "EXACT_RETRY",
+      "mutation": "same_request",
+      "expected": "PASS"
+    },
+    {
+      "id": "WRONG_SIGNATURE",
+      "mutation": "proof_signature",
+      "expected": "INVALID_SIGNATURE"
+    },
+    {
+      "id": "WRONG_INSTALLATION",
+      "mutation": "installation_id",
+      "expected": "INVALID_INSTALLATION_IDENTITY"
+    },
+    {
+      "id": "WRONG_KEY_HASH",
+      "mutation": "installation_public_key_hash",
+      "expected": "INVALID_INSTALLATION_IDENTITY"
+    },
+    {
+      "id": "STALE_GENERATION",
+      "mutation": "generation_minus_one",
+      "expected": "STALE_CONCURRENT_INSTALLATION_STATE"
+    },
+    {
+      "id": "FUTURE_GENERATION",
+      "mutation": "generation_plus_one",
+      "expected": "FUTURE_CONCURRENCY_GENERATION"
+    },
+    {
+      "id": "WRONG_LICENSE_REVISION",
+      "mutation": "license_revision",
+      "expected": "ACTIVATION_NOT_ACTIVE"
+    },
+    {
+      "id": "WRONG_ACTIVATION_GENERATION",
+      "mutation": "activation_generation",
+      "expected": "ACTIVATION_NOT_ACTIVE"
+    },
+    {
+      "id": "WRONG_AUTHORITY_EPOCH",
+      "mutation": "authority_epoch",
+      "expected": "AUTHORITY_RECOVERY_HOLD"
+    },
+    {
+      "id": "RETIRED_INSTALLATION",
+      "mutation": "retired",
+      "expected": "INSTALLATION_RETIRED"
+    },
+    {
+      "id": "CLONE_CONFLICT",
+      "mutation": "different_stale_request",
+      "expected": "STALE_CONCURRENT_INSTALLATION_STATE"
+    },
+    {
+      "id": "MALFORMED_CANONICAL_PAYLOAD",
+      "mutation": "duplicate_field",
+      "expected": "INVALID_REQUEST"
+    },
+    {
+      "id": "REPLAYED_LEASE",
+      "mutation": "older_signed_generation",
+      "expected": "INSTALLATION_LICENSE_ROLLBACK"
+    },
+    {
+      "id": "RECOVERY_GENERATION_MISMATCH",
+      "mutation": "recovery_generation",
+      "expected": "RECOVERY_GENERATION_MISMATCH"
+    }
+  ]
+}

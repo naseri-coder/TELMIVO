@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const ConcurrentPolicy = "TELMIVO_CONCURRENT_INSTALLATION_LEASE_V1"
+
 const (
 	Product           = "TELMIVO"
 	Audience          = "TELMIVO_INSTALLATION"
@@ -90,6 +92,9 @@ type CertifiedSigner struct {
 	Bytes, Signature []byte
 }
 type Claims struct {
+	ConcurrentPolicy, RuntimeSessionID, ConcurrencyLeaseID, ConflictState             string
+	ConcurrencyIssuedAt, ConcurrencyExpiresAt                                         int64
+	ConcurrencyGeneration, RecoveryGeneration                                         int64
 	Version                                                                           uint16
 	Algorithm, Product, Type, Issuer, Audience                                        string
 	LicenseID, ActivationID, InstallationID                                           string

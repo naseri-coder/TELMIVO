@@ -1,27 +1,67 @@
 #!/usr/bin/env python3
-"""Create TEST-ONLY LIC-A7 fixture outside both source repositories.
-Usage: prepare_authority_fixture.py AUTHORITY_REPO NEW_FIXTURE_DIR
-Run go test ./authority -run '^TestE2E[1-6]$' with LIC_A8_TEST_DATABASE_URL
-pointing to an exclusively disposable non-production PostgreSQL database.
+"""Prepare a TEST-ONLY Authority fixture from the selected PR32 source.
+
+Usage:
+    python3 prepare_authority_fixture.py AUTHORITY_REPO NEW_FIXTURE_DIR
+
+This fixture is historic LIC-A8 E2E research. It is not evidence of PR32
+compatibility: source API and migration differences must be resolved and
+validated separately. Never point its tests at a non-disposable database.
 """
-import pathlib, subprocess, sys
-sha='392fc89087d8dac001d1709d0f7973c2f28a8515'
-repo=pathlib.Path(sys.argv[1]).resolve(); dst=pathlib.Path(sys.argv[2]).resolve()
-product=pathlib.Path(__file__).resolve().parents[2]
-if dst.exists() or dst.is_relative_to(repo) or dst.is_relative_to(product):
- raise SystemExit('fixture must be a new directory outside source worktrees')
-dst.mkdir(mode=0o700); authority=dst/'authority';authority.mkdir()
-archive=subprocess.run(['git','-C',str(repo),'archive',sha],check=True,stdout=subprocess.PIPE).stdout
-subprocess.run(['tar','-x','-C',str(authority)],input=archive,check=True)
-old='github.com/naseri-coder/TELMIVO-LICENSE-AUTHORITY';new='github.com/naseri-coder/TELMIVO/lica8-e2e/authority'
-for p in authority.rglob('*.go'):
- s=p.read_text().replace(old,new)
- # Injectable lease/business clock only. Transport replay/nonce clocks stay real.
- if p.parent==authority/'internal/store/postgres' and p.name!='transport.go' and not p.name.endswith('_test.go'):
-  s=s.replace('clock_timestamp()', 'lic_a8_clock()')
- p.write_text(s)
-mod=(product/'go.mod').read_text().replace('module github.com/naseri-coder/TELMIVO','module github.com/naseri-coder/TELMIVO/lica8-e2e',1)
-mod+='\nrequire github.com/naseri-coder/TELMIVO v0.0.0\nreplace github.com/naseri-coder/TELMIVO => '+str(product)+'\n'
-(dst/'go.mod').write_text(mod);(dst/'go.sum').write_bytes((product/'go.sum').read_bytes())
-(authority/'client_test.go').write_bytes((pathlib.Path(__file__).parent/'authority_e2e_test.go.template').read_bytes())
-print('TEST-ONLY fixture prepared from '+sha)
+import pathlib
+import subprocess
+import sys
+
+sha = "68cdb6996f85981c36dd20ecb7435ec010351e9b"
+
+
+def prepare(repo: pathlib.Path, dst: pathlib.Path) -> None:
+    repo = repo.resolve()
+    dst = dst.resolve()
+    product = pathlib.Path(__file__).resolve().parents[2]
+    if dst.exists() or dst.is_relative_to(repo) or dst.is_relative_to(product):
+        raise SystemExit("fixture must be a new directory outside source worktrees")
+    actual = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", sha + "^{commit}"],
+                            check=True, capture_output=True, text=True).stdout.strip()
+    if actual != sha:
+        raise SystemExit("Authority source commit not available at exact approved SHA")
+    archive = subprocess.run(["git", "-C", str(repo), "archive", sha],
+                             check=True, stdout=subprocess.PIPE).stdout
+    dst.mkdir(mode=0o700)
+    authority = dst / "authority"
+    authority.mkdir()
+    subprocess.run(["tar", "-x", "-C", str(authority)], input=archive, check=True)
+    # The Git archive includes Authority's own go.mod and go.sum. Leaving
+    # go.mod nested under <fixture>/authority creates a SECOND Go module:
+    # 'go test ./authority' from the joint fixture root then cannot find it.
+    # Remove only the ARCHIVED copies, never manifests from either checkout.
+    authority_manifest = authority / "go.mod"
+    if not authority_manifest.is_file() or not authority_manifest.read_text().startswith(
+            "module github.com/naseri-coder/TELMIVO-LICENSE-AUTHORITY\n"):
+        raise SystemExit("unexpected Authority module in disposable fixture")
+    authority_manifest.unlink()
+    (authority / "go.sum").unlink(missing_ok=True)
+    old = "github.com/naseri-coder/TELMIVO-LICENSE-AUTHORITY"
+    new = "github.com/naseri-coder/TELMIVO/lica8-e2e/authority"
+    for p in authority.rglob("*.go"):
+        source = p.read_text().replace(old, new)
+        if (p.parent == authority / "internal/store/postgres"
+                and p.name != "transport.go" and not p.name.endswith("_test.go")):
+            source = source.replace("clock_timestamp()", "lic_a8_clock()")
+        p.write_text(source)
+    module = (product / "go.mod").read_text().replace(
+        "module github.com/naseri-coder/TELMIVO",
+        "module github.com/naseri-coder/TELMIVO/lica8-e2e", 1)
+    module += ("\nrequire github.com/naseri-coder/TELMIVO v0.0.0\n"
+               "replace github.com/naseri-coder/TELMIVO => " + str(product) + "\n")
+    (dst / "go.mod").write_text(module)
+    (dst / "go.sum").write_bytes((product / "go.sum").read_bytes())
+    (authority / "client_test.go").write_bytes(
+        (pathlib.Path(__file__).parent / "authority_e2e_test.go.template").read_bytes())
+    print("TEST-ONLY fixture prepared from " + sha)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: prepare_authority_fixture.py AUTHORITY_REPO NEW_FIXTURE_DIR")
+    prepare(pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]))

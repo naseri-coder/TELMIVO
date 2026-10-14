@@ -42,32 +42,41 @@ func (i Identity) PublicKey() ed25519.PublicKey {
 }
 
 type HighWater struct {
+	ConcurrencyGeneration                              int64  `json:",omitempty"`
+	RecoveryGeneration                                 int64  `json:",omitempty"`
+	ConcurrencyLeaseID                                 string `json:",omitempty"`
 	Epoch, Revision, Generation, IssuedAt, TrustedTime int64
 	LicenseID, ActivationID                            string
 }
 type State struct {
-	Envelope   []byte
-	Restricted string
-	Pending    *Operation
+	BaseEnvelope []byte `json:",omitempty"`
+	Envelope     []byte
+	Restricted   string
+	Pending      *Operation
 }
 type Operation struct {
 	Kind, Key string
 	Body      []byte
 }
 type Config struct {
+	RequireConcurrency                       bool
 	Directory, AuthorityID, Environment, URL string
 	Roots                                    c.Roots
 	// Clock is an injected validation clock; production forbids it.
 	Clock func() time.Time
 }
 type Manager struct {
-	cfg Config
-	now func() time.Time
+	runtimeSession string
+	cfg            Config
+	now            func() time.Time
 }
 type Decision struct {
-	State, Reason               string
-	RefreshDue                  bool
-	Epoch, Revision, Generation int64
+	ConcurrencyGeneration, RecoveryGeneration int64
+	RuntimeSessionID, ConcurrencyLeaseID      string
+	ConcurrencyExpiresAt                      int64
+	State, Reason                             string
+	RefreshDue                                bool
+	Epoch, Revision, Generation               int64
 }
 
 func Open(cfg Config) (*Manager, error) {
@@ -109,7 +118,12 @@ func Open(cfg Config) (*Manager, error) {
 	if cfg.Clock != nil && cfg.Environment == "PRODUCTION" {
 		return nil, ErrState
 	}
-	m := &Manager{cfg: cfg, now: time.Now}
+	session, e := UUID()
+	if e != nil {
+		return nil, e
+	}
+	cfg.RequireConcurrency = cfg.RequireConcurrency || cfg.Environment == "PRODUCTION"
+	m := &Manager{cfg: cfg, now: time.Now, runtimeSession: session}
 	if cfg.Clock != nil {
 		m.now = cfg.Clock
 	}
@@ -255,6 +269,9 @@ func (m *Manager) verify(i Identity, s State, h HighWater) (c.Result, error) {
 		return r, e
 	}
 	x := r.Claims
+	if x.Version == 2 && (x.ConcurrencyIssuedAt > m.now().UnixMicro()+c.ClockTolerance.Microseconds() || x.ConcurrencyGeneration < h.ConcurrencyGeneration || x.RecoveryGeneration < h.RecoveryGeneration || (x.ConcurrencyGeneration == h.ConcurrencyGeneration && h.ConcurrencyLeaseID != "" && x.ConcurrencyLeaseID != h.ConcurrencyLeaseID) || m.now().UnixMicro() > x.ConcurrencyExpiresAt) {
+		return c.Result{}, ErrRollback
+	}
 	if x.ActivationGeneration < h.Generation || x.IssuedAt < h.IssuedAt || (h.LicenseID != "" && x.LicenseID != h.LicenseID) || (h.ActivationID != "" && x.ActivationGeneration == h.Generation && x.ActivationID != h.ActivationID) {
 		return c.Result{}, ErrRollback
 	}
@@ -290,6 +307,9 @@ func (m *Manager) decisionLocked() (Decision, error) {
 		return Decision{State: "RESTRICTED", Reason: "VERIFICATION_FAILED"}, e
 	}
 	x := r.Claims
+	if (m.cfg.RequireConcurrency || h.ConcurrencyGeneration > 0) && x.Version != 2 {
+		return Decision{State: "RESTRICTED", Reason: "CONCURRENCY_REFRESH_REQUIRED", RefreshDue: true}, ErrRestricted
+	}
 	allowed := false
 	for _, cap := range x.Capabilities {
 		if cap == "product.use" {
@@ -299,7 +319,7 @@ func (m *Manager) decisionLocked() (Decision, error) {
 	if !allowed {
 		return Decision{State: "RESTRICTED", Reason: "CAPABILITY_MISSING"}, ErrRestricted
 	}
-	return Decision{State: r.State, RefreshDue: now >= x.RefreshAfter, Epoch: x.AuthorityEpoch, Revision: x.LicenseRevision, Generation: x.ActivationGeneration}, nil
+	return Decision{ConcurrencyGeneration: x.ConcurrencyGeneration, RecoveryGeneration: x.RecoveryGeneration, RuntimeSessionID: x.RuntimeSessionID, ConcurrencyLeaseID: x.ConcurrencyLeaseID, ConcurrencyExpiresAt: x.ConcurrencyExpiresAt, State: r.State, RefreshDue: now >= x.RefreshAfter, Epoch: x.AuthorityEpoch, Revision: x.LicenseRevision, Generation: x.ActivationGeneration}, nil
 }
 func (m *Manager) Decision() Decision {
 	d := Decision{State: "RESTRICTED", Reason: "STATE_INVALID"}
@@ -337,8 +357,35 @@ func (m *Manager) acceptLocked(envelope []byte) error {
 		return e
 	}
 	x := r.Claims
-	if s.Restricted != "" && x.AuthorityEpoch <= h.Epoch && x.LicenseRevision <= h.Revision && x.ActivationGeneration <= h.Generation && x.IssuedAt <= h.IssuedAt {
+
+	if x.Version == 2 && s.Pending != nil && s.Pending.Kind == "concurrency" {
+		request, e := c.ParseConcurrencyRequest(s.Pending.Body)
+		if e != nil || x.ConcurrentPolicy != request.ProtocolID || x.LicenseID != request.LicenseID || x.InstallationID != request.InstallationID || x.ActivationID != request.ActivationID || x.AuthorityEpoch != request.AuthorityEpoch || x.LicenseRevision != request.LicenseRevision || x.ActivationGeneration != request.ActivationGeneration || x.ConcurrencyGeneration != request.RequestedGeneration+1 || x.RecoveryGeneration != request.RecoveryGeneration || x.RuntimeSessionID != request.RuntimeSessionID {
+			return ErrRollback
+		}
+	}
+	if x.Version == 2 && x.ConcurrencyGeneration <= h.ConcurrencyGeneration && h.ConcurrencyGeneration > 0 {
+		repair := false
+		if s.Pending != nil && s.Pending.Kind == "concurrency" {
+			pending, e := c.ParseConcurrencyRequest(s.Pending.Body)
+			repair = e == nil && pending.RequestedGeneration+1 == x.ConcurrencyGeneration && pending.RuntimeSessionID == x.RuntimeSessionID
+		}
+		if !repair {
+			return ErrRollback
+		}
+	}
+	if s.Restricted != "" && x.AuthorityEpoch <= h.Epoch && x.LicenseRevision <= h.Revision && x.ActivationGeneration <= h.Generation && x.IssuedAt <= h.IssuedAt && x.ConcurrencyGeneration <= h.ConcurrencyGeneration {
 		return ErrRollback
+	}
+	if x.Version == 2 {
+		h.ConcurrencyGeneration = x.ConcurrencyGeneration
+		h.RecoveryGeneration = x.RecoveryGeneration
+		h.ConcurrencyLeaseID = x.ConcurrencyLeaseID
+	}
+	if x.Version == 1 && (m.cfg.RequireConcurrency || h.ConcurrencyGeneration > 0) {
+		candidate = s
+		candidate.BaseEnvelope = append([]byte(nil), envelope...)
+		candidate.Pending = nil
 	}
 	h.Epoch = x.AuthorityEpoch
 	h.Revision = x.LicenseRevision
