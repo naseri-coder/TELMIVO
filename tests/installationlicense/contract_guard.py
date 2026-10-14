@@ -36,11 +36,12 @@ def check_source(contract: str, client: str, fixture: str) -> list[str]:
                    '"Idempotency-Key"', '"application/json"'):
         if marker not in client:
             failures.append(f"product HTTP contract marker missing: {marker}")
-    if not re.search(r'(?m)^sha\s*=\s*["\']' + AUTHORITY_SHA + r'["\']\s*
+    sha_match = re.search(r'(?m)^sha\s*=\s*["\x27]([0-9a-f]{40})["\x27]\s*$', fixture)
+    if not sha_match or sha_match.group(1) != AUTHORITY_SHA:
         failures.append("test fixture does not pin the selected PR32 Authority SHA")
-    if re.search(r'(?m)^sha\s*=\s*["\']' + LEGACY_SHA + r'["\']\s*
+    if sha_match and sha_match.group(1) == LEGACY_SHA:
         failures.append("legacy Authority SHA still pinned")
-    if not re.search(r'["\']git["\']\s*,\s*["\']-C["\']\s*,\s*str\(repo\)\s*,\s*["\']archive["\']\s*,\s*sha', fixture):
+    if not re.search(r'["\x27]git["\x27]\s*,\s*["\x27]-C["\x27]\s*,\s*str\(repo\)\s*,\s*["\x27]archive["\x27]\s*,\s*sha', fixture):
         failures.append("fixture provenance is not pinned to git archive")
     return failures
 
