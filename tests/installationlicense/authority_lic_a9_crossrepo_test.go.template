@@ -50,8 +50,9 @@ func TestLICA9CrossRepoRealLeaseAndRestart(t *testing.T) {
 	x := setup(t, false) // Real disposable PostgreSQL schema + TLS Authority.
 	x.activate(t)        // LIC-A8 activation is only the bootstrap grant.
 	manager, client := openConcurrentClient(t, x, x.cfg.Directory)
-	if manager.Decision().State != "RESTRICTED" {
-		t.Fatal("concurrency-required client accepted the legacy bootstrap")
+	bootstrap := manager.Decision()
+	if bootstrap.State != "RESTRICTED" || bootstrap.Reason != "CONCURRENCY_REFRESH_REQUIRED" {
+		t.Fatal("concurrency-required client accepted the legacy bootstrap or failed for an unrelated reason", bootstrap.State, bootstrap.Reason)
 	}
 	if err := client.Concurrency(context.Background()); err != nil {
 		t.Fatal("first real concurrency lease", err)
@@ -96,8 +97,25 @@ func TestLICA9CrossRepoClonedGenerationFenced(t *testing.T) {
 		t.Fatal("stale replica did not receive terminal restriction", err)
 	}
 	decision := replica.Decision()
-	if decision.State != "RESTRICTED" {
-		t.Fatal("cloned installation retained permission")
+	if decision.State != "RESTRICTED" || decision.Reason != "CONCURRENT_INSTALLATION_CONFLICT" {
+		t.Fatal("clone must be restricted for the exact stale-generation conflict", decision.State, decision.Reason)
+	}
+	installationID, _, identityErr := leader.PublicIdentity()
+	if identityErr != nil {
+		t.Fatal("primary installation identity", identityErr)
+	}
+	var generation int64
+	var conflictState string
+	if err := x.store.Pool.QueryRow(x.ctx,
+		"SELECT concurrency_generation,conflict_state FROM concurrency_leases WHERE installation_id=$1",
+		installationID).Scan(&generation, &conflictState); err != nil || generation != 2 || conflictState != "CLONE_SUSPECTED" {
+		t.Fatal("Authority did not persist the clone conflict without rolling back the winning generation", generation, conflictState, err)
+	}
+	var conflictIntents int
+	if err := x.store.Pool.QueryRow(x.ctx,
+		"SELECT count(*) FROM audit_intents WHERE action='clone_conflict_detected' AND entity_id=$1",
+		installationID).Scan(&conflictIntents); err != nil || conflictIntents != 1 {
+		t.Fatal("expected exactly one durable clone conflict intent", conflictIntents, err)
 	}
 	executed := false
 	err := replica.Effect(context.Background(), func() error { executed = true; return nil })
