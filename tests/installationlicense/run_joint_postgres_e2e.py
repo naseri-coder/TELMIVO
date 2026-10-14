@@ -16,6 +16,7 @@ import uuid
 
 AUTHORITY_MERGED_SHA = '939d14800c602dd9c31ff23fdf6e0688a440d4c2'
 PRODUCT_MERGED_SHA = 'bc417045ca5e1b91a2377aba6dece348699f7bf4'
+FIXTURE_PREPARER_BLOB = 'be27fbdf5871ee54e35ef9302d2749a67b1725e9'
 AUTHORITY_ARCHIVE_SHA = '68cdb6996f85981c36dd20ecb7435ec010351e9b'
 EXPECTED_AUTHORITY_NONRUNTIME_DELTA = frozenset({
     'docs/development/LIC_A9_PHASE2B_AUTHORITY_PG16_CI_BLOCKER_20261014.md',
@@ -65,9 +66,13 @@ def check_product_checkout(root: Path, baseline: str = PRODUCT_MERGED_SHA) -> No
     # Allow newly added *test tooling* on top of pinned product source, but
     # never allow a different Go/runtime module or old E2E fixture.
     protected = ('go.mod', 'go.sum', 'internal',
-                 'tests/installationlicense/prepare_authority_fixture.py',
                  'tests/installationlicense/authority_e2e_test.go.template')
     git(root, 'diff', '--quiet', baseline, 'HEAD', '--', *protected)
+    # A reviewed fixture-only change repairs the copied Authority module
+    # boundary; reject ANY other bytes in this helper (including dirty files).
+    preparer = root / 'tests/installationlicense/prepare_authority_fixture.py'
+    if not preparer.is_file() or git(root, 'hash-object', str(preparer)) != FIXTURE_PREPARER_BLOB:
+        raise ValueError('unexpected joint fixture preparer revision')
 
 
 def check_go_version(output: str) -> None:

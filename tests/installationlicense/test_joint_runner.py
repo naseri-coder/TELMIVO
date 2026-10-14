@@ -1,6 +1,7 @@
 import contextlib
 import io
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -95,6 +96,8 @@ class RunnerTests(unittest.TestCase):
                                       capture_output=True, text=True, check=True).stdout.strip()
             (root / 'tests' / 'installationlicense').mkdir(parents=True)
             (root / 'tests' / 'installationlicense' / 'new_runner.py').write_text('# test-only\n')
+            shutil.copyfile(Path(__file__).with_name('prepare_authority_fixture.py'),
+                            root / 'tests' / 'installationlicense' / 'prepare_authority_fixture.py')
             subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
             subprocess.run(commit, check=True)
             runner.check_product_checkout(root, baseline)
