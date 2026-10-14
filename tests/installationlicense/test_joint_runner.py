@@ -3,6 +3,7 @@ import io
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -69,13 +70,39 @@ class RunnerTests(unittest.TestCase):
     def test_reject_inherited_external_docker_target(self):
         with (mock.patch.dict(os.environ, {'DOCKER_HOST': 'ssh://production'}, clear=True),
               mock.patch.object(runner, 'check_checkout') as check,
+              mock.patch.object(runner, 'check_product_checkout') as check_product,
               mock.patch.object(runner, 'run') as commands,
               contextlib.redirect_stderr(io.StringIO())):
             rc = runner.main(['--authority','/tmp/repo-1','--product','/tmp/repo-2',
                               '--acknowledge-disposable-host'])
         self.assertEqual(rc, 3)
         check.assert_not_called()
+        check_product.assert_not_called()
         commands.assert_not_called()
+
+    def test_real_git_product_source_pin_allows_test_tool_only(self):
+        with tempfile.TemporaryDirectory(prefix='lic-a9-product-fixture-') as temp:
+            root = Path(temp)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            (root / 'go.mod').write_text('module test\n go 1.27\n')
+            (root / 'internal').mkdir()
+            (root / 'internal' / 'core.go').write_text('package core\n')
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            commit = ['git', '-C', str(root), '-c', 'user.name=Test',
+                      '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']
+            subprocess.run(commit, check=True)
+            baseline = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'],
+                                      capture_output=True, text=True, check=True).stdout.strip()
+            (root / 'tests' / 'installationlicense').mkdir(parents=True)
+            (root / 'tests' / 'installationlicense' / 'new_runner.py').write_text('# test-only\n')
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            subprocess.run(commit, check=True)
+            runner.check_product_checkout(root, baseline)
+            (root / 'internal' / 'core.go').write_text('package changed\n')
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            subprocess.run(commit, check=True)
+            with self.assertRaises(subprocess.CalledProcessError):
+                runner.check_product_checkout(root, baseline)
 
     def test_mocked_joint_path_compiles_before_docker_and_always_stops(self):
         calls = []
@@ -92,6 +119,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(argv)
             return subprocess.CompletedProcess(argv, 0)
         with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
               contextlib.redirect_stdout(io.StringIO())):
@@ -123,6 +151,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(argv)
             return subprocess.CompletedProcess(argv, 0)
         with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
               contextlib.redirect_stderr(io.StringIO()),
