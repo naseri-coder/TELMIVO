@@ -21,7 +21,7 @@ from run_joint_postgres_e2e import (
     validate_authority_archive_provenance, run,
 )
 
-GO_IMAGE = 'golang:1.27.0-bookworm'
+GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
 PG_DATABASE = 'lic_a9_joint_test'
 E2E_TESTS = frozenset(f'TestE2E{i}' for i in range(1, 7))
@@ -130,8 +130,8 @@ def main(argv=None) -> int:
             run([sys.executable, '-B', str(prepare), str(authority), str(fixture)], timeout=90)
             version = run(go_docker_command(fixture, product, cache, 'bridge', ['go', 'version']),
                           output=True, timeout=180).stdout
-            if not re.search(r'\bgo version go1\.27\.0\b', version):
-                raise ValueError('container Go version not exactly 1.27.0')
+            if not re.search(r'\bgo version go1\.27\.2\b', version):
+                raise ValueError('container Go version not exactly 1.27.2')
             # Compile all imported real sources and populate only an isolated Go cache,
             # BEFORE any PostgreSQL service exists. Failures are not called E2E PASS.
             run(go_docker_command(fixture, product, cache, 'bridge',
