@@ -136,7 +136,15 @@ def main(argv=None) -> int:
             # Compile all imported real sources and populate only an isolated Go cache,
             # BEFORE any PostgreSQL service exists. Failures are not called E2E PASS.
             run(go_docker_command(fixture, product, cache, 'bridge',
-                                  ['go', 'test', '-count=1', '-run', '^            # Postgres is network-isolated: NO -p / exposed host port, even loopback.
+                                  ['go', 'test', '-count=1', '-run', '^$', './authority']),
+                timeout=420)
+            discovered = run(go_docker_command(
+                fixture, product, cache, 'bridge',
+                ['go', 'test', '-list', '^TestE2E[1-6]$', './authority']),
+                output=True, timeout=240).stdout
+            require_six_discovered_tests(discovered)
+            pg_container = 'lic-a9-joint-' + uuid.uuid4().hex[:12]
+            # Postgres is network-isolated: NO -p / exposed host port, even loopback.
             run(['docker', 'run', '-d', '--rm', '--name', pg_container,
                  '--network', 'none', '--security-opt', 'no-new-privileges',
                  '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
@@ -167,124 +175,6 @@ def main(argv=None) -> int:
             ]
             executed = run(cmd, output=True, timeout=600).stdout
             require_six_passed_tests(executed)
-        outcome = 0
-    except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
-            subprocess.CalledProcessError) as exc:
-        print(f'NOT_PASS: {exc}', file=sys.stderr)
-    finally:
-        if pg_container is not None:
-            # Fail closed: a completed E2E test is NOT a success if its
-            # temporary database could not be stopped and removed.
-            try:
-                cleaned = subprocess.run(['docker', 'stop', pg_container],
-                                         capture_output=True, text=True, timeout=60)
-                if cleaned.returncode != 0:
-                    raise RuntimeError(cleaned.stderr or 'docker stop returned nonzero')
-            except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
-                print(f'NOT_PASS: disposable PostgreSQL cleanup was not confirmed: {exc}',
-                      file=sys.stderr)
-                outcome = 3
-    if outcome == 0:
-        # Emit PASS *only after* the disposable database cleanup succeeds.
-        print('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS')
-    return outcome
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
-, './authority']),
-                timeout=420)
-            discovered = run(go_docker_command(
-                fixture, product, cache, 'bridge',
-                ['go', 'test', '-list', '^TestE2E[1-6]            # Postgres is network-isolated: NO -p / exposed host port, even loopback.
-            run(['docker', 'run', '-d', '--rm', '--name', pg_container,
-                 '--network', 'none', '--security-opt', 'no-new-privileges',
-                 '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
-                 '--label', 'telmivo.purpose=lic-a9-disposable-joint-e2e',
-                 '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
-                 '-e', f'POSTGRES_DB={PG_DATABASE}', PG_IMAGE,
-                 '-c', 'shared_buffers=32MB', '-c', 'max_connections=35'], timeout=180)
-            deadline = time.monotonic() + 60
-            while True:
-                ready = subprocess.run(['docker', 'exec', pg_container, 'pg_isready',
-                                        '-h', '127.0.0.1', '-U', 'postgres', '-d', PG_DATABASE],
-                                       capture_output=True, text=True, timeout=12)
-                if ready.returncode == 0:
-                    break
-                if time.monotonic() >= deadline:
-                    raise TimeoutError('PostgreSQL 16 isolated container did not become ready')
-                time.sleep(1)
-            # Join DB network namespace without publishing any port or providing
-            # outbound internet access. All dependencies were compiled beforehand.
-            cmd = go_docker_command(
-                fixture, product, cache, 'container:' + pg_container,
-                ['go', 'test', '-count=1', '-v', '-timeout', '8m',
-                 '-run', '^TestE2E[1-6]$', './authority'])
-            image_index = cmd.index(GO_IMAGE)
-            cmd[image_index:image_index] = [
-                '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
-                '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
-            ]
-            run(cmd, timeout=600)
-        outcome = 0
-    except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
-            subprocess.CalledProcessError) as exc:
-        print(f'NOT_PASS: {exc}', file=sys.stderr)
-    finally:
-        if pg_container is not None:
-            # Fail closed: a completed E2E test is NOT a success if its
-            # temporary database could not be stopped and removed.
-            try:
-                cleaned = subprocess.run(['docker', 'stop', pg_container],
-                                         capture_output=True, text=True, timeout=60)
-                if cleaned.returncode != 0:
-                    raise RuntimeError(cleaned.stderr or 'docker stop returned nonzero')
-            except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
-                print(f'NOT_PASS: disposable PostgreSQL cleanup was not confirmed: {exc}',
-                      file=sys.stderr)
-                outcome = 3
-    if outcome == 0:
-        # Emit PASS *only after* the disposable database cleanup succeeds.
-        print('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS')
-    return outcome
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
-, './authority']),
-                output=True, timeout=240).stdout
-            require_six_discovered_tests(discovered)
-            pg_container = 'lic-a9-joint-' + uuid.uuid4().hex[:12]
-            # Postgres is network-isolated: NO -p / exposed host port, even loopback.
-            run(['docker', 'run', '-d', '--rm', '--name', pg_container,
-                 '--network', 'none', '--security-opt', 'no-new-privileges',
-                 '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
-                 '--label', 'telmivo.purpose=lic-a9-disposable-joint-e2e',
-                 '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
-                 '-e', f'POSTGRES_DB={PG_DATABASE}', PG_IMAGE,
-                 '-c', 'shared_buffers=32MB', '-c', 'max_connections=35'], timeout=180)
-            deadline = time.monotonic() + 60
-            while True:
-                ready = subprocess.run(['docker', 'exec', pg_container, 'pg_isready',
-                                        '-h', '127.0.0.1', '-U', 'postgres', '-d', PG_DATABASE],
-                                       capture_output=True, text=True, timeout=12)
-                if ready.returncode == 0:
-                    break
-                if time.monotonic() >= deadline:
-                    raise TimeoutError('PostgreSQL 16 isolated container did not become ready')
-                time.sleep(1)
-            # Join DB network namespace without publishing any port or providing
-            # outbound internet access. All dependencies were compiled beforehand.
-            cmd = go_docker_command(
-                fixture, product, cache, 'container:' + pg_container,
-                ['go', 'test', '-count=1', '-v', '-timeout', '8m',
-                 '-run', '^TestE2E[1-6]$', './authority'])
-            image_index = cmd.index(GO_IMAGE)
-            cmd[image_index:image_index] = [
-                '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
-                '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
-            ]
-            run(cmd, timeout=600)
         outcome = 0
     except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
             subprocess.CalledProcessError) as exc:
