@@ -144,7 +144,11 @@ def main(argv=None) -> int:
             require_six_discovered_tests(discovered)
             pg_container = 'lic-a9-joint-' + uuid.uuid4().hex[:12]
             # Postgres is network-isolated: NO -p / exposed host port, even loopback.
+            # Official postgres entrypoint drops root via gosu, which needs
+            # CAP_SETUID/CAP_SETGID. Run directly as its built-in unprivileged
+            # postgres user so the container can safely drop ALL capabilities.
             run(['docker', 'run', '-d', '--rm', '--name', pg_container,
+                 '--user', 'postgres', '--cap-drop', 'ALL',
                  '--network', 'none', '--security-opt', 'no-new-privileges',
                  '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
                  '--label', 'telmivo.purpose=lic-a9-disposable-joint-e2e',
