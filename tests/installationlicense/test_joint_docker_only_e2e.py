@@ -29,7 +29,7 @@ GO_SUCCESS_EVENTS = "\n".join(
 
 class DockerOnlyTests(unittest.TestCase):
     def test_go_image_is_exact_and_image_exists(self):
-        self.assertEqual(runner.GO_IMAGE, 'golang:1.27.0-bookworm')
+        self.assertEqual(runner.GO_IMAGE, 'golang:1.27.2-bookworm')
         self.assertEqual(runner.PG_IMAGE, 'postgres:16')
 
     def test_prevents_remote_network_and_relative_mounts(self):
@@ -67,7 +67,7 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(result, 3)
         commands.assert_not_called()
 
-    def simulate(self, *, go_version='go version go1.27.0 linux/amd64\n',
+    def simulate(self, *, go_version='go version go1.27.2 linux/amd64\n',
                  fail_test=False, missing_discovery=False, missing_passes=False):
         calls = []
         def fake_run(argv, **kwargs):
@@ -137,7 +137,7 @@ class DockerOnlyTests(unittest.TestCase):
                 if argv[:3] == ['docker', 'context', 'inspect']:
                     return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
                 if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
-                    return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.0 linux/amd64\n')
+                    return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.2 linux/amd64\n')
                 if '-list' in argv:
                     return subprocess.CompletedProcess(argv, 0, stdout=GO_DISCOVERY)
                 if '-json' in argv:
@@ -165,9 +165,11 @@ class DockerOnlyTests(unittest.TestCase):
                 self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
 
     def test_wrong_container_go_never_starts_postgres(self):
-        status, calls = self.simulate(go_version='go version go1.26.8 linux/amd64\n')
-        self.assertEqual(status, 3)
-        self.assertFalse(any(c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c for c in calls))
+        for unsupported in ('1.26.8', '1.27.0', '1.27.1'):
+            with self.subTest(version=unsupported):
+                status, calls = self.simulate(go_version=f'go version go{unsupported} linux/amd64\n')
+                self.assertEqual(status, 3)
+                self.assertFalse(any(c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c for c in calls))
 
     def test_zero_discovered_tests_refuses_before_database(self):
         code, calls = self.simulate(missing_discovery=True)
