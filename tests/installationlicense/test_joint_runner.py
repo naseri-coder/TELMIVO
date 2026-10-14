@@ -84,7 +84,7 @@ class RunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='lic-a9-product-fixture-') as temp:
             root = Path(temp)
             subprocess.run(['git', 'init', '-q', str(root)], check=True)
-            (root / 'go.mod').write_text('module test\n go 1.27\n')
+            (root / 'go.mod').write_text('module test\ngo 1.27\n')
             (root / 'internal').mkdir()
             (root / 'internal' / 'core.go').write_text('package core\n')
             subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
