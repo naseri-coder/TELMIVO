@@ -108,6 +108,12 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertLess(pg_start, e2e)
         self.assertLess(e2e, stop)
         pg_argv = calls[pg_start]
+        # The official entrypoint calls gosu when started as root; dropping
+        # all Linux capabilities before that prevents the UID transition.
+        # Explicitly start as the image's postgres user, retaining zero caps.
+        self.assertEqual(pg_argv[pg_argv.index('--user') + 1], 'postgres')
+        self.assertEqual(pg_argv[pg_argv.index('--cap-drop') + 1], 'ALL')
+        self.assertNotIn('--privileged', pg_argv)
         self.assertEqual(pg_argv[pg_argv.index('--network') + 1], 'none')
         self.assertNotIn('-p', pg_argv)
         e2e_argv = calls[e2e]
