@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Offline source-contract guard: static checks only; NOT E2E or Production approval."""
+"""Static M2M compatibility checks. No network, PostgreSQL or production calls."""
 import argparse
+import ast
 import pathlib
 import re
 import subprocess
@@ -9,10 +10,9 @@ import sys
 AUTHORITY_SHA = "68cdb6996f85981c36dd20ecb7435ec010351e9b"
 LEGACY_SHA = "392fc89087d8dac001d1709d0f7973c2f28a8515"
 ROUTES = ("activate", "refresh", "deactivate", "status")
-PROOF_FIELDS = (
-    "[]byte(method)", "[]byte(path)", "[]byte(query)",
-    "[]byte(timestamp)", "[]byte(nonce)", "[]byte(key)",
-    "[]byte(i.ID)", "pk[:]", "bh[:]")
+PROOF_FIELDS = ("[]byte(method)", "[]byte(path)", "[]byte(query)",
+                "[]byte(timestamp)", "[]byte(nonce)", "[]byte(key)",
+                "[]byte(i.ID)", "pk[:]", "bh[:]")
 
 
 def check_source(contract: str, client: str, fixture: str) -> list[str]:
@@ -22,178 +22,56 @@ def check_source(contract: str, client: str, fixture: str) -> list[str]:
             failures.append(f"authority route missing: {route}")
     if "TELMIVO_INSTALLATION_REQUEST_V1" not in contract:
         failures.append("authority proof namespace missing")
-    if "TELMIVO_INSTALLATION_REQUEST_V1\\x00" not in client:
+    if r"TELMIVO_INSTALLATION_REQUEST_V1\x00" not in client:
         failures.append("product proof namespace missing")
     match = re.search(r"for\s+_,\s*f\s*:=\s*range\s*\[\]\[\]byte\s*\{([^}]+)\}", client, re.S)
     if not match:
-        failures.append("product proof field tuple missing")
+        failures.append("product proof fields missing")
     else:
-        fields = [re.sub(r"\s+", "", x) for x in match.group(1).split(",") if x.strip()]
-        if tuple(fields) != PROOF_FIELDS:
-            failures.append(f"product proof fields changed: {fields!r}")
-    for marker in ('"X-Telmivo-Installation-ID"', '"X-Telmivo-Timestamp"',
-                   '"X-Telmivo-Nonce"', '"X-Telmivo-Signature"',
-                   '"Idempotency-Key"', '"application/json"'):
-        if marker not in client:
-            failures.append(f"product HTTP contract marker missing: {marker}")
-    sha_match = re.search(r'(?m)^sha\s*=\s*["\x27]([0-9a-f]{40})["\x27]\s*$', fixture)
-    if not sha_match or sha_match.group(1) != AUTHORITY_SHA:
-        failures.append("test fixture does not pin the selected PR32 Authority SHA")
-    if sha_match and sha_match.group(1) == LEGACY_SHA:
-        failures.append("legacy Authority SHA still pinned")
-    if not re.search(r'["\x27]git["\x27]\s*,\s*["\x27]-C["\x27]\s*,\s*str\(repo\)\s*,\s*["\x27]archive["\x27]\s*,\s*sha', fixture):
-        failures.append("fixture provenance is not pinned to git archive")
+        fields = tuple(re.sub(r"\s+", "", x) for x in match.group(1).split(",") if x.strip())
+        if fields != PROOF_FIELDS:
+            failures.append("product proof fields changed")
+    for header in ('X-Telmivo-Installation-ID', 'X-Telmivo-Timestamp',
+                   'X-Telmivo-Nonce', 'X-Telmivo-Signature',
+                   'Idempotency-Key', 'application/json'):
+        if f'"{header}"' not in client:
+            failures.append("missing client header: " + header)
+    try:
+        parsed = ast.parse(fixture)
+        assigns = [stmt for stmt in parsed.body if isinstance(stmt, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "sha" for t in stmt.targets)]
+        if len(assigns) != 1 or ast.literal_eval(assigns[0].value) != AUTHORITY_SHA:
+            failures.append("fixture source pin not PR32 (possibly legacy Authority SHA)")
+        if '"archive", sha' not in fixture and "'archive',sha" not in fixture:
+            failures.append("fixture source archive missing")
+    except (SyntaxError, ValueError, TypeError):
+        failures.append("fixture invalid Python syntax or nonconstant SHA")
     return failures
 
 
-def git_head(root: pathlib.Path) -> str:
-    result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
-                            capture_output=True, text=True, check=True)
-    return result.stdout.strip()
-
-
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--authority-root", required=True, type=pathlib.Path)
-    p.add_argument("--product-root", required=True, type=pathlib.Path)
-    a = p.parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--authority-root", required=True, type=pathlib.Path)
+    parser.add_argument("--product-root", required=True, type=pathlib.Path)
+    args = parser.parse_args(argv)
     try:
-        if git_head(a.authority_root) != AUTHORITY_SHA:
-            print("FAIL: Authority checkout must be exact selected PR32 SHA", file=sys.stderr)
+        head = subprocess.run(["git", "-C", str(args.authority_root), "rev-parse", "HEAD"],
+                              check=True, capture_output=True, text=True).stdout.strip()
+        if head != AUTHORITY_SHA:
+            print("FAIL: Authority checkout must be exact PR32 SHA", file=sys.stderr)
             return 2
-        doc = (a.authority_root / "docs/m2m-api.md").read_text()
-        client = (a.product_root / "internal/platform/installationlicense/client.go").read_text()
-        fixture = (a.product_root / "tests/installationlicense/prepare_authority_fixture.py").read_text()
-        failures = check_source(doc, client, fixture)
+        contract = (args.authority_root / "docs/m2m-api.md").read_text()
+        client = (args.product_root / "internal/platform/installationlicense/client.go").read_text()
+        fixture = (args.product_root / "tests/installationlicense/prepare_authority_fixture.py").read_text()
     except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"FAIL: cannot inspect source: {exc}", file=sys.stderr)
+        print(f"FAIL: source unavailable: {exc}", file=sys.stderr)
         return 2
-    for failure in failures:
-        print("FAIL: " + failure, file=sys.stderr)
+    failures = check_source(contract, client, fixture)
+    for issue in failures:
+        print("FAIL: " + issue, file=sys.stderr)
     if failures:
         return 1
-    print("PASS: current-source static M2M contract guard; NOT an E2E execution")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-, fixture):
-        failures.append("test fixture does not pin the selected PR32 Authority SHA")
-    if f"sha='{LEGACY_SHA}'" in fixture:
-        failures.append("legacy Authority SHA still pinned")
-    if "git','-C',str(repo),'archive',sha" not in fixture:
-        failures.append("fixture provenance is not pinned to git archive")
-    return failures
-
-
-def git_head(root: pathlib.Path) -> str:
-    result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
-                            capture_output=True, text=True, check=True)
-    return result.stdout.strip()
-
-
-def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--authority-root", required=True, type=pathlib.Path)
-    p.add_argument("--product-root", required=True, type=pathlib.Path)
-    a = p.parse_args(argv)
-    try:
-        if git_head(a.authority_root) != AUTHORITY_SHA:
-            print("FAIL: Authority checkout must be exact selected PR32 SHA", file=sys.stderr)
-            return 2
-        doc = (a.authority_root / "docs/m2m-api.md").read_text()
-        client = (a.product_root / "internal/platform/installationlicense/client.go").read_text()
-        fixture = (a.product_root / "tests/installationlicense/prepare_authority_fixture.py").read_text()
-        failures = check_source(doc, client, fixture)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"FAIL: cannot inspect source: {exc}", file=sys.stderr)
-        return 2
-    for failure in failures:
-        print("FAIL: " + failure, file=sys.stderr)
-    if failures:
-        return 1
-    print("PASS: current-source static M2M contract guard; NOT an E2E execution")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-, fixture):
-        failures.append("legacy Authority SHA still pinned")
-    if "git','-C',str(repo),'archive',sha" not in fixture:
-        failures.append("fixture provenance is not pinned to git archive")
-    return failures
-
-
-def git_head(root: pathlib.Path) -> str:
-    result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
-                            capture_output=True, text=True, check=True)
-    return result.stdout.strip()
-
-
-def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--authority-root", required=True, type=pathlib.Path)
-    p.add_argument("--product-root", required=True, type=pathlib.Path)
-    a = p.parse_args(argv)
-    try:
-        if git_head(a.authority_root) != AUTHORITY_SHA:
-            print("FAIL: Authority checkout must be exact selected PR32 SHA", file=sys.stderr)
-            return 2
-        doc = (a.authority_root / "docs/m2m-api.md").read_text()
-        client = (a.product_root / "internal/platform/installationlicense/client.go").read_text()
-        fixture = (a.product_root / "tests/installationlicense/prepare_authority_fixture.py").read_text()
-        failures = check_source(doc, client, fixture)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"FAIL: cannot inspect source: {exc}", file=sys.stderr)
-        return 2
-    for failure in failures:
-        print("FAIL: " + failure, file=sys.stderr)
-    if failures:
-        return 1
-    print("PASS: current-source static M2M contract guard; NOT an E2E execution")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-, fixture):
-        failures.append("test fixture does not pin the selected PR32 Authority SHA")
-    if f"sha='{LEGACY_SHA}'" in fixture:
-        failures.append("legacy Authority SHA still pinned")
-    if "git','-C',str(repo),'archive',sha" not in fixture:
-        failures.append("fixture provenance is not pinned to git archive")
-    return failures
-
-
-def git_head(root: pathlib.Path) -> str:
-    result = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
-                            capture_output=True, text=True, check=True)
-    return result.stdout.strip()
-
-
-def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--authority-root", required=True, type=pathlib.Path)
-    p.add_argument("--product-root", required=True, type=pathlib.Path)
-    a = p.parse_args(argv)
-    try:
-        if git_head(a.authority_root) != AUTHORITY_SHA:
-            print("FAIL: Authority checkout must be exact selected PR32 SHA", file=sys.stderr)
-            return 2
-        doc = (a.authority_root / "docs/m2m-api.md").read_text()
-        client = (a.product_root / "internal/platform/installationlicense/client.go").read_text()
-        fixture = (a.product_root / "tests/installationlicense/prepare_authority_fixture.py").read_text()
-        failures = check_source(doc, client, fixture)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"FAIL: cannot inspect source: {exc}", file=sys.stderr)
-        return 2
-    for failure in failures:
-        print("FAIL: " + failure, file=sys.stderr)
-    if failures:
-        return 1
-    print("PASS: current-source static M2M contract guard; NOT an E2E execution")
+    print("PASS: static M2M contract only; Go/PostgreSQL E2E still pending")
     return 0
 
 
