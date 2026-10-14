@@ -35,6 +35,14 @@ class ContractSourceGuardTests(unittest.TestCase):
         changed = CLIENT.replace("INSTALLATION_REQUEST_V1", "INSTALLATION_REQUEST_V2")
         self.assertTrue(any("namespace" in error for error in check_source(DOC, changed, FIXTURE)))
 
+    def test_reject_broken_fixture_syntax(self):
+        self.assertTrue(any("syntax" in error for error in check_source(
+            DOC, CLIENT, FIXTURE + "\nUNKNOWN SYNTAX %%")))
+
+    def test_reject_duplicate_source_assignments(self):
+        self.assertTrue(any("source pin" in error for error in check_source(
+            DOC, CLIENT, FIXTURE + '\nsha = "' + AUTHORITY_SHA + '"\n')))
+
     def test_reject_missing_idempotency_header(self):
         changed = CLIENT.replace("Idempotency-Key", "Idempotency-Key-2")
         self.assertTrue(any("Idempotency-Key" in error for error in check_source(DOC, changed, FIXTURE)))
