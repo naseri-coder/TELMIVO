@@ -11,7 +11,8 @@ func proof() {
 "X-Telmivo-Installation-ID" "X-Telmivo-Timestamp" "X-Telmivo-Nonce"
 "X-Telmivo-Signature" "Idempotency-Key" "application/json"
 """
-FIXTURE = "sha='" + AUTHORITY_SHA + "'\narchive=subprocess.run(['git','-C',str(repo),'archive',sha]"
+FIXTURE = ('sha = "' + AUTHORITY_SHA + '"\n'
+           'archive = subprocess.run(["git", "-C", str(repo), "archive", sha], check=True)')
 
 
 class ContractSourceGuardTests(unittest.TestCase):
