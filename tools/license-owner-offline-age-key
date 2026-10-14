@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""Owner-device-only age recovery identity. Never run on a TELMIVO server.
+
+This tool never transmits, prints, uploads or copies the private age identity.
+It generates one locally in a newly created 0700 directory, stores it 0600,
+and tests encryption/decryption on synthetic text in memory.
+"""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import socket
+import stat
+import subprocess
+import sys
+
+HOST_DENY={"telmivo-license-authority"}
+PURPOSES={"database-backup","db-credential-escrow"}
+RECIPIENT_RE=re.compile(r"age1[a-z0-9]{50,100}\Z")
+IDENTITY_FILENAME="recovery-identity.txt"
+PUBLIC_FILENAME="public-recipient.json"
+SENTINEL=b"TELMIVO_LOCAL_OFFLINE_AGE_RECOVERY_TEST_ONLY_V1"
+
+class Refused(Exception):
+    pass
+
+def require(test, why):
+    if not test: raise Refused(why)
+
+def is_owner_device():
+    """Protection against mistakenly running through SSH/Termius on a VPS."""
+    require(socket.gethostname().lower() not in HOST_DENY,
+            "TELMIVO_AUTHORITY_SERVER_REFUSED")
+    for name in ("SSH_CONNECTION","SSH_CLIENT","SSH_TTY"):
+        require(not os.environ.get(name),"REMOTE_SSH_SESSION_REFUSED")
+    if hasattr(os,"geteuid"):
+        require(os.geteuid()!=0,"RUN_AS_PERSONAL_USER_NOT_ROOT")
+    require(sys.platform in ("linux","darwin"),
+            "OWNER_LINUX_MACOS_OR_ANDROID_TERMUX_REQUIRED")
+    return True
+
+def owner_private_parents(path):
+    """Protect the key from world-writable and symlinked ancestor paths."""
+    path=Path(path)
+    require(path.is_absolute() and not path.is_symlink(),"ABSOLUTE_NON_SYMLINK_PATH_REQUIRED")
+    require(path!=Path.home() and path!=Path("/"),"DEDICATED_DIRECTORY_REQUIRED")
+    for parent in path.parents:
+        info=parent.lstat()
+        # Android's /data may be group-writable by the OS's own system
+        # group, which the Termux application is not a member of. Reject
+        # all world-write, and group-write when this user belongs to that
+        # group or owns the parent, rather than wrongly blocking Termux.
+        group_is_ours = (info.st_gid in os.getgroups() or
+                         info.st_uid == os.getuid())
+        unsafe_write = bool(info.st_mode & 0o002) or (
+            bool(info.st_mode & 0o020) and group_is_ours)
+        require(stat.S_ISDIR(info.st_mode) and not parent.is_symlink()
+                and not unsafe_write,
+                "UNSAFE_OR_PUBLIC_PARENT_DIRECTORY")
+        require(not (parent/".git").exists(),"GIT_WORKTREE_DESTINATION_FORBIDDEN")
+    return path
+
+def default_owner_directory(home=None):
+    # On Android, $HOME may begin with a compatibility alias:
+    # /data/data -> /data/user/0. Use the canonical private app path,
+    # without relaxing the symlink rejection for arbitrary user inputs.
+    home = Path.home() if home is None else Path(home)
+    return home.resolve()/"telmivo-offline-recovery"
+
+def age_bins():
+    a=shutil.which("age")
+    k=shutil.which("age-keygen")
+    require(a is not None and k is not None,
+            "INSTALL_AGE_AND_AGE_KEYGEN_ON_OWNER_DEVICE")
+    return a,k
+
+def fingerprint(recipient):
+    require(RECIPIENT_RE.fullmatch(recipient) is not None,
+            "INVALID_AGE_RECIPIENT")
+    return hashlib.sha256(recipient.encode("ascii")).hexdigest()
+
+def verify_local_recovery(identity,age=None,keygen=None):
+    identity=Path(identity)
+    require(identity.is_absolute() and not identity.is_symlink(),
+            "IDENTITY_PATH_UNSAFE")
+    info=identity.lstat()
+    require(stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode)==0o600
+            and 60<=info.st_size<=2048,"IDENTITY_FILE_NOT_PRIVATE")
+    a,k=age_bins() if not age or not keygen else (age,keygen)
+    try:
+        pub=subprocess.run([k,"-y",str(identity)],capture_output=True,
+                           timeout=12,check=True).stdout.decode("ascii").strip()
+        require(RECIPIENT_RE.fullmatch(pub) is not None,
+                "PUBLIC_RECIPIENT_INVALID")
+        cipher=subprocess.run([a,"-r",pub],input=SENTINEL,capture_output=True,
+                              timeout=12,check=True).stdout
+        require(cipher.startswith(b"age-encryption.org/v1"),
+                "CIPHERTEXT_HEADER_MISSING")
+        opened=subprocess.run([a,"-d","-i",str(identity)],input=cipher,
+                              capture_output=True,timeout=12,check=True).stdout
+        require(opened==SENTINEL,"RECOVERY_DECRYPTION_FAILED")
+    except (OSError,ValueError,UnicodeError,subprocess.SubprocessError):
+        raise Refused("OFFLINE_ENCRYPT_DECRYPT_TEST_FAILED") from None
+    return {"recipient_public":pub,
+            "recipient_fingerprint_sha256":fingerprint(pub),
+            "synthetic_encrypt_decrypt":"PASS",
+            "private_identity_printed":False}
+
+def verify_owner_public_manifest(directory, recovery):
+    public_file=Path(directory)/PUBLIC_FILENAME
+    require(not public_file.is_symlink(),"PUBLIC_MANIFEST_SYMLINK_DENIED")
+    info=public_file.lstat()
+    require(stat.S_ISREG(info.st_mode) and
+            stat.S_IMODE(info.st_mode)==0o600 and 100<=info.st_size<=4096,
+            "PUBLIC_MANIFEST_NOT_PRIVATE")
+    with public_file.open("rb") as f:
+        content=f.read(4097)
+    require(len(content)<=4096,"PUBLIC_MANIFEST_TOO_LARGE")
+    try:
+        item=json.loads(content)
+    except (ValueError,UnicodeError):
+        raise Refused("PUBLIC_MANIFEST_UNREADABLE") from None
+    require(type(item)==dict and
+            item.get("schema")=="TELMIVO_OWNER_OFFLINE_RECOVERY_PUBLIC_V1"
+            and item.get("purpose") in PURPOSES and
+            item.get("recipient_public")==recovery["recipient_public"]
+            and item.get("recipient_fingerprint_sha256")==recovery[
+                "recipient_fingerprint_sha256"]
+            and item.get("synthetic_encrypt_decrypt")=="PASS"
+            and item.get("owner_backups_verified") is False
+            and item.get("production_backup_restore_verified") is False,
+            "PUBLIC_RECIPIENT_MANIFEST_OR_IDENTITY_MISMATCH")
+    return True
+
+def _private_write_new(path,data):
+    f=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+    with os.fdopen(f,"wb") as out:
+        out.write(data);out.flush();os.fsync(out.fileno())
+
+def generate_identity(directory,purpose,age=None,keygen=None):
+    """Only caller-requested local path. Tests use disposable synthetic paths."""
+    require(purpose in PURPOSES,"UNKNOWN_RECOVERY_PURPOSE")
+    dest=owner_private_parents(Path(directory))
+    require(not dest.exists() and not dest.is_symlink(),
+            "DESTINATION_EXISTS_DO_NOT_OVERWRITE")
+    a,k=age_bins() if not age or not keygen else (age,keygen)
+    dest.mkdir(mode=0o700)
+    dest.chmod(0o700)
+    identity=dest/IDENTITY_FILENAME
+    # Output from age-keygen is suppressed; the private identity is never
+    # copied into a command argument, stdout, journal or repository file.
+    try:
+        r=subprocess.run([k,"-o",str(identity)],stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
+        require(r.returncode==0,"AGE_KEYGEN_FAILED_STOP_NO_RETRY")
+        identity.chmod(0o600)
+        result=verify_local_recovery(identity,age=a,keygen=k)
+        public={
+            "schema":"TELMIVO_OWNER_OFFLINE_RECOVERY_PUBLIC_V1",
+            "purpose":purpose,
+            "created_utc":datetime.now(timezone.utc).isoformat(),
+            "recipient_public":result["recipient_public"],
+            "recipient_fingerprint_sha256":result["recipient_fingerprint_sha256"],
+            "synthetic_encrypt_decrypt":"PASS",
+            "private_key_stored_only_in_owner_directory":True,
+            "owner_backups_verified":False,
+            "production_backup_restore_verified":False
+        }
+        _private_write_new(dest/PUBLIC_FILENAME,
+            (json.dumps(public,sort_keys=True,indent=2)+"\n").encode())
+        fd=os.open(dest,os.O_DIRECTORY|os.O_RDONLY)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        return {"verdict":"OWNER_LOCAL_AGE_IDENTITY_CREATED_AND_SYNTHETIC_TEST_PASS",
+                "purpose":purpose,
+                "identity_location":"LOCAL_DEVICE_PRIVATE_FILE",
+                "recipient_public":result["recipient_public"],
+                "recipient_fingerprint_sha256":result["recipient_fingerprint_sha256"],
+                "identity_file":str(identity),
+                "public_manifest":str(dest/PUBLIC_FILENAME),
+                "owner_backups_verified":False,
+                "production_ready":False}
+    except Exception:
+        # No automatic deletion of a potentially irreplaceable private key.
+        # A partial directory must be inspected safely, never overwritten.
+        raise
+
+def main():
+    os.umask(0o077)
+    parser=argparse.ArgumentParser(description="Generate an age recovery identity on your OWN device, never a VPS.")
+    sub=parser.add_subparsers(dest="action",required=True)
+    new=sub.add_parser("create")
+    new.add_argument("--purpose",choices=sorted(PURPOSES),required=True)
+    new.add_argument("--directory",default=str(default_owner_directory()))
+    check=sub.add_parser("verify")
+    check.add_argument("--directory",default=str(default_owner_directory()))
+    args=parser.parse_args()
+    try:
+        is_owner_device()
+        require(sys.stdin.isatty(),"INTERACTIVE_OWNER_DEVICE_TERMINAL_REQUIRED")
+        dest=Path(args.directory).expanduser()
+        if args.action=="create":
+            require(dest.is_absolute(),"ABSOLUTE_DESTINATION_REQUIRED")
+            require(not dest.exists() and not dest.is_symlink(),
+                    "DESTINATION_EXISTS_NO_OVERWRITE")
+            print("WARNING: run only on your PERSONAL device (Termux locally, not Termius SSH).")
+            answer=input("Type GENERATE-LOCAL-RECOVERY-KEY to confirm: ")
+            require(answer=="GENERATE-LOCAL-RECOVERY-KEY","OWNER_CONFIRMATION_REQUIRED")
+            result=generate_identity(dest,args.purpose)
+        else:
+            owner_private_parents(dest)
+            require(dest.is_dir() and
+                    stat.S_IMODE(dest.stat().st_mode)==0o700,
+                    "PRIVATE_OWNER_DIRECTORY_REQUIRED")
+            result=verify_local_recovery(dest/IDENTITY_FILENAME)
+            verify_owner_public_manifest(dest,result)
+            result["verdict"]="OWNER_LOCAL_AGE_KEY_ENCRYPT_DECRYPT_TEST_PASS"
+            result["production_ready"]=False
+        print(json.dumps(result,sort_keys=True))
+        return 0
+    except (Refused,OSError,ValueError,subprocess.SubprocessError):
+        print("LOCAL_OWNER_RECOVERY_KEY_ACTION_DENIED_NO_PRIVATE_KEY_OUTPUT",
+              file=sys.stderr)
+        return 2
+
+if __name__=="__main__":
+    sys.exit(main())
