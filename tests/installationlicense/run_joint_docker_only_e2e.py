@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""LIC-A9 nonproduction joint E2E: only local Docker is needed for Go + PG16.
+"""LEGACY LIC-A8 cross-repo smoke: only local Docker for Go + PG16.
 
 No GitHub Actions, on-host Go installation, live database, or production keys.
-All source checkouts must pass the existing pinned Git provenance fences.
+All source checkouts must pass pinned Git provenance.
+Passing six legacy LIC-A8 tests does NOT certify LIC-A9 anti-cloning/concurrency.
 """
 import argparse
 from collections import Counter
@@ -25,6 +26,16 @@ GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
 PG_DATABASE = 'lic_a9_joint_test'
 E2E_TESTS = frozenset(f'TestE2E{i}' for i in range(1, 7))
+
+LEGACY_SMOKE_SUCCESS = 'LIC_A8_LEGACY_CROSSREPO_GO1272_PG16_SMOKE_PASS'
+A9_COVERAGE_GAP = 'LIC_A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED'
+
+
+def emit_legacy_smoke_result() -> None:
+    """Report only the proven six-test LIC-A8 interoperability scope."""
+    print(LEGACY_SMOKE_SUCCESS)
+    print(A9_COVERAGE_GAP)
+
 
 
 def require_six_discovered_tests(stdout: str) -> None:
@@ -197,7 +208,7 @@ def main(argv=None) -> int:
                 outcome = 3
     if outcome == 0:
         # Emit PASS *only after* the disposable database cleanup succeeds.
-        print('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS')
+        emit_legacy_smoke_result()
     return outcome
 
 
