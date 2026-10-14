@@ -1,0 +1,111 @@
+// Test-only genuine TELMIVO product-client ↔ Authority anti-cloning integration.
+// This source is copied into an isolated joint module; NEVER a production package.
+package e2e
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	l "github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
+)
+
+func openConcurrentClient(t *testing.T, x *fixture, dir string) (*l.Manager, *l.Client) {
+	t.Helper()
+	cfg := x.cfg
+	cfg.Directory = dir
+	cfg.RequireConcurrency = true
+	manager, err := l.Open(cfg)
+	if err != nil {
+		t.Fatal("open concurrent installation", err)
+	}
+	client, err := l.NewClient(manager)
+	if err != nil {
+		t.Fatal("concurrent client", err)
+	}
+	return manager, client
+}
+
+func cloneInstallationFiles(t *testing.T, x *fixture) string {
+	t.Helper()
+	dest := filepath.Join(t.TempDir(), "cloned-installation")
+	if err := os.Mkdir(dest, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"identity.json", "state.json", "highwater.json"} {
+		b, err := os.ReadFile(filepath.Join(x.cfg.Directory, name))
+		if err != nil {
+			t.Fatal("clone read", name, err)
+		}
+		if err = os.WriteFile(filepath.Join(dest, name), b, 0600); err != nil {
+			t.Fatal("clone write", name, err)
+		}
+	}
+	return dest
+}
+
+func TestLICA9CrossRepoRealLeaseAndRestart(t *testing.T) {
+	x := setup(t, false) // Real disposable PostgreSQL schema + TLS Authority.
+	x.activate(t)        // LIC-A8 activation is only the bootstrap grant.
+	manager, client := openConcurrentClient(t, x, x.cfg.Directory)
+	if manager.Decision().State != "RESTRICTED" {
+		t.Fatal("concurrency-required client accepted the legacy bootstrap")
+	}
+	if err := client.Concurrency(context.Background()); err != nil {
+		t.Fatal("first real concurrency lease", err)
+	}
+	initial := manager.Decision()
+	if initial.State != "VALID_ONLINE" || initial.ConcurrencyGeneration != 1 || initial.ConcurrencyLeaseID == "" {
+		t.Fatal("signed first concurrency lease not accepted", initial.State, initial.ConcurrencyGeneration)
+	}
+	restarted, next := openConcurrentClient(t, x, x.cfg.Directory)
+	if err := next.Concurrency(context.Background()); err != nil {
+		t.Fatal("restart ratchet", err)
+	}
+	advanced := restarted.Decision()
+	if advanced.State != "VALID_ONLINE" || advanced.ConcurrencyGeneration != 2 ||
+		advanced.ConcurrencyLeaseID == initial.ConcurrencyLeaseID || advanced.ConcurrencyLeaseID == "" ||
+		advanced.RuntimeSessionID == initial.RuntimeSessionID {
+		t.Fatal("restarted product failed monotonic signed concurrency ratchet")
+	}
+	t.Log("LIC_A9_REAL_CROSSREPO_LEASE_RESTART_PASS")
+}
+
+func TestLICA9CrossRepoClonedGenerationFenced(t *testing.T) {
+	x := setup(t, false)
+	x.activate(t)
+	leader, client := openConcurrentClient(t, x, x.cfg.Directory)
+	if err := client.Concurrency(context.Background()); err != nil {
+		t.Fatal("first lease", err)
+	}
+	if leader.Decision().ConcurrencyGeneration != 1 {
+		t.Fatal("no first concurrency lease")
+	}
+	clonedDir := cloneInstallationFiles(t, x) // Full synthetic identity/state copy.
+	// Real primary wins the generation ratchet before the replica attempts refresh.
+	if err := client.Concurrency(context.Background()); err != nil {
+		t.Fatal("second lease", err)
+	}
+	if leader.Decision().ConcurrencyGeneration != 2 {
+		t.Fatal("primary did not advance")
+	}
+	replica, replicaClient := openConcurrentClient(t, x, clonedDir)
+	if err := replicaClient.Concurrency(context.Background()); !errors.Is(err, l.ErrRestricted) {
+		t.Fatal("stale replica did not receive terminal restriction", err)
+	}
+	decision := replica.Decision()
+	if decision.State != "RESTRICTED" {
+		t.Fatal("cloned installation retained permission")
+	}
+	executed := false
+	err := replica.Effect(context.Background(), func() error { executed = true; return nil })
+	if !errors.Is(err, l.ErrRestricted) || executed {
+		t.Fatal("cloned installation performed an authorized side effect", err)
+	}
+	if leader.Decision().State != "VALID_ONLINE" {
+		t.Fatal("clone interference revoked the winning installation")
+	}
+	t.Log("LIC_A9_REAL_CROSSREPO_CLONE_REJECTED_EFFECT_FENCED_PASS")
+}
