@@ -30,6 +30,21 @@ def check_checkout(root: Path, expected: str) -> None:
         raise ValueError(f'checkout contains uncommitted or untracked files: {root}')
 
 
+def check_product_checkout(root: Path, baseline: str = PRODUCT_MERGED_SHA) -> None:
+    if not root.is_dir():
+        raise ValueError('TELMIVO checkout is missing')
+    git(root, 'rev-parse', '--verify', 'HEAD^{commit}')
+    git(root, 'merge-base', '--is-ancestor', baseline, 'HEAD')
+    if git(root, 'status', '--porcelain', '--untracked-files=all'):
+        raise ValueError('TELMIVO checkout has uncommitted or untracked files')
+    # Allow newly added *test tooling* on top of pinned product source, but
+    # never allow a different Go/runtime module or old E2E fixture.
+    protected = ('go.mod', 'go.sum', 'internal',
+                 'tests/installationlicense/prepare_authority_fixture.py',
+                 'tests/installationlicense/authority_e2e_test.go.template')
+    git(root, 'diff', '--quiet', baseline, 'HEAD', '--', *protected)
+
+
 def check_go_version(output: str) -> None:
     m = re.search(r'\bgo version go(\d+)\.(\d+)(?:\.\d+)?\b', output)
     if m is None or (int(m[1]), int(m[2])) < (1, 27):
@@ -77,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
             if os.environ.get(bad):
                 raise ValueError(f'refusing inherited production-like environment variable {bad}')
         check_checkout(authority, AUTHORITY_MERGED_SHA)
-        check_checkout(product, PRODUCT_MERGED_SHA)
+        check_product_checkout(product)
         check_go_version(run(['go', 'version'], output=True).stdout)
         endpoint = run(['docker', 'context', 'inspect', '--format',
                         '{{ .Endpoints.docker.Host }}'], output=True).stdout.strip()
