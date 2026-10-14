@@ -66,6 +66,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     authority, product = args.authority.resolve(), args.product.resolve()
     pg_container = None
+    outcome = 3
     try:
         if authority == product:
             raise ValueError('Authority and Product need separate checkouts')
@@ -124,20 +125,27 @@ def main(argv=None) -> int:
                 '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
             ]
             run(cmd, timeout=600)
-            print('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS')
-        return 0
+        outcome = 0
     except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
             subprocess.CalledProcessError) as exc:
         print(f'NOT_PASS: {exc}', file=sys.stderr)
-        return 3
     finally:
         if pg_container is not None:
-            # Cleanup errors must not masquerade as successful isolation.
-            cleaned = subprocess.run(['docker', 'stop', pg_container],
-                                     capture_output=True, text=True, timeout=60)
-            if cleaned.returncode:
-                print('WARNING: disposable DB container stop failed; inspect Docker locally',
+            # Fail closed: a completed E2E test is NOT a success if its
+            # temporary database could not be stopped and removed.
+            try:
+                cleaned = subprocess.run(['docker', 'stop', pg_container],
+                                         capture_output=True, text=True, timeout=60)
+                if cleaned.returncode != 0:
+                    raise RuntimeError(cleaned.stderr or 'docker stop returned nonzero')
+            except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
+                print(f'NOT_PASS: disposable PostgreSQL cleanup was not confirmed: {exc}',
                       file=sys.stderr)
+                outcome = 3
+    if outcome == 0:
+        # Emit PASS *only after* the disposable database cleanup succeeds.
+        print('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS')
+    return outcome
 
 
 if __name__ == '__main__':

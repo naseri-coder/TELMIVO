@@ -102,6 +102,38 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(status, 3)
         self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
 
+    def test_cleanup_error_never_allows_success_verdict(self):
+        for mode in ('nonzero', 'timeout', 'missing'):
+            calls = []
+            capture = io.StringIO()
+            def fake_run(argv, **kwargs):
+                calls.append(list(argv))
+                if argv[:3] == ['docker', 'context', 'inspect']:
+                    return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
+                if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
+                    return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.0 linux/amd64\n')
+                return subprocess.CompletedProcess(argv, 0, stdout='')
+            def fake_subprocess(argv, **kwargs):
+                calls.append(list(argv))
+                if argv[:2] == ['docker', 'stop']:
+                    if mode == 'timeout':
+                        raise subprocess.TimeoutExpired(argv, 60)
+                    if mode == 'missing':
+                        raise FileNotFoundError('Docker unavailable on cleanup')
+                    return subprocess.CompletedProcess(argv, 1, stdout='', stderr='stop failed')
+                return subprocess.CompletedProcess(argv, 0, stdout='')
+            with self.subTest(mode=mode):
+                with (mock.patch.object(runner, 'check_checkout'),
+                      mock.patch.object(runner, 'validate_authority_archive_provenance'),
+                      mock.patch.object(runner, 'check_product_checkout'),
+                      mock.patch.object(runner, 'run', side_effect=fake_run),
+                      mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
+                      contextlib.redirect_stdout(capture),
+                      contextlib.redirect_stderr(io.StringIO())):
+                    self.assertEqual(runner.main(ARGS), 3)
+                self.assertNotIn('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS', capture.getvalue())
+                self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
+
     def test_wrong_container_go_never_starts_postgres(self):
         status, calls = self.simulate(go_version='go version go1.26.8 linux/amd64\n')
         self.assertEqual(status, 3)
