@@ -31,6 +31,16 @@ def prepare(repo: pathlib.Path, dst: pathlib.Path) -> None:
     authority = dst / "authority"
     authority.mkdir()
     subprocess.run(["tar", "-x", "-C", str(authority)], input=archive, check=True)
+    # The Git archive includes Authority's own go.mod and go.sum. Leaving
+    # go.mod nested under <fixture>/authority creates a SECOND Go module:
+    # 'go test ./authority' from the joint fixture root then cannot find it.
+    # Remove only the ARCHIVED copies, never manifests from either checkout.
+    authority_manifest = authority / "go.mod"
+    if not authority_manifest.is_file() or not authority_manifest.read_text().startswith(
+            "module github.com/naseri-coder/TELMIVO-LICENSE-AUTHORITY\n"):
+        raise SystemExit("unexpected Authority module in disposable fixture")
+    authority_manifest.unlink()
+    (authority / "go.sum").unlink(missing_ok=True)
     old = "github.com/naseri-coder/TELMIVO-LICENSE-AUTHORITY"
     new = "github.com/naseri-coder/TELMIVO/lica8-e2e/authority"
     for p in authority.rglob("*.go"):
