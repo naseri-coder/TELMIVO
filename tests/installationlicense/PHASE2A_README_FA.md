@@ -1,32 +1,33 @@
-# LIC-A9 — Phase 2A: source contract preflight (no VPS)
+# LIC-A9 — آزمون سورس مشترک بدون VPS
 
-**2026-10-14 | NONPRODUCTION ONLY.** The product is under development from scratch; no customers, no permanently provisioned License Authority server, and no real Telegram/authority credentials are needed.
+**2026-10-14 · NONPRODUCTION / TEST ONLY**
 
-## Current authoritative source selection
+مرجع Authority: PR32 SHA `68cdb6996f85981c36dd20ecb7435ec010351e9b`. مرجع کلاینت TELMIVO: SHA دقیق Commit مورد آزمون در PR47؛ نام شاخه به تنهایی کافی نیست. هیچ داده عملیاتی از سرور لایسنس قدیمی نیاز نیست.
 
-- Authority: private `naseri-coder/TELMIVO-LICENSE-AUTHORITY`, PR32 exact SHA `68cdb6996f85981c36dd20ecb7435ec010351e9b`.
-- Product: this TELMIVO feature branch based on `feature/lic-a9-anti-cloning-client-v0.1`.
-- The previous TEST-only fixture pinned outdated Authority SHA `392fc89087d8dac001d1709d0f7973c2f28a8515`. It now pins the chosen PR32 SHA. This **updates source selection only**; do not infer E2E compatibility from that edit.
+## اجرای کنترل روی دو کلون واقعی
 
-## Zero-server contract preflight
-
-On a developer's own machine with **both private repositories** checked out, detach the Authority checkout at exact PR32 SHA (never use a production checkout). The check performs no network access or side effects except reading repository files and calling read-only `git rev-parse HEAD`:
+در محیط **موقت و مستقل** که هر دو مخزن خصوصی در آن دریافت شده‌اند، Authority را دقیقاً روی SHA بالا و TELMIVO را روی SHA بررسی‌شده PR47 قرار دهید. هر دو worktree باید پاک باشند. این ابزار قبل از اجرای آزمون، نبودن فایل‌های تغییرکرده یا untracked را نیز بررسی می‌کند.
 
 ```sh
-python3 tests/installationlicense/contract_guard.py \
-  --authority-root /absolute/path/to/TELMIVO-LICENSE-AUTHORITY \
-  --product-root /absolute/path/to/TELMIVO
-python3 -m unittest discover -s tests/installationlicense -p 'test_contract_guard.py' -v
+python3 -B tests/installationlicense/run_source_preflight.py \
+  --authority /absolute/path/TELMIVO-LICENSE-AUTHORITY \
+  --product /absolute/path/TELMIVO \
+  --expected-product-sha <EXACT_40_CHARACTER_TELMIVO_COMMIT_SHA>
 ```
 
-The contract guard requires exactly the selected Authority SHA, verifies the four v1 M2M route declarations, `TELMIVO_INSTALLATION_REQUEST_V1` domain, exact nine signed field ordering in the product `proof` builder, six essential client HTTP markers, the fixture SHA pin, and the use of `git archive` to extract the pinned authority.
+این دستور بدون راه‌اندازی دیتابیس، ابتدا سه گروه آزمون Python و کنترل استاتیک قرارداد M2M را اجرا می‌کند، سپس نسخه Go را بررسی می‌کند و در صورت واجدشرایط‌بودن، `go test -count=1 ./internal/platform/installationlicense` را اجرا می‌کند.
 
-Six isolated unittest scenarios: expected static source shape, old Authority SHA refused, missing route refused, signed-field reordering refused, changed signature domain refused, missing Idempotency-Key refused.
+**پیش‌نیاز:** فایل `go.mod` کلاینت Go **1.27.0** اعلام می‌کند؛ Go 1.25 یا Go 1.23 کافی نیست. اجرای `go test` ممکن است به ماژول‌های cache نشده نیاز داشته باشد؛ این ابزار اجازه اجرا روی Production، دانلود مخفی سورس خصوصی یا استفاده از اعتبارنامه واقعی نمی‌دهد.
 
-**Limit:** this check is static. The 6 self-contained tests passed in an isolated Python 3.13 container using synthetic source snippets; they do NOT prove actual Go builds, Authority handler acceptance, cryptographic E2E or PostgreSQL migrations. Full original-source static preflight is available via the command above and must be run on clean checked-out sources.
+## مدرک آزمون کنترل‌کننده
 
-## Next remaining Phase 2A gate
+- دو فایل `run_source_preflight.py` و `test_source_preflight.py` با bytes برابر با GitHub روی محیط موقت بازسازی شدند و Git blob SHA1 آنها با blob ثبت‌شده روی GitHub مطابقت داده شد.
+- **۱۲ آزمون Python از ۱۲ آزمون PASS**، شامل تشخیص SHA غلط، checkout مشترک، تغییر ثبت‌نشده، خطای child process و آزمون عملی `git init/commit/status` روی یک مخزن کاملاً موقت.
+- دستور: `python3 -B -m unittest discover -s tests/installationlicense -p 'test_source_preflight.py' -v` (در این مرحله همان فایل‌های byte-verified در محیط مستقل اجرا شدند).
+- این نتیجه **اجرای runner با mockهای کنترل‌شده** است؛ test runner به صورت سرتاسری از دو کلون کامل، با Go 1.27، اجرا نشده است.
 
-Run a **real disposable joint Authority + Product Go test** against a throwaway PostgreSQL 16 instance with synthetic signing keys and mock TLS, first resolving compile/fixture incompatibilities introduced since the old SHA. The existing `authority_e2e_test.go.template` references a legacy fixture transformed with string substitutions including a mock clock; it is **not yet evidence of PR32 cross-repo E2E PASS**. Report compile errors and failing assertions precisely instead of changing production behavior to make tests pass.
+## گیت باقی‌مانده
 
-Do not start any VPS, contact live Telegram, issue real licenses, push private keys to GitHub, or claim production readiness. Commit each actual fix in a scoped PR.
+آزمون Go/PostgreSQL 16 مشترکِ `Authority + TELMIVO` از سورس دقیق هنوز **NOT_RUN** است. `authority_e2e_test.go.template` قبلاً برای نسخه قدیمی‌تر Authority نوشته شده و ممکن است نیازمند اصلاحات صرفاً آزمایشی باشد. تا اجرای واقعی، وضعیت `PRODUCT_E2E_PASS` یا `LICENSE_INSTALLER_READY` صادر نشود.
+
+هیچ VPS، توکن Telegram، کلید خصوصی Production یا دیتابیس عملیاتی در این مرحله مورد استفاده قرار نمی‌گیرد.
