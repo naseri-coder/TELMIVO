@@ -300,6 +300,22 @@ class DockerOnlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runner.install_a9_fixture(product, fixture)
 
+    def test_anticlone_template_proves_exact_restriction_and_durable_conflict(self):
+        source = (Path(__file__).parent / 'authority_lic_a9_crossrepo_test.go.template').read_text()
+        expected = (
+            'bootstrap.Reason != "CONCURRENCY_REFRESH_REQUIRED"',
+            'decision.Reason != "CONCURRENT_INSTALLATION_CONFLICT"',
+            'generation != 2 || conflictState != "CLONE_SUSPECTED"',
+            "action='clone_conflict_detected'",
+            'conflictIntents != 1',
+            'replica.Effect(context.Background()',
+            'if !errors.Is(err, l.ErrRestricted) || executed',
+        )
+        for guard in expected:
+            with self.subTest(guard=guard):
+                self.assertIn(guard, source)
+        self.assertIn('TestLICA9CrossRepoClonedGenerationFenced', source)
+
     def test_real_go_can_list_eight_named_tests(self):
         with tempfile.TemporaryDirectory(prefix='lic-a9-go-discovery-') as path:
             root = Path(path)
