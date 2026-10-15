@@ -50,12 +50,12 @@ class DockerOnlyTests(unittest.TestCase):
             runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=runner.PG_IMAGE)
         with self.assertRaises(ValueError):
             runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
-                                     'bridge', ['go', 'version'], image=runner.GO_IMAGE)
+                                     'none', ['go', 'version'], image=runner.GO_IMAGE)
         with self.assertRaises(TypeError):
             runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
         with self.assertRaises(TypeError):
             runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
-                                     'bridge', ['go', 'version'])
+                                     'none', ['go', 'version'])
 
     def test_postgres_uses_ephemeral_tmpfs_instead_of_root_owned_image_volume(self):
         argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=PG_PIN)
@@ -98,14 +98,14 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(sum(args[:2] == ['docker', 'stop'] for args in calls), 1)
 
     def test_prevents_remote_network_and_relative_mounts(self):
-        for name in ['host', 'none', 'container:production', 'container:lic-a9-joint-bad']:
+        for name in ['host', 'bridge', 'container:production', 'container:lic-a9-joint-bad']:
             with self.subTest(name=name), self.assertRaises(ValueError):
                 runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), name, ['go', 'version'], image=GO_PIN)
         with self.assertRaises(ValueError):
-            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
+            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'none', ['go', 'version'], image=GO_PIN)
 
     def test_mounts_product_read_only_without_host_secrets(self):
-        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
+        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'none', ['go', 'version'], image=GO_PIN)
         self.assertIn('type=bind,src=/product,dst=/product,readonly', cmd)
         self.assertIn('--cap-drop', cmd)
         self.assertIn('ALL', cmd)
@@ -113,6 +113,30 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertNotIn('-p', cmd)
         self.assertNotIn('/var/run/docker.sock', ' '.join(cmd))
         self.assertEqual(cmd[-3:], [GO_PIN, 'go', 'version'])
+        self.assertEqual(cmd[cmd.index('--network') + 1], 'none')
+        self.assertEqual(cmd.count('--network'), 1)
+        self.assertEqual(cmd.count('GOPROXY=off'), 1)
+        self.assertEqual(cmd.count('GOSUMDB=off'), 1)
+        self.assertEqual(cmd.count('GOTOOLCHAIN=local'), 1)
+
+    def test_compiler_preflight_mock_is_network_disconnected(self):
+        code, calls = self.simulate()
+        self.assertEqual(code, 0)
+        first_go_runs = [argv for argv in calls
+                         if argv[:2] == ['docker', 'run']
+                         and GO_PIN in argv and '-json' not in argv]
+        self.assertGreaterEqual(len(first_go_runs), 3)
+        for argv in first_go_runs:
+            self.assertEqual(argv[argv.index('--network') + 1], 'none')
+            self.assertIn('GOPROXY=off', argv)
+            self.assertIn('GOSUMDB=off', argv)
+            self.assertIn('--pull=never', argv)
+
+    def test_no_bridge_network_even_without_real_docker_daemon(self):
+        with self.assertRaises(ValueError):
+            runner.go_docker_command(Path('/fixture'), Path('/product'),
+                                     Path('/cache'), 'bridge', ['go', 'version'],
+                                     image=GO_PIN)
 
     def test_rejects_inherited_remote_docker_target_before_any_calls(self):
         with (mock.patch.dict(os.environ, {'DOCKER_HOST': 'ssh://server'}, clear=True),
