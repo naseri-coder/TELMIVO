@@ -43,6 +43,9 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/phase10_image_identity.py',
     'tests/installationlicense/test_phase10_image_identity.py',
     'tests/installationlicense/PHASE10_IMMUTABLE_E2E_PROVENANCE_20261015.md',
+    'tests/installationlicense/PHASE11_RUNNER_SYNTAX_RECOVERY_20261015.md',
+    'tests/installationlicense/phase11_python_source_gate.py',
+    'tests/installationlicense/test_phase11_python_source_gate.py',
 })
 
 def validate_authority_archive_provenance(
