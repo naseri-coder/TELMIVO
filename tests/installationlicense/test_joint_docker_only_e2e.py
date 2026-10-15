@@ -157,6 +157,7 @@ class DockerOnlyTests(unittest.TestCase):
         with (mock.patch.object(runner, 'check_checkout'),
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'install_a9_fixture'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
@@ -186,6 +187,7 @@ class DockerOnlyTests(unittest.TestCase):
         with (mock.patch.object(runner, 'check_checkout', side_effect=checked) as check,
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'run') as execute,
               contextlib.redirect_stderr(io.StringIO())):
             status = runner.main(ARGS)
@@ -201,6 +203,7 @@ class DockerOnlyTests(unittest.TestCase):
         with (mock.patch.object(runner, 'check_checkout') as check,
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'run') as execute,
               contextlib.redirect_stderr(io.StringIO())):
             status = runner.main(args)
@@ -208,12 +211,26 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(check.call_count, 1)
         execute.assert_not_called()
 
+    def test_syntax_audit_failure_blocks_docker_before_inspection(self):
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources',
+                                side_effect=ValueError('synthetic syntax error')) as lint,
+              mock.patch.object(runner, 'run') as commands,
+              contextlib.redirect_stderr(io.StringIO())):
+            result = runner.main(ARGS)
+        self.assertEqual(result, 3)
+        lint.assert_called_once()
+        commands.assert_not_called()
+
     def test_missing_image_review_pin_refuses_before_docker(self):
         args = ARGS.copy()
         args[args.index('--expected-go-image-id') + 1] = 'golang:1.27.2-bookworm'
         with (mock.patch.object(runner, 'check_checkout') as check,
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'run') as execute,
               contextlib.redirect_stderr(io.StringIO())):
             status = runner.main(args)
@@ -233,6 +250,7 @@ class DockerOnlyTests(unittest.TestCase):
         with (mock.patch.object(runner, 'check_checkout'),
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner, 'install_a9_fixture') as fixture,
               contextlib.redirect_stderr(io.StringIO())):
@@ -333,6 +351,7 @@ class DockerOnlyTests(unittest.TestCase):
         with (mock.patch.object(runner, 'check_checkout'),
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'install_a9_fixture'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
@@ -375,6 +394,7 @@ class DockerOnlyTests(unittest.TestCase):
                 with (mock.patch.object(runner, 'check_checkout'),
                       mock.patch.object(runner, 'validate_authority_archive_provenance'),
                       mock.patch.object(runner, 'check_product_checkout'),
+                      mock.patch.object(runner, 'audit_python_sources'),
                       mock.patch.object(runner, 'install_a9_fixture'),
                       mock.patch.object(runner, 'run', side_effect=fake_run),
                       mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
