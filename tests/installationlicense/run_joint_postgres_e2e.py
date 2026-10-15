@@ -23,8 +23,10 @@ FIXTURE_PREPARER_BLOB = '816456d387c8e231f1c469c668e01c722e8b5a32'
 AUTHORITY_ARCHIVE_SHA = AUTHORITY_MERGED_SHA
 EXPECTED_AUTHORITY_NONRUNTIME_DELTA = frozenset()
 
-# Changes on top of the hardened product must be exactly the reviewed
-# disposable E2E scripts/templates/tests/docs. No broad prefix exceptions.
+# Changes on top of the hardened product must be exactly enumerated.
+# Phase19 deliberately adds one narrow runtime security fix plus a new Go
+# regression test; this is NOT test-only and is not release-certified.
+# No broad directory/prefix exceptions are permitted.
 EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/PHASE02_CANONICAL_CROSSREPO_GATE_20261015.md',
     'tests/installationlicense/PHASE2L_TARGETED_A9_CROSSREPO_DRAFT_20261015.md',
@@ -51,6 +53,10 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/PHASE17_INDEPENDENT_TEST_HOST_ACCEPTANCE_20261015.md',
     'tests/installationlicense/phase17_disposable_host_preflight.py',
     'tests/installationlicense/test_phase17_disposable_host_preflight.py',
+    # Phase19: exact, independently reviewed SECURITY EXCEPTION to test-only freeze.
+    'internal/platform/installationlicense/state.go',
+    'internal/platform/installationlicense/phase19_session_fencing_test.go',
+    'tests/installationlicense/PHASE19_RUNTIME_SESSION_SECURITY_ACCEPTANCE_20261016.md',
     'tests/installationlicense/phase16_real_go_offline_cache_probe.py',
     'tests/installationlicense/phase15_reviewed_module_cache.py',
     'tests/installationlicense/test_phase15_reviewed_module_cache.py',
