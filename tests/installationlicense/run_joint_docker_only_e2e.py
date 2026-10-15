@@ -300,7 +300,8 @@ def main(argv=None) -> int:
             # Compile all imported real sources and populate only an isolated Go cache,
             # BEFORE any PostgreSQL service exists. Failures are not called E2E PASS.
             run(go_docker_command(fixture, product, cache, 'bridge',
-                                  ['go', 'test', '-count=1', '-run', '^
+                                  ['go', 'test', '-count=1', '-run', '^$', './authority'],
+                                  image=go_image),
                 timeout=420)
             discovered = run(go_docker_command(
                 fixture, product, cache, 'bridge',
