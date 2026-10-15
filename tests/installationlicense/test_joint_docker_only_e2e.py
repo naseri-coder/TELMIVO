@@ -651,10 +651,12 @@ class DockerOnlyTests(unittest.TestCase):
             runner.require_combined_passed_tests(result.stdout)
 
     def test_early_argv_check_rejects_same_source(self):
+        args = ARGS.copy()
+        args[args.index('--authority') + 1] = '/tmp/same'
+        args[args.index('--product') + 1] = '/tmp/same'
         with (mock.patch.object(runner, 'run') as commands,
               contextlib.redirect_stderr(io.StringIO())):
-            code = runner.main(['--authority', '/tmp/same', '--product', '/tmp/same',
-                                '--acknowledge-disposable-host'])
+            code = runner.main(args)
         self.assertEqual(code, 3)
         commands.assert_not_called()
 
