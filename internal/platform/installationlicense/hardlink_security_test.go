@@ -43,6 +43,13 @@ func TestLICA9Phase03HardlinkedLicenseFilesFailClosed(t *testing.T) {
     }
 }
 
+func TestLICA9Phase03NewClientMissingManagerFailsClosed(t *testing.T) {
+    client, err := NewClient(nil)
+    if client != nil || !errors.Is(err, ErrState) {
+        t.Fatal("missing licensing manager did not return explicit state error", err)
+    }
+}
+
 func TestLICA9Phase03HardlinkedRefreshLeaderFailsClosed(t *testing.T) {
     m, _ := fixture(t)
     first, e := m.acquireRefreshLeader()
