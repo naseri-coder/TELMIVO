@@ -47,6 +47,8 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/PHASE12_PYTHON_EXECUTABLE_ENTRYPOINT_20261015.md',
     'tests/installationlicense/PHASE13_OFFLINE_GO_ISOLATION_20261015.md',
     'tests/installationlicense/PHASE15_REVIEWED_GO_MODULE_CACHE_20261015.md',
+    'tests/installationlicense/PHASE16_REAL_LOCAL_GO_CACHE_ACCEPTANCE_20261015.md',
+    'tests/installationlicense/phase16_real_go_offline_cache_probe.py',
     'tests/installationlicense/phase15_reviewed_module_cache.py',
     'tests/installationlicense/test_phase15_reviewed_module_cache.py',
     'tests/installationlicense/phase13_offline_go_policy.py',
