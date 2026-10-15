@@ -21,7 +21,7 @@ Isolated model-owned Linux 6.18.44 x86_64 working container:
 - This is **not** the TELMIVO server. No attempt was made to reach its Docker socket, production files or database.
 - Important nuance: the **Docker-only runner does not require host Go 1.27.2 or host PostgreSQL**; it requires local, isolated Docker with reviewed `golang:1.27.2-bookworm` and `postgres:16` images and access to exact private Git checkouts. Lack of Docker is the first concrete blocker here.
 
-The exact new `phase09_host_requirements.py` GitHub source blob `ee023fe4491a7451867e83f275d969ed4c628f62` was copied **byte-identically** and executed locally, producing `BLOCKED_NO_DOCKER_CLIENT`, exit code `3`, with no sensitive inherited environment variables detected. This scanner **does not invoke docker/Go/Git/network**, and its verdict never claims E2E or Production authorization.
+The exact new `phase09_host_requirements.py` GitHub source blob `cc39702bcc862129457924321508ee877d867058` was copied **byte-identically** and executed locally, producing `BLOCKED_NO_DOCKER_CLIENT`, exit code `3`, with no sensitive inherited environment variables detected. This scanner **does not invoke docker/Go/Git/network**, and its verdict never claims E2E or Production authorization.
 
 ## Source-level issue discovered and repaired
 
@@ -39,7 +39,7 @@ The existing `test_joint_docker_only_e2e.py` now tests the constructed argv, inv
 
 ## Actually executed tests and evidence
 
-1. `phase09_host_requirements.py` and `test_phase09_host_requirements.py` were independently materialized into local files with **exact same Git blob** as their new GitHub counterparts (`ee023fe4491a7451867e83f275d969ed4c628f62`, `2e88ee643d7c5a41a95a47f1d40b1573a5e1c015`). Run: `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s ... -p test_phase09_host_requirements.py -v` → **9/9 PASS**.
+1. `phase09_host_requirements.py` and `test_phase09_host_requirements.py` were independently materialized into local files with **exact same Git blob** as their new GitHub counterparts (`cc39702bcc862129457924321508ee877d867058`, `2e88ee643d7c5a41a95a47f1d40b1573a5e1c015`). Run: `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s ... -p test_phase09_host_requirements.py -v` → **9/9 PASS**.
 2. A separate local ephemeral Go 1.23.2 module generated **eight synthetic test stubs with the same Go test names** as the frozen runner. Real `go test -list` and `go test -json -run` executed: **8/8 individual run/pass events observed**, package pass observed. This tests Go output/event formatting and selection only. It is **not** any of the real Authority/Product eight E2E tests, does not compile their actual runtime code, and does not involve PostgreSQL16.
 3. GitHub confirms Phase09 changes are limited to test code, test utilities and documentation. Source SHA/diff confirmation is separate from functional Go/DB E2E.
 
