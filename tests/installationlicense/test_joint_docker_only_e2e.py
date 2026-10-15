@@ -19,7 +19,9 @@ ARGS = ['--authority', '/tmp/authority-fixture', '--product', '/tmp/product-fixt
         '--acknowledge-disposable-host',
         '--expected-product-head', PRODUCT_HEAD_PIN,
         '--expected-go-image-id', GO_PIN,
-        '--expected-pg-image-id', PG_PIN]
+        '--expected-pg-image-id', PG_PIN,
+        '--reviewed-module-cache', '/tmp/nonproduction-reviewed-cache',
+        '--expected-module-cache-sha256', 'sha256:' + 'd' * 64]
 
 GO_DISCOVERY = "\n".join(sorted(runner.COMBINED_TESTS)) + "\nok\n"
 GO_SUCCESS_EVENTS = "\n".join(
@@ -182,6 +184,7 @@ class DockerOnlyTests(unittest.TestCase):
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'audit_python_sources'),
+              mock.patch.object(runner, 'stage_approved_module_cache'),
               mock.patch.object(runner, 'install_a9_fixture'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
@@ -248,6 +251,44 @@ class DockerOnlyTests(unittest.TestCase):
         lint.assert_called_once()
         commands.assert_not_called()
 
+    def test_invalid_module_cache_digest_refuses_before_docker(self):
+        args = ARGS.copy()
+        args[args.index('--expected-module-cache-sha256') + 1] = 'not-reviewed'
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
+              mock.patch.object(runner, 'run') as docker,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(args)
+        self.assertEqual(status, 3)
+        docker.assert_not_called()
+
+    def test_missing_approved_cache_rejects_before_go_container(self):
+        calls = []
+        def fake_run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0,
+                        stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
+            if argv[:3] == ['docker', 'context', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock')
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'audit_python_sources'),
+              mock.patch.object(runner, 'stage_approved_module_cache',
+                                side_effect=ValueError('missing preapproved module bytes')) as stage,
+              mock.patch.object(runner, 'install_a9_fixture') as fixture,
+              mock.patch.object(runner, 'run', side_effect=fake_run),
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(ARGS)
+        self.assertEqual(status, 3)
+        stage.assert_called_once()
+        fixture.assert_not_called()
+        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+
     def test_missing_image_review_pin_refuses_before_docker(self):
         args = ARGS.copy()
         args[args.index('--expected-go-image-id') + 1] = 'golang:1.27.2-bookworm'
@@ -276,6 +317,7 @@ class DockerOnlyTests(unittest.TestCase):
               mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'audit_python_sources'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
+              mock.patch.object(runner, 'stage_approved_module_cache'),
               mock.patch.object(runner, 'install_a9_fixture') as fixture,
               contextlib.redirect_stderr(io.StringIO())):
             status = runner.main(ARGS)
@@ -376,6 +418,7 @@ class DockerOnlyTests(unittest.TestCase):
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'audit_python_sources'),
+              mock.patch.object(runner, 'stage_approved_module_cache'),
               mock.patch.object(runner, 'install_a9_fixture'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
@@ -419,6 +462,7 @@ class DockerOnlyTests(unittest.TestCase):
                       mock.patch.object(runner, 'validate_authority_archive_provenance'),
                       mock.patch.object(runner, 'check_product_checkout'),
                       mock.patch.object(runner, 'audit_python_sources'),
+                      mock.patch.object(runner, 'stage_approved_module_cache'),
                       mock.patch.object(runner, 'install_a9_fixture'),
                       mock.patch.object(runner, 'run', side_effect=fake_run),
                       mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
