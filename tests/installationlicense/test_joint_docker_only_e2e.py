@@ -119,6 +119,25 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(cmd.count('GOSUMDB=off'), 1)
         self.assertEqual(cmd.count('GOTOOLCHAIN=local'), 1)
 
+    def test_compiler_preflight_mock_is_network_disconnected(self):
+        code, calls = self.simulate()
+        self.assertEqual(code, 0)
+        first_go_runs = [argv for argv in calls
+                         if argv[:2] == ['docker', 'run']
+                         and GO_PIN in argv and '-json' not in argv]
+        self.assertGreaterEqual(len(first_go_runs), 3)
+        for argv in first_go_runs:
+            self.assertEqual(argv[argv.index('--network') + 1], 'none')
+            self.assertIn('GOPROXY=off', argv)
+            self.assertIn('GOSUMDB=off', argv)
+            self.assertIn('--pull=never', argv)
+
+    def test_no_bridge_network_even_without_real_docker_daemon(self):
+        with self.assertRaises(ValueError):
+            runner.go_docker_command(Path('/fixture'), Path('/product'),
+                                     Path('/cache'), 'bridge', ['go', 'version'],
+                                     image=GO_PIN)
+
     def test_rejects_inherited_remote_docker_target_before_any_calls(self):
         with (mock.patch.dict(os.environ, {'DOCKER_HOST': 'ssh://server'}, clear=True),
               mock.patch.object(runner, 'run') as commands,
