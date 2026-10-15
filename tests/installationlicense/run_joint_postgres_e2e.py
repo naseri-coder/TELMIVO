@@ -15,22 +15,36 @@ import tempfile
 import time
 import uuid
 
-AUTHORITY_MERGED_SHA = '939d14800c602dd9c31ff23fdf6e0688a440d4c2'
-PRODUCT_MERGED_SHA = 'bc417045ca5e1b91a2377aba6dece348699f7bf4'
-FIXTURE_PREPARER_BLOB = 'be27fbdf5871ee54e35ef9302d2749a67b1725e9'
-AUTHORITY_ARCHIVE_SHA = '68cdb6996f85981c36dd20ecb7435ec010351e9b'
-EXPECTED_AUTHORITY_NONRUNTIME_DELTA = frozenset({
-    'docs/development/LIC_A9_PHASE2B_AUTHORITY_PG16_CI_BLOCKER_20261014.md',
-    'internal/domain/phase2b_safety_test.go',
-})
+# Exact reviewed source selections for the next real disposable E2E.
+# No stale archive is allowed: the fixture must use this exact Authority HEAD.
+AUTHORITY_MERGED_SHA = 'bfceaef06d41aa185677a796652d17b07979058a'
+PRODUCT_MERGED_SHA = 'd88fdb2e4d34f18e8f9c8313f73db5b14a077d5a'
+FIXTURE_PREPARER_BLOB = '816456d387c8e231f1c469c668e01c722e8b5a32'
+AUTHORITY_ARCHIVE_SHA = AUTHORITY_MERGED_SHA
+EXPECTED_AUTHORITY_NONRUNTIME_DELTA = frozenset()
 
+# Changes on top of the hardened product must be exactly the reviewed
+# disposable E2E scripts/templates/tests/docs. No broad prefix exceptions.
+EXPECTED_PRODUCT_TEST_DELTA = frozenset({
+    'tests/installationlicense/PHASE02_CANONICAL_CROSSREPO_GATE_20261015.md',
+    'tests/installationlicense/PHASE2L_TARGETED_A9_CROSSREPO_DRAFT_20261015.md',
+    'tests/installationlicense/PHASE08_FINAL_SOURCE_PIN_ACCEPTANCE_20261015.md',
+    'tests/installationlicense/authority_lic_a9_crossrepo_test.go.template',
+    'tests/installationlicense/prepare_authority_fixture.py',
+    'tests/installationlicense/run_joint_docker_only_e2e.py',
+    'tests/installationlicense/run_joint_postgres_e2e.py',
+    'tests/installationlicense/test_joint_docker_only_e2e.py',
+    'tests/installationlicense/test_joint_runner.py',
+    'tests/installationlicense/test_phase02_authority_pin.py',
+    'tests/installationlicense/test_phase08_refreeze.py',
+})
 
 def validate_authority_archive_provenance(
     root: Path, archive_sha: str = AUTHORITY_ARCHIVE_SHA,
     merged_sha: str = AUTHORITY_MERGED_SHA,
     allowed_delta: frozenset[str] = EXPECTED_AUTHORITY_NONRUNTIME_DELTA,
 ) -> None:
-    """Prove archived Authority runtime is identical to merged Authority runtime."""
+    """Reject stale archives: selected Authority and E2E fixture must be identical."""
     git(root, 'merge-base', '--is-ancestor', archive_sha, merged_sha)
     changed = frozenset(filter(None, git(
         root, 'diff', '--name-only', archive_sha, merged_sha).splitlines()))
@@ -38,10 +52,9 @@ def validate_authority_archive_provenance(
         raise ValueError(
             'Authority fixture archive and merged source differ unexpectedly: '
             + ','.join(sorted(changed.symmetric_difference(allowed_delta))))
-    # A distinct merged commit is allowed only with precisely these nonruntime files.
-    if any(not (name.startswith('docs/') or name.endswith('_test.go'))
-           for name in changed):
-        raise ValueError('Authority runtime source changed since archived commit')
+    # Exact set equality above is the security gate. Synthetic regression
+    # callers may substitute their own archive and exact allowlist; production
+    # runtime files remain forbidden by the default immutable allowlist.
 
 
 
@@ -57,20 +70,24 @@ def check_checkout(root: Path, expected: str) -> None:
         raise ValueError(f'checkout contains uncommitted or untracked files: {root}')
 
 
-def check_product_checkout(root: Path, baseline: str = PRODUCT_MERGED_SHA) -> None:
+def check_product_checkout(
+    root: Path, baseline: str = PRODUCT_MERGED_SHA,
+    allowed_delta: frozenset[str] = EXPECTED_PRODUCT_TEST_DELTA,
+) -> None:
     if not root.is_dir():
         raise ValueError('TELMIVO checkout is missing')
     git(root, 'rev-parse', '--verify', 'HEAD^{commit}')
     git(root, 'merge-base', '--is-ancestor', baseline, 'HEAD')
     if git(root, 'status', '--porcelain', '--untracked-files=all'):
         raise ValueError('TELMIVO checkout has uncommitted or untracked files')
-    # Allow newly added *test tooling* on top of pinned product source, but
-    # never allow a different Go/runtime module or old E2E fixture.
-    protected = ('go.mod', 'go.sum', 'internal',
-                 'tests/installationlicense/authority_e2e_test.go.template')
-    git(root, 'diff', '--quiet', baseline, 'HEAD', '--', *protected)
-    # A reviewed fixture-only change repairs the copied Authority module
-    # boundary; reject ANY other bytes in this helper (including dirty files).
+    # Compare all paths, not only Go/module paths: an unexpected new script,
+    # deploy file, secret, or modified test template must fail BEFORE Docker.
+    actual = frozenset(filter(None, git(root, 'diff', '--name-only',
+                                         baseline, 'HEAD').splitlines()))
+    if actual != allowed_delta:
+        raise ValueError('TELMIVO joint test-only source delta mismatch: ' +
+                         ','.join(sorted(actual.symmetric_difference(allowed_delta))))
+    # Verify the exact reviewed fixture copy helper, not any file under tests/.
     preparer = root / 'tests/installationlicense/prepare_authority_fixture.py'
     if not preparer.is_file() or git(root, 'hash-object', str(preparer)) != FIXTURE_PREPARER_BLOB:
         raise ValueError('unexpected joint fixture preparer revision')

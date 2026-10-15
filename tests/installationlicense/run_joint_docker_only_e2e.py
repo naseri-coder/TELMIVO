@@ -6,6 +6,7 @@ All source checkouts must pass pinned Git provenance.
 Passing six legacy LIC-A8 tests does NOT certify LIC-A9 anti-cloning/concurrency.
 """
 import argparse
+import hashlib
 from collections import Counter
 import json
 import os
@@ -26,15 +27,40 @@ GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
 PG_DATABASE = 'lic_a9_joint_test'
 E2E_TESTS = frozenset(f'TestE2E{i}' for i in range(1, 7))
+A9_TESTS = frozenset({'TestLICA9CrossRepoRealLeaseAndRestart', 'TestLICA9CrossRepoClonedGenerationFenced'})
+COMBINED_TESTS = E2E_TESTS | A9_TESTS
+COMBINED_FILTER = '^(' + '|'.join(sorted(COMBINED_TESTS)) + ')$'
+A9_TEMPLATE_BLOB = 'e9846d589990210074c8980321c8cb168cc0fb6f'
 
 LEGACY_SMOKE_SUCCESS = 'LIC_A8_LEGACY_CROSSREPO_GO1272_PG16_SMOKE_PASS'
-A9_COVERAGE_GAP = 'LIC_A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED'
+A9_COVERAGE_GAP = 'LIC_A9_FULL_SECURITY_MATRIX_NOT_CERTIFIED'
+A9_TARGETED_SUCCESS = 'LIC_A9_CROSSREPO_TARGETED_ANTICLONE_2_TESTS_PASS'
 
 
 def emit_legacy_smoke_result() -> None:
     """Report only the proven six-test LIC-A8 interoperability scope."""
     print(LEGACY_SMOKE_SUCCESS)
     print(A9_COVERAGE_GAP)
+
+
+def emit_targeted_a9_result() -> None:
+    """Clearly scoped, not a claim that the entire LIC-A9 matrix passed."""
+    print(LEGACY_SMOKE_SUCCESS)
+    print(A9_TARGETED_SUCCESS)
+    print(A9_COVERAGE_GAP)
+
+
+def install_a9_fixture(product: Path, fixture: Path) -> None:
+    """Import reviewed test-only Go bytes, never modify pinned preparer."""
+    source = product / 'tests/installationlicense/authority_lic_a9_crossrepo_test.go.template'
+    payload = source.read_bytes()
+    sha = hashlib.sha1(b'blob ' + str(len(payload)).encode() + b'\x00' + payload).hexdigest()
+    if sha != A9_TEMPLATE_BLOB:
+        raise ValueError('unapproved LIC-A9 integration Go test template')
+    destination = fixture / 'authority' / 'client_lic_a9_crossrepo_test.go'
+    if not destination.parent.is_dir() or destination.exists():
+        raise ValueError('unexpected LIC-A9 fixture destination')
+    destination.write_bytes(payload)
 
 
 
@@ -76,6 +102,80 @@ def require_six_passed_tests(stdout: str) -> None:
         raise ValueError('six E2E test executions and successes were not proven')
     if any(started[test] != 1 or passed[test] != 1 for test in E2E_TESTS):
         raise ValueError('duplicate or missing E2E execution evidence')
+
+
+def require_a9_discovered_tests(stdout: str) -> None:
+    found = [line.strip() for line in stdout.splitlines()
+             if line.strip().startswith('TestLICA9CrossRepo')]
+    if len(found) != len(A9_TESTS) or set(found) != A9_TESTS:
+        raise ValueError(f'missing or duplicate LIC-A9 crossrepo test: {found!r}')
+
+
+def require_combined_passed_tests(stdout: str) -> None:
+    started, passed = Counter(), Counter()
+    package_pass = 0
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError('malformed Go JSON E2E event') from exc
+        if not isinstance(event, dict):
+            raise ValueError('malformed Go event object')
+        action, name = event.get('Action'), event.get('Test')
+        # Go's JSON schema uses strings for Action and optional Test.
+        # Non-string / unhashable input must fail closed as an ordinary
+        # validation error, never crash with TypeError/AttributeError.
+        if not isinstance(action, str) or (name is not None and not isinstance(name, str)):
+            raise ValueError('malformed Go E2E action/test identity')
+        if action in ('fail', 'skip'):
+            raise ValueError('Go test skipped or failed')
+        if name is None and action == 'pass':
+            package_pass += 1
+        if name in COMBINED_TESTS:
+            if action == 'run':
+                started[name] += 1
+            elif action == 'pass':
+                passed[name] += 1
+        elif name and (name.startswith('TestE2E') or name.startswith('TestLICA9CrossRepo')):
+            raise ValueError(f'unexpected selected E2E test: {name}')
+    if package_pass != 1 or set(started) != COMBINED_TESTS or set(passed) != COMBINED_TESTS:
+        raise ValueError('all eight individual test run/pass events are required')
+    if any(started[name] != 1 or passed[name] != 1 for name in COMBINED_TESTS):
+        raise ValueError('duplicate or missing Go E2E evidence')
+
+
+def safe_failed_e2e_summary(exc: subprocess.CalledProcessError) -> str:
+    """Preserve failure evidence without echoing Go output or fixture secrets.
+
+    Real Go -json output may contain arbitrary test logs and credentials. Never
+    dump it to the console. Report only *approved* test identities, event types
+    and digests so the first failed case is identifiable without a false PASS.
+    """
+    stdout = exc.stdout if isinstance(exc.stdout, str) else ''
+    stderr = exc.stderr if isinstance(exc.stderr, str) else ''
+    fail, skip = set(), set()
+    package_failed = False
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        action = event.get('Action')
+        if action not in ('fail', 'skip'):
+            continue
+        name = event.get('Test')
+        if name is None:
+            if action == 'fail':
+                package_failed = True
+        elif isinstance(name, str) and name in COMBINED_TESTS:
+            (fail if action == 'fail' else skip).add(name)
+    digest = lambda data: hashlib.sha256(data.encode('utf-8', errors='replace')).hexdigest()
+    return (f'exit={exc.returncode}; failed={",".join(sorted(fail)) or "none"}; '
+            f'skipped={",".join(sorted(skip)) or "none"}; '
+            f'package_fail={package_failed}; '
+            f'go_json_sha256={digest(stdout)}; stderr_sha256={digest(stderr)}')
 
 
 def go_docker_command(fixture: Path, product: Path, cache: Path,
@@ -139,6 +239,7 @@ def main(argv=None) -> int:
             cache.mkdir()
             prepare = product / 'tests/installationlicense/prepare_authority_fixture.py'
             run([sys.executable, '-B', str(prepare), str(authority), str(fixture)], timeout=90)
+            install_a9_fixture(product, fixture)
             version = run(go_docker_command(fixture, product, cache, 'bridge', ['go', 'version']),
                           output=True, timeout=180).stdout
             if not re.search(r'\bgo version go1\.27\.2\b', version):
@@ -150,9 +251,10 @@ def main(argv=None) -> int:
                 timeout=420)
             discovered = run(go_docker_command(
                 fixture, product, cache, 'bridge',
-                ['go', 'test', '-list', '^TestE2E[1-6]$', './authority']),
+                ['go', 'test', '-list', COMBINED_FILTER, './authority']),
                 output=True, timeout=240).stdout
             require_six_discovered_tests(discovered)
+            require_a9_discovered_tests(discovered)
             pg_container = 'lic-a9-joint-' + uuid.uuid4().hex[:12]
             # Postgres is network-isolated: NO -p / exposed host port, even loopback.
             # Official postgres entrypoint drops root via gosu, which needs
@@ -181,14 +283,19 @@ def main(argv=None) -> int:
             cmd = go_docker_command(
                 fixture, product, cache, 'container:' + pg_container,
                 ['go', 'test', '-count=1', '-json', '-timeout', '8m',
-                 '-run', '^TestE2E[1-6]$', './authority'])
+                 '-run', COMBINED_FILTER, './authority'])
             image_index = cmd.index(GO_IMAGE)
             cmd[image_index:image_index] = [
                 '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
                 '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
             ]
-            executed = run(cmd, output=True, timeout=600).stdout
-            require_six_passed_tests(executed)
+            try:
+                executed = run(cmd, output=True, timeout=600).stdout
+            except subprocess.CalledProcessError as exc:
+                print('LIC_A9_TEST_FAILURE_SUMMARY: ' + safe_failed_e2e_summary(exc),
+                      file=sys.stderr)
+                raise
+            require_combined_passed_tests(executed)
         outcome = 0
     except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
             subprocess.CalledProcessError) as exc:
@@ -208,7 +315,7 @@ def main(argv=None) -> int:
                 outcome = 3
     if outcome == 0:
         # Emit PASS *only after* the disposable database cleanup succeeds.
-        emit_legacy_smoke_result()
+        emit_targeted_a9_result()
     return outcome
 
 

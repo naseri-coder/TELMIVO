@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Prepare a TEST-ONLY Authority fixture from the selected PR32 source.
+"""Prepare a TEST-ONLY Authority fixture from the exact Phase07 candidate source.
 
 Usage:
     python3 prepare_authority_fixture.py AUTHORITY_REPO NEW_FIXTURE_DIR
 
-This fixture is historic LIC-A8 E2E research. It is not evidence of PR32
-compatibility: source API and migration differences must be resolved and
-validated separately. Never point its tests at a non-disposable database.
+This fixture copies the exact pinned Authority Phase07 source, not a stale
+archive. The synthetic tests do NOT certify full production interoperability.
+Never point its tests at a non-disposable database.
 """
 import pathlib
 import subprocess
 import sys
 
-sha = "68cdb6996f85981c36dd20ecb7435ec010351e9b"
+sha = "bfceaef06d41aa185677a796652d17b07979058a"
 
 
 def prepare(repo: pathlib.Path, dst: pathlib.Path) -> None:
@@ -58,7 +58,7 @@ def prepare(repo: pathlib.Path, dst: pathlib.Path) -> None:
     (dst / "go.sum").write_bytes((product / "go.sum").read_bytes())
     (authority / "client_test.go").write_bytes(
         (pathlib.Path(__file__).parent / "authority_e2e_test.go.template").read_bytes())
-    print("TEST-ONLY fixture prepared from " + sha)
+    print("TEST-ONLY exact Phase07 Authority fixture prepared from " + sha)
 
 
 if __name__ == "__main__":

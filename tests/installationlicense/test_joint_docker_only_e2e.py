@@ -15,7 +15,7 @@ import run_joint_docker_only_e2e as runner
 ARGS = ['--authority', '/tmp/authority-fixture', '--product', '/tmp/product-fixture',
         '--acknowledge-disposable-host']
 
-GO_DISCOVERY = "\n".join(f"TestE2E{i}" for i in range(1, 7)) + "\nok\n"
+GO_DISCOVERY = "\n".join(sorted(runner.COMBINED_TESTS)) + "\nok\n"
 GO_SUCCESS_EVENTS = "\n".join(
     json.dumps(event) for event in (
         [{'Action': 'run', 'Package': 'example/joint', 'Test': f'TestE2E{i}'}
@@ -25,6 +25,13 @@ GO_SUCCESS_EVENTS = "\n".join(
         + [{'Action': 'pass', 'Package': 'example/joint'}]
     )
 ) + "\n"
+COMBINED_EVENTS = "\n".join(json.dumps(event) for event in (
+    [{'Action': 'run', 'Package': 'example/joint', 'Test': name}
+     for name in sorted(runner.COMBINED_TESTS)]
+    + [{'Action': 'pass', 'Package': 'example/joint', 'Test': name}
+       for name in sorted(runner.COMBINED_TESTS)]
+    + [{'Action': 'pass', 'Package': 'example/joint'}]
+)) + "\n"
 
 
 class DockerOnlyTests(unittest.TestCase):
@@ -81,7 +88,7 @@ class DockerOnlyTests(unittest.TestCase):
             if '-json' in argv:
                 if fail_test:
                     raise subprocess.CalledProcessError(1, argv)
-                return subprocess.CompletedProcess(argv, 0, stdout='{"Action":"pass","Package":"example/joint"}\n' if missing_passes else GO_SUCCESS_EVENTS)
+                return subprocess.CompletedProcess(argv, 0, stdout='{"Action":"pass","Package":"example/joint"}\n' if missing_passes else COMBINED_EVENTS)
             return subprocess.CompletedProcess(argv, 0, stdout='')
         def fake_subprocess(argv, **kwargs):
             calls.append(list(argv))
@@ -89,6 +96,7 @@ class DockerOnlyTests(unittest.TestCase):
         with (mock.patch.object(runner, 'check_checkout'),
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'install_a9_fixture'),
               mock.patch.object(runner, 'run', side_effect=fake_run),
               mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
               contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO())):
@@ -128,6 +136,73 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(status, 3)
         self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
 
+    def test_real_go_failure_reports_failing_name_but_never_leaks_raw_logs(self):
+        raw = '\n'.join(json.dumps(event) for event in (
+            {'Action': 'run', 'Test': 'TestLICA9CrossRepoClonedGenerationFenced'},
+            {'Action': 'output', 'Test': 'TestLICA9CrossRepoClonedGenerationFenced',
+             'Output': 'SENSITIVE_TEST_SECRET_SHOULD_NOT_LEAK'},
+            {'Action': 'fail', 'Test': 'TestLICA9CrossRepoClonedGenerationFenced'},
+            {'Action': 'fail', 'Package': 'example/joint'},
+        )) + '\n'
+        err = subprocess.CalledProcessError(1, ['go', 'test', '-json'],
+                                            output=raw,
+                                            stderr='POTENTIALLY_SENSITIVE_ERROR_DETAILS')
+        summary = runner.safe_failed_e2e_summary(err)
+        self.assertIn('failed=TestLICA9CrossRepoClonedGenerationFenced', summary)
+        self.assertIn('package_fail=True', summary)
+        self.assertNotIn('SENSITIVE_TEST_SECRET_SHOULD_NOT_LEAK', summary)
+        self.assertNotIn('POTENTIALLY_SENSITIVE_ERROR_DETAILS', summary)
+        self.assertRegex(summary, r'go_json_sha256=[a-f0-9]{64}')
+        self.assertRegex(summary, r'stderr_sha256=[a-f0-9]{64}')
+        self.assertEqual(summary, runner.safe_failed_e2e_summary(err))
+
+    def test_real_go_failure_summary_ignores_untrusted_names(self):
+        stream = json.dumps({'Action': 'fail', 'Test': 'UNTRUSTED_TOKEN_LOG'})
+        err = subprocess.CalledProcessError(1, ['go'], output=stream)
+        summary = runner.safe_failed_e2e_summary(err)
+        self.assertIn('failed=none', summary)
+        self.assertNotIn('UNTRUSTED_TOKEN_LOG', summary)
+
+    def test_actual_main_surfaces_safe_go_failure_and_always_cleans_up(self):
+        calls = []
+        secret = 'SECRET_OUTPUT_NOT_FOR_CONSOLE'
+        stream = '\n'.join(json.dumps(x) for x in (
+            {'Action': 'run', 'Test': 'TestLICA9CrossRepoRealLeaseAndRestart'},
+            {'Action': 'output', 'Test': 'TestLICA9CrossRepoRealLeaseAndRestart',
+             'Output': secret},
+            {'Action': 'fail', 'Test': 'TestLICA9CrossRepoRealLeaseAndRestart'},
+            {'Action': 'fail', 'Package': 'example/joint'},
+        )) + '\n'
+        def fake_run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[:3] == ['docker', 'context', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
+            if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
+                return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.2 linux/amd64\n')
+            if '-list' in argv:
+                return subprocess.CompletedProcess(argv, 0, stdout=GO_DISCOVERY)
+            if '-json' in argv:
+                raise subprocess.CalledProcessError(1, argv, output=stream, stderr=secret)
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        def fake_subprocess(argv, **kwargs):
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        err = io.StringIO()
+        out = io.StringIO()
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'install_a9_fixture'),
+              mock.patch.object(runner, 'run', side_effect=fake_run),
+              mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
+              contextlib.redirect_stdout(out), contextlib.redirect_stderr(err)):
+            self.assertEqual(runner.main(ARGS), 3)
+        self.assertIn('failed=TestLICA9CrossRepoRealLeaseAndRestart', err.getvalue())
+        self.assertIn('LIC_A9_TEST_FAILURE_SUMMARY:', err.getvalue())
+        self.assertNotIn(secret, err.getvalue() + out.getvalue())
+        self.assertNotIn(runner.A9_TARGETED_SUCCESS, out.getvalue())
+        self.assertEqual(sum(c[:2] == ['docker', 'stop'] for c in calls), 1)
+
     def test_cleanup_error_never_allows_success_verdict(self):
         for mode in ('nonzero', 'timeout', 'missing'):
             calls = []
@@ -156,6 +231,7 @@ class DockerOnlyTests(unittest.TestCase):
                 with (mock.patch.object(runner, 'check_checkout'),
                       mock.patch.object(runner, 'validate_authority_archive_provenance'),
                       mock.patch.object(runner, 'check_product_checkout'),
+                      mock.patch.object(runner, 'install_a9_fixture'),
                       mock.patch.object(runner, 'run', side_effect=fake_run),
                       mock.patch.object(runner.subprocess, 'run', side_effect=fake_subprocess),
                       contextlib.redirect_stdout(capture),
@@ -240,7 +316,7 @@ class DockerOnlyTests(unittest.TestCase):
         lines = result.getvalue().splitlines()
         self.assertEqual(lines, [runner.LEGACY_SMOKE_SUCCESS, runner.A9_COVERAGE_GAP])
         self.assertTrue(lines[0].startswith('LIC_A8_LEGACY_'))
-        self.assertIn('A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED', lines[1])
+        self.assertIn('A9_FULL_SECURITY_MATRIX_NOT_CERTIFIED', lines[1])
         self.assertNotIn('LIC_A9_JOINT_DOCKER_GO127_POSTGRES16_E2E_PASS', result.getvalue())
 
     def test_old_host_runner_is_not_an_A9_certification(self):
@@ -250,6 +326,95 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertNotIn('LIC_A9_JOINT_GO127_POSTGRES16_E2E_PASS', source)
         self.assertIn('LIC_A8_LEGACY_HOST_GO127_PG16_SMOKE_COMMAND_COMPLETED_TEST_COUNT_UNVERIFIED', source)
         self.assertIn('LIC_A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED', source)
+
+    def test_malformed_go_json_event_field_types_fail_closed(self):
+        runner.require_combined_passed_tests(COMBINED_EVENTS)
+        malformed = (
+            {'Action': 'pass', 'Test': []},
+            {'Action': 'run', 'Test': 123},
+            {'Action': [], 'Test': None},
+            {'Action': None, 'Test': None},
+            {'Action': 'pass', 'Test': {'untrusted': 'value'}},
+        )
+        for event in malformed:
+            with self.subTest(event=event), self.assertRaisesRegex(
+                    ValueError, 'malformed Go E2E action/test identity'):
+                runner.require_combined_passed_tests(json.dumps(event))
+        with self.assertRaisesRegex(ValueError, 'all eight individual test run/pass events'):
+            runner.require_combined_passed_tests(
+                json.dumps({'Action': 'pass', 'Package': 'example/joint'}))
+
+    def test_targeted_a9_success_requires_eight_real_events(self):
+        runner.require_six_discovered_tests(GO_DISCOVERY)
+        runner.require_a9_discovered_tests(GO_DISCOVERY)
+        runner.require_combined_passed_tests(COMBINED_EVENTS)
+        stream = [json.loads(line) for line in COMBINED_EVENTS.splitlines()]
+        for target in sorted(runner.A9_TESTS):
+            for event in ('run', 'pass'):
+                missing = [x for x in stream if not (x.get('Test') == target and x['Action'] == event)]
+                with self.subTest(target=target, event=event), self.assertRaises(ValueError):
+                    runner.require_combined_passed_tests('\n'.join(json.dumps(x) for x in missing))
+        with self.assertRaises(ValueError):
+            runner.require_a9_discovered_tests(GO_DISCOVERY.replace('TestLICA9CrossRepoRealLeaseAndRestart\n', ''))
+        with self.assertRaises(ValueError):
+            runner.require_combined_passed_tests(GO_SUCCESS_EVENTS)
+
+    def test_targeted_a9_result_does_not_claim_full_certification(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            runner.emit_targeted_a9_result()
+        self.assertEqual(out.getvalue().splitlines(), [
+            runner.LEGACY_SMOKE_SUCCESS, runner.A9_TARGETED_SUCCESS, runner.A9_COVERAGE_GAP])
+        self.assertIn('TARGETED', out.getvalue())
+        self.assertIn('NOT_CERTIFIED', out.getvalue())
+
+    def test_source_pinned_a9_fixture_and_rejects_changed_bytes(self):
+        with tempfile.TemporaryDirectory(prefix='lic-a9-fixture-sha-') as path:
+            root = Path(path)
+            product = root / 'product'
+            template = product / 'tests/installationlicense/authority_lic_a9_crossrepo_test.go.template'
+            template.parent.mkdir(parents=True)
+            template.write_bytes((Path(__file__).parent / 'authority_lic_a9_crossrepo_test.go.template').read_bytes())
+            fixture = root / 'fixture'
+            (fixture / 'authority').mkdir(parents=True)
+            runner.install_a9_fixture(product, fixture)
+            installed = fixture / 'authority/client_lic_a9_crossrepo_test.go'
+            self.assertEqual(installed.read_bytes(), template.read_bytes())
+            template.write_bytes(template.read_bytes() + b'\n// unauthorized revision\n')
+            with self.assertRaises(ValueError):
+                runner.install_a9_fixture(product, fixture)
+
+    def test_anticlone_template_proves_exact_restriction_and_durable_conflict(self):
+        source = (Path(__file__).parent / 'authority_lic_a9_crossrepo_test.go.template').read_text()
+        expected = (
+            'bootstrap.Reason != "CONCURRENCY_REFRESH_REQUIRED"',
+            'decision.Reason != "CONCURRENT_INSTALLATION_CONFLICT"',
+            'generation != 2 || conflictState != "CLONE_SUSPECTED"',
+            "action='clone_conflict_detected'",
+            'conflictIntents != 1',
+            'replica.Effect(context.Background()',
+            'if !errors.Is(err, l.ErrRestricted) || executed',
+        )
+        for guard in expected:
+            with self.subTest(guard=guard):
+                self.assertIn(guard, source)
+        self.assertIn('TestLICA9CrossRepoClonedGenerationFenced', source)
+
+    def test_real_go_can_list_eight_named_tests(self):
+        with tempfile.TemporaryDirectory(prefix='lic-a9-go-discovery-') as path:
+            root = Path(path)
+            (root / 'go.mod').write_text('module example.org/eight\ngo 1.23\n')
+            code = ['package evidence', 'import "testing"']
+            code.extend(f'func {name}(t *testing.T) {{}}' for name in sorted(runner.COMBINED_TESTS))
+            (root / 'evidence_test.go').write_text('\n'.join(code) + '\n')
+            env = dict(os.environ, GOTOOLCHAIN='local', GOPROXY='off', GOSUMDB='off')
+            found = subprocess.run(['go', 'test', '-list', runner.COMBINED_FILTER, '.'], cwd=root,
+                                   check=True, capture_output=True, text=True, env=env, timeout=90)
+            runner.require_six_discovered_tests(found.stdout)
+            runner.require_a9_discovered_tests(found.stdout)
+            result = subprocess.run(['go', 'test', '-count=1', '-json', '-run', runner.COMBINED_FILTER, '.'],
+                                    cwd=root, check=True, capture_output=True, text=True, env=env, timeout=90)
+            runner.require_combined_passed_tests(result.stdout)
 
     def test_early_argv_check_rejects_same_source(self):
         with (mock.patch.object(runner, 'run') as commands,
