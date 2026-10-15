@@ -152,6 +152,78 @@ class DockerOnlyTests(unittest.TestCase):
             result = runner.main(ARGS)
         return result, calls
 
+    def test_disposable_commands_use_immutable_ids_with_never_pull(self):
+        code, calls = self.simulate()
+        self.assertEqual(code, 0)
+        images = [
+            c for c in calls
+            if c[:2] == ['docker', 'run']
+        ]
+        self.assertTrue(images)
+        for argv in images:
+            self.assertIn('--pull=never', argv)
+            self.assertTrue(GO_PIN in argv or PG_PIN in argv)
+            self.assertNotIn(runner.GO_IMAGE, argv)
+            self.assertNotIn(runner.PG_IMAGE, argv)
+        self.assertTrue(any(PG_PIN in argv and '--network' in argv for argv in images))
+
+    def test_product_head_check_receives_independent_pin(self):
+        with (mock.patch.object(runner, 'check_checkout', side_effect=ValueError('not exact')) as check,
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run') as execute,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(ARGS)
+        self.assertEqual(status, 3)
+        execute.assert_not_called()
+        self.assertEqual(check.call_count, 1)  # Authority rejects first.
+
+    def test_unreviewed_product_sha_refuses_before_docker(self):
+        args = ARGS.copy()
+        args[args.index('--expected-product-head') + 1] = 'main'
+        with (mock.patch.object(runner, 'check_checkout') as check,
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run') as execute,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(args)
+        self.assertEqual(status, 3)
+        self.assertEqual(check.call_count, 1)
+        execute.assert_not_called()
+
+    def test_missing_image_review_pin_refuses_before_docker(self):
+        args = ARGS.copy()
+        args[args.index('--expected-go-image-id') + 1] = 'golang:1.27.2-bookworm'
+        with (mock.patch.object(runner, 'check_checkout') as check,
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run') as execute,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(args)
+        self.assertEqual(status, 3)
+        self.assertEqual(check.call_count, 2)
+        execute.assert_not_called()
+
+    def test_wrong_local_image_refuses_before_any_container(self):
+        commands = []
+        def fake_run(argv, **kwargs):
+            commands.append(argv)
+            if argv[:3] == ['docker', 'context', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock')
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='sha256:' + 'd' * 64)
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run', side_effect=fake_run),
+              mock.patch.object(runner, 'install_a9_fixture') as fixture,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(ARGS)
+        self.assertEqual(status, 3)
+        fixture.assert_not_called()
+        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in commands))
+
     def test_compiler_runs_before_unpublished_database(self):
         code, calls = self.simulate()
         self.assertEqual(code, 0)
