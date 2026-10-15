@@ -45,6 +45,24 @@ def _is_main_guard(node):
             and test.comparators[0].value == '__main__')
 
 
+def _is_executable_main_entrypoint(node):
+    """Accept only the canonical terminal raise SystemExit(main())."""
+    if not _is_main_guard(node) or node.orelse or len(node.body) != 1:
+        return False
+    stmt = node.body[0]
+    if not isinstance(stmt, ast.Raise) or stmt.cause is not None:
+        return False
+    call = stmt.exc
+    if not (isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name) and call.func.id == 'SystemExit'
+            and len(call.args) == 1 and not call.keywords):
+        return False
+    arg = call.args[0]
+    return (isinstance(arg, ast.Call)
+            and isinstance(arg.func, ast.Name) and arg.func.id == 'main'
+            and not arg.args and not arg.keywords)
+
+
 def audit(root):
     """Fail closed on a missing source or any malformed Python before Docker."""
     directory = Path(root)
@@ -66,6 +84,10 @@ def audit(root):
             main_guards = [node for node in tree.body if _is_main_guard(node)]
             if len(main_guards) != 1 or not _is_main_guard(tree.body[-1]):
                 raise SourceDenied('RUNNER_MAIN_GUARD_NOT_UNIQUE_OR_TERMINAL')
+            if (not _is_executable_main_entrypoint(tree.body[-1])
+                    or not any(isinstance(node, ast.FunctionDef)
+                               and node.name == 'main' for node in tree.body)):
+                raise SourceDenied('RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE')
     return {
         'schema': 'TELMIVO_LIC_A9_PHASE11_PYTHON_SOURCE_GATE_V1',
         'verdict': 'SYNTAX_AND_RUNNER_ENTRYPOINT_PASS_ONLY',

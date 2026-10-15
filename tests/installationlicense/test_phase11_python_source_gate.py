@@ -20,7 +20,9 @@ class Phase11SourceGateTests(unittest.TestCase):
         for name in gate.REQUIRED:
             (self.root / name).write_text('value = 1\n', encoding='utf-8')
         self.runner = self.root / gate.RUNNER
-        self.runner.write_text("value = 1\nif __name__ == '__main__':\n    value = 2\n")
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n"
+                               "    raise SystemExit(main())\n")
 
     def test_good_source_inventory_is_syntax_only(self):
         result = gate.audit(self.root)
@@ -28,6 +30,51 @@ class Phase11SourceGateTests(unittest.TestCase):
         self.assertEqual(result['inspected_files'], len(gate.REQUIRED))
         self.assertFalse(result['go_pg16_e2e_executed'])
         self.assertFalse(result['production_authorized'])
+
+    def test_main_guard_that_only_passes_is_denied(self):
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n    pass\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
+
+    def test_main_guard_that_only_exits_zero_is_denied(self):
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n    raise SystemExit(0)\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
+
+    def test_main_guard_wrong_function_name_denied(self):
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n    raise SystemExit(skip_checks())\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
+
+    def test_main_guard_additional_statement_denied(self):
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n"
+                               "    log_ahead()\n    raise SystemExit(main())\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
+
+    def test_main_guard_else_branch_denied(self):
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n"
+                               "    raise SystemExit(main())\nelse:\n    unapproved()\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
+
+    def test_main_guard_calls_main_with_fake_args_denied(self):
+        self.runner.write_text("def main():\n    return 0\n"
+                               "if __name__ == '__main__':\n"
+                               "    raise SystemExit(main('--skip-e2e'))\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
+
+    def test_no_main_definition_denied(self):
+        self.runner.write_text("if __name__ == '__main__':\n"
+                               "    raise SystemExit(main())\n")
+        with self.assertRaisesRegex(gate.SourceDenied, 'RUNNER_MAIN_ENTRYPOINT_NOT_EXECUTABLE'):
+            gate.audit(self.root)
 
     def test_stray_duplicate_invalid_tail_is_rejected(self):
         with self.runner.open('a') as f:
