@@ -30,6 +30,9 @@ from phase11_python_source_gate import audit as audit_python_sources
 from phase13_offline_go_policy import (
     validate_go_network, offline_go_env_flags, audit_go_docker_argv,
 )
+from phase15_reviewed_module_cache import (
+    reviewed_module_pin, stage_approved_module_cache,
+)
 
 GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
@@ -260,6 +263,10 @@ def main(argv=None) -> int:
     parser.add_argument('--expected-product-head', help='independently reviewed Product commit SHA')
     parser.add_argument('--expected-go-image-id', help='out-of-band approved local Go Docker image ID')
     parser.add_argument('--expected-pg-image-id', help='out-of-band approved local PG Docker image ID')
+    parser.add_argument('--reviewed-module-cache', type=Path, required=True,
+                        help='absolute independently provisioned nonproduction GOMODCACHE path')
+    parser.add_argument('--expected-module-cache-sha256', required=True,
+                        help='independently reviewed sha256 digest of Go module file inventory')
     args = parser.parse_args(argv)
     authority, product = args.authority.resolve(), args.product.resolve()
     pg_container = None
@@ -281,6 +288,7 @@ def main(argv=None) -> int:
         audit_python_sources(product / 'tests/installationlicense')
         approved_go = reviewed_image_id(args.expected_go_image_id)
         approved_pg = reviewed_image_id(args.expected_pg_image_id)
+        module_pin = reviewed_module_pin(args.expected_module_cache_sha256)
         endpoint = run(['docker', 'context', 'inspect', '--format',
                         '{{ .Endpoints.docker.Host }}'], output=True).stdout.strip()
         if not re.fullmatch(r'unix:///[\w./-]+\.sock', endpoint):
@@ -294,6 +302,11 @@ def main(argv=None) -> int:
             fixture = Path(temp) / 'fixture'
             cache = Path(temp) / 'go_cache'
             cache.mkdir()
+            # Stage and verify separately reviewed modules before any Go/PG
+            # container runs. The previous empty GOMODCACHE made offline
+            # compilation fail whenever dependencies were not already present.
+            stage_approved_module_cache(args.reviewed_module_cache,
+                                        cache / 'mod', module_pin)
             prepare = product / 'tests/installationlicense/prepare_authority_fixture.py'
             run([sys.executable, '-B', str(prepare), str(authority), str(fixture)], timeout=90)
             install_a9_fixture(product, fixture)
