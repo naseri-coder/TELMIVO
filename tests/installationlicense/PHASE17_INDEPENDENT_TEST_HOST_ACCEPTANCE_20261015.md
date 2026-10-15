@@ -78,3 +78,27 @@ The full production release also requires independent recovery, live installer v
 | Real server, live data, signing keys or `main` mutations | NONE |
 
 **Stop at Phase17.** Do not mark it as actual infrastructure provisioning or advance to Phase18 until the independent host is designated and its prerequisites are genuinely satisfied.
+
+---
+
+## Phase18 — attempted full Python suite and real Go/PG16 E2E (2026-10-15)
+
+**Decision: BLOCKED, do not certify E2E or advance to release.** This section records actual execution rather than creating more simulated “passed E2E” tests.
+
+**Exact source parents:** TELMIVO Phase17 Draft PR #71 = `36b3fb75e8817908aa0083b84f1509d7142eb801`; hardened Product runtime PR #61 = `d88fdb2e4d34f18e8f9c8313f73db5b14a077d5a`; Authority Phase07 Draft PR #55 = `bfceaef06d41aa185677a796652d17b07979058a`. All remain unmerged. No deployment, build of the real source, production signing, live user DB or main-branch edits took place.
+
+**What was executed in isolated model-owned Linux:**
+- The six existing Python unittest groups (Phases 09, 10, 12, 13, 15, 17) were re-executed: **114 tests PASS, 0 failures**. These are real executions of limited local tests, not full commercial client/Authority runtime verification.
+- Direct GitHub connector retrieval enabled *16 out of 20* required Python source/tool/test files to be placed in a disposable local checkout. Every one of the 16 exact files matched its GitHub **Git Blob SHA**, and **16/16 passed `ast.parse`**. The four required absent files are `run_joint_docker_only_e2e.py`, `run_joint_postgres_e2e.py`, `test_joint_docker_only_e2e.py` and `test_joint_runner.py`.
+- An actual `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s . -p 'test_*.py' -v` on the **incomplete** test checkout **returned exit 1**: 115 discovery results, **114 successful tests and 1 import error** from `test_phase02_authority_pin.py` because `run_joint_postgres_e2e` was not locally materialized. Its real Go/Python runner test cases were therefore **not loaded**, not “passed”.
+- The complete Python source inventory gate correctly returned **SOURCE_DENIED / PYTHON_SOURCE_INVENTORY_INCOMPLETE (exit 3)**. It was not bypassed and no valid pass assertion was created.
+- Local nonproduction host gate returned **BLOCKED_NONPRODUCTION_HOST_PREREQUISITES (exit 3)** due precisely to `DOCKER_CLI_NOT_INSTALLED` and `LOCAL_DOCKER_SOCKET_MISSING`. Go locally is 1.23.2, not the required Docker Go 1.27.2; genuine PostgreSQL16 is absent.
+- The 8 real cross-repository Go1.27.2/PG16 integration cases including lease, restart and anti-clone **NOT_RUN**. Source download via direct GitHub DNS failed locally; the connected GitHub plugin was read-only for source verification. No Production device was used.
+
+**Evidence stored with the response:** `LIC_A9_PHASE18_CURRENT_STATUS_FA.md` and `LIC_A9_PHASE18_CURRENT_EVIDENCE.zip` include the raw 115-discovery run showing the one ImportError, 114-unit recheck log, 16 Git Blob inventory, source gate, host gate and SHA256 manifests. They are **local model-produced evidence**, not CI artifacts or test results from an independent production-equivalent host.
+
+**No test-only executable runtime files changed in this Phase18 PR.** Append this audit only to this already allowlisted document, preserving exactly **32 changed test/docs paths** against hardened PR61 and the Phase17 source-fence integrity. No files outside `tests/installationlicense/`, no `go.mod`, `go.sum`, `internal/`, `deploy/`, DB, secrets or `main` changed.
+
+**Blocking prerequisite before claiming Phase18 complete:** an owner-approved, isolated, independently reviewed disposable host with local Docker Unix socket, clean actual private Product and Authority checkouts at exact SHAs, externally reviewed Go/PG16 image IDs and full module cache. Run full source AST and all Python tests until PASS, then **8 genuine named Go run/pass events and successful PG cleanup**. Only those events can qualify the integration. Continue the security/fault matrix afterward; do not relabel the current partial result as E2E PASS.
+
+**Verdict:** `PHASE18_114_UNIT_PASS` / `PHASE18_PARTIAL_CHECKOUT_16_OF_20_VERIFIED` / `FULL_PYTHON_SUITE_INCOMPLETE_1_IMPORT_ERROR` / `REAL_GO1272_PG16_E2E_NOT_RUN` / `PRODUCTION_NO_GO`.
