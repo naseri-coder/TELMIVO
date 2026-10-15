@@ -34,7 +34,7 @@ PGDATA_TEST_ONLY = '/tmp/lic-a9-postgres-data'
 PG_TMPFS = '/tmp:rw,nosuid,nodev,size=256m,mode=1777'
 
 
-def disposable_pg_command(container: str, *, image: str = PG_IMAGE) -> list[str]:
+def disposable_pg_command(container: str, *, image: str) -> list[str]:
     """Unprivileged, fully ephemeral PG16 on an isolated network namespace.
 
     The official PG16 image declares a default data VOLUME. Running as the
@@ -44,8 +44,7 @@ def disposable_pg_command(container: str, *, image: str = PG_IMAGE) -> list[str]
     """
     if not re.fullmatch(r'lic-a9-joint-[0-9a-f]{12}', container):
         raise ValueError('unreviewed disposable PostgreSQL container name')
-    if image != PG_IMAGE:
-        reviewed_image_id(image)
+    reviewed_image_id(image)
     return [
         'docker', 'run', '--pull=never', '-d', '--rm', '--name', container,
         '--user', 'postgres', '--cap-drop', 'ALL',
@@ -215,14 +214,13 @@ def safe_failed_e2e_summary(exc: subprocess.CalledProcessError) -> str:
 
 def go_docker_command(fixture: Path, product: Path, cache: Path,
                       network: str, command: list[str], *,
-                      image: str = GO_IMAGE) -> list[str]:
+                      image: str) -> list[str]:
     """Never mount host credentials; source product read-only and caches disposable."""
     if network != 'bridge' and not re.fullmatch(r'container:lic-a9-joint-[a-f0-9]{12}', network):
         raise ValueError('only disposable network namespaces are supported')
     if any(not p.is_absolute() for p in (fixture, product, cache)):
         raise ValueError('Docker source mounts must be absolute')
-    if image != GO_IMAGE:
-        reviewed_image_id(image)
+    reviewed_image_id(image)
     return [
         'docker', 'run', '--pull=never', '--rm', '--network', network,
         '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL',
