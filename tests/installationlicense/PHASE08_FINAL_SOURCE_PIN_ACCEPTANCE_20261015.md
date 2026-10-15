@@ -41,7 +41,7 @@ The exact expected Phase08 changed-file inventory is the set defined in `EXPECTE
 
 - GitHub connector checked Phase07 Authority PR55 and Product PR61 exact immutable heads, their unmerged status and current Phase02 PR60/Phase2L PR59 templates.
 - Direct GitHub diff on this branch proved the new delta contains only reviewed `tests/installationlicense/` paths. Static source checks for final commit SHA pins, exact clean-worktree/diff fence, pinned fixture hash, unchanged original A9 template, current Authority archive and unchanged Product operational code passed.
-- Python synthetic source-pin tests, created for this phase, are **not a substitute for compiled Go**; report separate local execution evidence only if actually run.
+- Python synthetic source-pin tests, created for this phase, are **not a substitute for compiled Go**. The complete branch's unittest suite was NOT_RUN. A separately authored independent local mirror of the exact diff/ancestor/clean-worktree algorithm was executed in disposable Git repositories: **13/13 PASS, 0 failures**; local log SHA256 `c26e0f5adab8db26375b743c7dc95b4bbdd1ef920c58ed24d51768626b6ebc8b`. This demonstrates only guard semantics, not complete checked-out source operation.
 - The current execution environment has Go `go1.23.2` and no Docker CLI, PostgreSQL16 or authenticated access to the private source through a local Git checkout. **The real Go1.27.2/PG16 cross-repository tests were NOT_RUN**.
 - Full Authority Go>=1.25, Product Go1.27.2, operator PG16, two-cluster age restore, authenticated independent keeper and Ubuntu installer/release qualification remain blocked by the same nonproduction infrastructure limits as Phase07.
 
@@ -70,7 +70,8 @@ Verify Docker only via a local Unix socket, use pinned Go1.27.2 and PG16, preser
 | Product hardened PR61 source is branch ancestor; no runtime diff | IMPLEMENTED (GitHub verified) |
 | Exact 11-file test-only product allowlist + clean worktree | IMPLEMENTED (negative test fixtures committed) |
 | Previous stale Authority archive can no longer qualify | IMPLEMENTED |
-| Real isolated Python source-fence suite on final branch | PENDING execution on full checkout |
+| Independent local synthetic exact-source Git fence mirror | 13/13 PASS (separate reimplementation) |
+| Real complete Python source-fence suite on final branch | NOT_RUN (private checkout inaccessible locally) |
 | Real Go1.27.2 + PG16 eight named test run/pass events | NOT_RUN |
 | Full Go unit/race and independent anti-clone security fault matrix | NOT_RUN |
 | Production/main modifications | NONE |
