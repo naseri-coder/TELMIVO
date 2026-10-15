@@ -51,8 +51,12 @@ def audit_go_docker_argv(argv: list[str]) -> None:
             if i + 1 >= len(argv):
                 raise ValueError('incomplete Docker environment argument')
             env.append(argv[i + 1])
-        if token in ('--publish', '-p', '--publish-all', '-P', '--network=host'):
-            raise ValueError('published port or host network forbidden')
+        if (token in ('--publish', '-p', '--publish-all', '-P', '--net',
+                       '--cap-add', '--privileged')
+                or token.startswith(('--network=', '--net=', '--publish=',
+                                     '-p=', '--env=', '-e=', '--cap-add=',
+                                     '--privileged='))):
+            raise ValueError('Docker override of isolation policy is forbidden')
     for name in ('GOTOOLCHAIN', 'GOWORK', 'GOTELEMETRY', 'GOPROXY', 'GOSUMDB'):
         values = [entry for entry in env if entry.split('=', 1)[0] == name]
         if len(values) != 1 or values[0] != next(x for x in OFFLINE_ENV if x.startswith(name + '=')):
