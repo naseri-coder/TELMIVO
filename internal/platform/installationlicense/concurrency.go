@@ -62,7 +62,7 @@ func (m *Manager) acquireRefreshLeader() (*os.File, error) {
 	}
 	f := os.NewFile(uintptr(fd), "refresh-leader")
 	var st syscall.Stat_t
-	if syscall.Fstat(fd, &st) != nil || st.Mode&syscall.S_IFMT != syscall.S_IFREG || st.Mode&0077 != 0 || int(st.Uid) != os.Geteuid() {
+	if syscall.Fstat(fd, &st) != nil || st.Mode&syscall.S_IFMT != syscall.S_IFREG || st.Nlink != 1 || st.Mode&0077 != 0 || int(st.Uid) != os.Geteuid() {
 		f.Close()
 		return nil, ErrState
 	}
