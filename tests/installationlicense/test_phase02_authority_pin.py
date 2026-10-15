@@ -1,9 +1,7 @@
-"""Offline/nonproduction exact-source fence tests for Phase02 joint E2E.
+"""Phase08 exact-current-Authority source pin and no-stale-archive regression tests.
 
-Never connects to Authority, Docker, PostgreSQL or production. All Git worktrees
-are synthetic and created under a temporary directory.
+All Git trees are disposable synthetic fixtures. No network or PostgreSQL.
 """
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -12,131 +10,85 @@ import unittest
 import run_joint_postgres_e2e as runner
 
 
-EXPECTED_FILES = frozenset({
-    "docs/development/LIC_A9_PHASE01_CANONICAL_CONSOLIDATION_20261015.md",
-    "docs/development/LIC_A9_PHASE2B_AUTHORITY_PG16_CI_BLOCKER_20261014.md",
-    "docs/release/lic-a9-offline-preinstall-bundle-check.md",
-    "internal/domain/phase2b_safety_test.go",
-    "tests/online_install_bundle_test.py",
-    "tests/release_test.py",
-    "tools/build-release",
-    "tools/verify-online-install-bundle",
-})
+def git(root, *args):
+    return subprocess.run(['git', '-C', str(root), *args], check=True,
+                          text=True, capture_output=True).stdout.strip()
 
 
-def cmd(directory, *argv):
-    return subprocess.run(
-        ["git", "-C", str(directory), *argv], check=True,
-        text=True, capture_output=True,
-    ).stdout.strip()
-
-
-class Phase02AuthorityPinTests(unittest.TestCase):
-    def test_frozen_canonical_authority_pins_and_exact_allowlist(self):
-        self.assertEqual(
-            runner.AUTHORITY_MERGED_SHA,
-            "d4cff712d39e21f934afb0f43ee36a376f1e5345",
-        )
-        self.assertEqual(
-            runner.AUTHORITY_ARCHIVE_SHA,
-            "68cdb6996f85981c36dd20ecb7435ec010351e9b",
-        )
-        self.assertEqual(runner.EXPECTED_AUTHORITY_NONRUNTIME_DELTA, EXPECTED_FILES)
-        self.assertTrue(all(path.startswith(("docs/", "tests/", "tools/"))
-                            or path == "internal/domain/phase2b_safety_test.go"
-                            for path in EXPECTED_FILES))
-        self.assertFalse(any(path.startswith((
-            "cmd/", "db/", "deploy/", "internal/m2m/", "internal/store/",
-            "pkg/", "internal/operator/",
-        )) for path in EXPECTED_FILES))
+class FinalAuthoritySourcePinTests(unittest.TestCase):
+    def test_fixed_source_and_fixture_represent_same_real_phase07_head(self):
+        selected = 'bfceaef06d41aa185677a796652d17b07979058a'
+        self.assertEqual(runner.AUTHORITY_MERGED_SHA, selected)
+        self.assertEqual(runner.AUTHORITY_ARCHIVE_SHA, selected)
+        self.assertEqual(runner.EXPECTED_AUTHORITY_NONRUNTIME_DELTA, frozenset())
+        self.assertEqual(runner.PRODUCT_MERGED_SHA,
+                         'd88fdb2e4d34f18e8f9c8313f73db5b14a077d5a')
+        self.assertEqual(runner.FIXTURE_PREPARER_BLOB,
+                         '816456d387c8e231f1c469c668e01c722e8b5a32')
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="lic-a9-phase02-pin-test-only-")
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        cmd(self.root, "init", "-q")
-        cmd(self.root, "config", "user.name", "Synthetic Test")
-        cmd(self.root, "config", "user.email", "synthetic@example.invalid")
-        self.write("README.md", "TEST_ONLY baseline\n")
-        self.commit()
-        self.archive = cmd(self.root, "rev-parse", "HEAD")
+        self.temp = tempfile.TemporaryDirectory(prefix='lic-a9-phase08-source-')
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        git(self.root, 'init', '-q')
+        git(self.root, 'config', 'user.name', 'Synthetic Fixture')
+        git(self.root, 'config', 'user.email', 'fixture@example.invalid')
+        (self.root / 'README.txt').write_text('TEST_ONLY\n')
+        git(self.root, 'add', '-A')
+        git(self.root, 'commit', '-qm', 'TEST_ONLY baseline')
+        self.base = git(self.root, 'rev-parse', 'HEAD')
 
-    def write(self, relative, content="TEST_ONLY\n"):
-        path = self.root / relative
+    def change(self, name, payload='TEST_ONLY\n'):
+        path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_text(payload)
+        git(self.root, 'add', '-A')
+        git(self.root, 'commit', '-qm', 'TEST_ONLY modification')
+        return git(self.root, 'rev-parse', 'HEAD')
 
-    def commit(self):
-        cmd(self.root, "add", "-A")
-        cmd(self.root, "commit", "-qm", "TEST_ONLY synthetic provenance")
-
-    def test_accepts_exact_eight_path_synthetic_delta(self):
-        for path in sorted(EXPECTED_FILES):
-            self.write(path)
-        self.commit()
-        merged = cmd(self.root, "rev-parse", "HEAD")
+    def test_identical_commit_is_admissible_fixture_source(self):
         runner.validate_authority_archive_provenance(
-            self.root, self.archive, merged, EXPECTED_FILES,
-        )
+            self.root, self.base, self.base, frozenset())
 
-    def test_rejects_subset_even_if_only_safe_paths(self):
-        for path in sorted(EXPECTED_FILES - {"tools/build-release"}):
-            self.write(path)
-        self.commit()
+    def test_stale_archive_rejected_even_for_docs_only(self):
+        fresh = self.change('docs/other.md')
         with self.assertRaises(ValueError):
             runner.validate_authority_archive_provenance(
-                self.root, self.archive, cmd(self.root, "rev-parse", "HEAD"),
-                EXPECTED_FILES,
-            )
+                self.root, self.base, fresh, frozenset())
 
-    def test_rejects_added_runtime_go_file(self):
-        for path in sorted(EXPECTED_FILES):
-            self.write(path)
-        self.write("internal/m2m/server.go", "package m2m\n")
-        self.commit()
+    def test_added_runtime_go_source_rejected(self):
+        fresh = self.change('internal/m2m/server.go', 'package m2m\n')
         with self.assertRaises(ValueError):
             runner.validate_authority_archive_provenance(
-                self.root, self.archive, cmd(self.root, "rev-parse", "HEAD"),
-                EXPECTED_FILES,
-            )
+                self.root, self.base, fresh, frozenset())
 
-    def test_rejects_added_migration_and_deploy_paths(self):
-        for extra in ("db/migrations/0009_unsafe.sql", "deploy/api.service"):
-            with self.subTest(extra=extra):
-                branch_root = self.root / extra
-                for path in sorted(EXPECTED_FILES):
-                    self.write(path)
-                self.write(extra)
-                self.commit()
-                with self.assertRaises(ValueError):
-                    runner.validate_authority_archive_provenance(
-                        self.root, self.archive, cmd(self.root, "rev-parse", "HEAD"),
-                        EXPECTED_FILES,
-                    )
-                branch_root.unlink()
-
-    def test_disallows_unreviewed_test_or_tool_even_if_nonruntime(self):
-        for path in EXPECTED_FILES:
-            self.write(path)
-        self.write("tools/optional-bypass", "TEST_ONLY malicious extra\n")
-        self.commit()
+    def test_new_sql_migration_rejected(self):
+        fresh = self.change('db/migrations/0009_unreviewed.sql', 'SELECT 1;\n')
         with self.assertRaises(ValueError):
             runner.validate_authority_archive_provenance(
-                self.root, self.archive, cmd(self.root, "rev-parse", "HEAD"),
-                EXPECTED_FILES,
-            )
+                self.root, self.base, fresh, frozenset())
 
-    def test_git_checkout_requires_exact_clean_commit(self):
-        self.write("test-note.txt", "TEST_ONLY commit marker\n")
-        self.commit()
-        merged = cmd(self.root, "rev-parse", "HEAD")
-        runner.check_checkout(self.root, merged)
+    def test_added_deploy_script_rejected(self):
+        fresh = self.change('deploy/service.sh')
         with self.assertRaises(ValueError):
-            runner.check_checkout(self.root, self.archive)
-        self.write("untracked", "TEST_ONLY")
+            runner.validate_authority_archive_provenance(
+                self.root, self.base, fresh, frozenset())
+
+    def test_added_test_tool_rejected(self):
+        fresh = self.change('tests/skip.py')
         with self.assertRaises(ValueError):
-            runner.check_checkout(self.root, merged)
+            runner.validate_authority_archive_provenance(
+                self.root, self.base, fresh, frozenset())
+
+    def test_checkout_rejects_old_head_and_untracked_material(self):
+        fresh = self.change('new.txt')
+        runner.check_checkout(self.root, fresh)
+        with self.assertRaises(ValueError):
+            runner.check_checkout(self.root, self.base)
+        (self.root / 'untracked').write_text('TEST_ONLY\n')
+        with self.assertRaises(ValueError):
+            runner.check_checkout(self.root, fresh)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
