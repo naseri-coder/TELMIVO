@@ -30,6 +30,9 @@ type Client struct {
 }
 
 func NewClient(m *Manager) (*Client, error) {
+	if m == nil {
+		return nil, ErrState
+	}
 	u, e := url.Parse(m.cfg.URL)
 	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
 		return nil, ErrState
