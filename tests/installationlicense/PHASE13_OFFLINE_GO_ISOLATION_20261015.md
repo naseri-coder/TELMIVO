@@ -57,3 +57,22 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -v \
 - Signed production installer, independent disaster-recovery/custody keeper, security review and explicit human release approval remain separate blocked gates.
 
 **Do not merge, deploy, sign, or report production readiness.** This is an offline test-runner security improvement only.
+
+
+---
+
+## Phase14 — actual E2E execution decision (2026-10-15)
+
+**NO-GO: `PHASE14_HOST_BLOCKED`; do not claim real Go/PostgreSQL test execution.** This audit is an appendix rather than an additional tracked file so the exact **24-path** Product PR61 source-diff allowlist remains valid without changing code.
+
+**Pinned parents:** Draft PR #67 TELMIVO `14d72d2b0466eed19aef462e5fa0aa8284068474` (still Draft, unmerged), hardened Product PR #61 `d88fdb2e4d34f18e8f9c8313f73db5b14a077d5a`, Authority PR #55 `bfceaef06d41aa185677a796652d17b07979058a`.
+
+**Observed model-owned isolated host:** Python 3.13.5; Git installed; Go 1.23.2. Docker CLI **ABSENT**, Docker socket **ABSENT**, Podman **ABSENT**, PostgreSQL (`postgres`, `initdb`, `psql`) **ABSENT**, `age` **ABSENT**; GitHub DNS **FAILED**. Authenticated complete private Product/Authority checkout **ABSENT**. This environment is explicitly not a designated production Authority host or TELMIVO server. Exact PR67 SHA returned **zero PR-triggered GitHub Actions workflow runs** in the checked query; no CI workflow was launched here.
+
+**Executed instead (not substitute E2E):** the preserved exact-file Phase09/10/12/13 Python policy test suites were rerun on local isolated copies (9+12+20+26 = **67/67 PASS, 0 FAIL**). These are narrow local unit/synthetic tests, already covered in Phase13; no real Go/PG16 integration behavior was executed or certified. Observed log SHA256: `9544127248e79ba369f84c09dc168b2d6586e6ed93487cc2e373048c9a5015b7`. Read-only host preflight evidence SHA256: `606072c5bb1c9a8252180ee1e804233417bd19a99320319c3221b75ec38fb16b`.
+
+**Not executed:** full exact private branch Python unittest suite; Phase11 AST scan over all current private branch files; Go 1.27.2 compilation of real combined Authority/client; Docker PostgreSQL16 startup; 8 real LIC-A8/A9 test `run/pass` events; full lease/clone/replay/fault matrix; independent offsite/last-known-good keeper; Ubuntu live installer and signed release. They all remain **NOT_RUN/NOT_CERTIFIED**.
+
+**Required next real proof:** an independently designated, owner-authorized **disposable nonproduction** Linux workstation with clean exact git checkouts (Authority PR55 SHA and Product final approved Phase14 SHA), local Unix Docker socket, independently approved immutable Go/PG image IDs, preloaded reviewed Go module cache, no production secrets, host/port publication or remote Docker context. Use the existing `phase11_python_source_gate.py` then `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests/installationlicense -p 'test_*.py' -v` on a clean checkout; only if PASS, invoke `run_joint_docker_only_e2e.py` with real independently approved source/head/image pins and `--acknowledge-disposable-host`. Record actual all-eight `run/pass` events and PostgreSQL cleanup before release planning. Never invent pins, weaken the offline checks, or run this on the main TELMIVO VPS.
+
+**Phase14 verdict:** `ENVIRONMENT_DIAGNOSIS_COMPLETE` / `LIMITED_LOCAL_UNIT_67_PASS` / `FULL_PYTHON_SUITE_NOT_RUN` / `REAL_CROSSREPO_E2E_NOT_RUN` / `PRODUCTION_NO_GO`.
