@@ -21,7 +21,7 @@ The Phase09 runner already required clean, reviewed Phase07 Authority source, a 
    - `--expected-go-image-id`: reviewed local Docker image ID for `golang:1.27.2-bookworm`.
    - `--expected-pg-image-id`: reviewed local Docker image ID for `postgres:16`.
 3. After the old source/clean-worktree/allowed-delta checks, the runner calls `check_checkout(product, expected_product_head)` **before Docker**. Absent/wrong pins and changed HEAD refuse. It inspects both preloaded local image labels and matches them to the independently supplied IDs before starting any container.
-4. All Go and PG16 `docker run` invocations from the real runner now use the **immutable approved image ID** rather than the mutable tag, and include `--pull=never`. The existing local Docker Unix-socket and private PG16 `--network none`, ephemeral `PGDATA` tmpfs and cleanup constraints remain unchanged. Docker will not implicitly fetch or switch an image to satisfy the test.
+4. All Go and PG16 `docker run` invocations from the real runner now use the **immutable approved image ID** rather than the mutable tag, and include `--pull=never`. Both command builders now require an explicit keyword-only `image` argument validated as a 64-digit SHA-256 Docker image ID: there is no tag-default fallback, and a direct call with a mutable tag is refused. The existing local Docker Unix-socket and private PG16 `--network none`, ephemeral `PGDATA` tmpfs and cleanup constraints remain unchanged. Docker will not implicitly fetch or switch an image to satisfy the test.
 5. `test_joint_docker_only_e2e.py`: updated mocked runner test scenarios to model image inspection and assert exact HEAD check, no pulling, unchanged image IDs, precontainer refusal on incorrect pin, and exact cleanup.
 6. The exact changed path allowlist now comprises **17 literal files** under `tests/installationlicense/`; `test_phase08_refreeze.py` expects exactly 17. No `internal/`, `go.mod`, `go.sum`, `deploy/` or production mutation.
 7. Added `test_phase10_image_identity.py`: **12 real isolated Python3.13.5 unittest cases** executed locally, validating strict pin formats, image comparison, changed-tag refusal, missing-image failure and no shell execution. Source/test Git blob values have been matched byte-for-byte to GitHub:
@@ -54,6 +54,8 @@ python3 -B tests/installationlicense/run_joint_docker_only_e2e.py \
 ```
 
 Those illustrative argument placeholders are deliberately **not** valid hashes: the program must refuse them. An independent image-config ID validates bytes relative to the review pin but is **not** a signed registry manifest, software supply-chain attestation, or proof that an entire Docker daemon is trustworthy. Retain source commit, manifest digest, registry attestation, expected architecture and compiler module integrity evidence separately. Docker tags must be downloaded and reviewed **before** test execution on an isolated machine, not implicitly pulled by the runner.
+
+GitHub inspection of the final candidate also verified the exact 17-path Product PR61 ancestry diff and nine additional source-level checks concerning the mandatory immutable-image arguments; those structural checks do not establish actual Docker execution.
 
 ## Remaining non-waivable blockers
 
