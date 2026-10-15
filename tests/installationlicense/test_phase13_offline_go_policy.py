@@ -94,6 +94,30 @@ class OfflineGoPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audit_go_docker_argv(valid_args() + [None])
 
+    def test_network_equals_alias_cannot_override_isolation(self):
+        with self.assertRaises(ValueError):
+            audit_go_docker_argv(valid_args() + ['--network=bridge'])
+
+    def test_docker_net_alias_cannot_override_isolation(self):
+        with self.assertRaises(ValueError):
+            audit_go_docker_argv(valid_args() + ['--net=host'])
+
+    def test_env_equals_proxy_override_fails_closed(self):
+        with self.assertRaises(ValueError):
+            audit_go_docker_argv(valid_args() + ['--env=GOPROXY=https://proxy.invalid'])
+
+    def test_cap_add_alias_fails_closed(self):
+        with self.assertRaises(ValueError):
+            audit_go_docker_argv(valid_args() + ['--cap-add=SYS_ADMIN'])
+
+    def test_privileged_true_fails_closed(self):
+        with self.assertRaises(ValueError):
+            audit_go_docker_argv(valid_args() + ['--privileged=true'])
+
+    def test_publish_equals_fails_closed(self):
+        with self.assertRaises(ValueError):
+            audit_go_docker_argv(valid_args() + ['--publish=5432:5432'])
+
     def test_missing_network_fails_closed(self):
         argv = valid_args()
         i = argv.index('--network')
