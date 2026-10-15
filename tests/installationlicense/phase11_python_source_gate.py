@@ -27,6 +27,8 @@ REQUIRED = frozenset({
     'test_phase11_python_source_gate.py',
     'phase13_offline_go_policy.py',
     'test_phase13_offline_go_policy.py',
+    'phase15_reviewed_module_cache.py',
+    'test_phase15_reviewed_module_cache.py',
 })
 
 
