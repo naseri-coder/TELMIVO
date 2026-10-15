@@ -26,6 +26,7 @@ from phase10_image_identity import (
     GO_TAG, POSTGRES_TAG, reviewed_image_id, reviewed_product_head,
     inspect_pinned_image,
 )
+from phase11_python_source_gate import audit as audit_python_sources
 
 GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
@@ -272,6 +273,9 @@ def main(argv=None) -> int:
         # reviewer, not from the checkout being tested.
         expected_head = reviewed_product_head(args.expected_product_head)
         check_checkout(product, expected_head)
+        # Syntax and terminal main guard of all review-pinned Python test tools
+        # must pass before ANY connection to Docker is attempted.
+        audit_python_sources(product / 'tests/installationlicense')
         approved_go = reviewed_image_id(args.expected_go_image_id)
         approved_pg = reviewed_image_id(args.expected_pg_image_id)
         endpoint = run(['docker', 'context', 'inspect', '--format',
