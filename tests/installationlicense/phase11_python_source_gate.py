@@ -25,6 +25,8 @@ REQUIRED = frozenset({
     'test_phase10_image_identity.py',
     'phase11_python_source_gate.py',
     'test_phase11_python_source_gate.py',
+    'phase13_offline_go_policy.py',
+    'test_phase13_offline_go_policy.py',
 })
 
 
