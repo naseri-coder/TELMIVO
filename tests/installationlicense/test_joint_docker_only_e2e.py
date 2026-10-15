@@ -12,8 +12,14 @@ from unittest import mock
 import run_joint_docker_only_e2e as runner
 
 
+GO_PIN = 'sha256:' + 'a' * 64
+PG_PIN = 'sha256:' + 'b' * 64
+PRODUCT_HEAD_PIN = 'c' * 40
 ARGS = ['--authority', '/tmp/authority-fixture', '--product', '/tmp/product-fixture',
-        '--acknowledge-disposable-host']
+        '--acknowledge-disposable-host',
+        '--expected-product-head', PRODUCT_HEAD_PIN,
+        '--expected-go-image-id', GO_PIN,
+        '--expected-pg-image-id', PG_PIN]
 
 GO_DISCOVERY = "\n".join(sorted(runner.COMBINED_TESTS)) + "\nok\n"
 GO_SUCCESS_EVENTS = "\n".join(
@@ -39,9 +45,21 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(runner.GO_IMAGE, 'golang:1.27.2-bookworm')
         self.assertEqual(runner.PG_IMAGE, 'postgres:16')
 
+    def test_mutable_docker_tags_cannot_be_emitted(self):
+        with self.assertRaises(ValueError):
+            runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=runner.PG_IMAGE)
+        with self.assertRaises(ValueError):
+            runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
+                                     'bridge', ['go', 'version'], image=runner.GO_IMAGE)
+        with self.assertRaises(TypeError):
+            runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
+        with self.assertRaises(TypeError):
+            runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
+                                     'bridge', ['go', 'version'])
+
     def test_postgres_uses_ephemeral_tmpfs_instead_of_root_owned_image_volume(self):
-        argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
-        self.assertEqual(argv[:3], ['docker', 'run', '-d'])
+        argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=PG_PIN)
+        self.assertEqual(argv[:4], ['docker', 'run', '--pull=never', '-d'])
         self.assertIn('PGDATA=/tmp/lic-a9-postgres-data', argv)
         self.assertEqual(argv[argv.index('--tmpfs') + 1],
                          '/tmp:rw,nosuid,nodev,size=256m,mode=1777')
@@ -64,14 +82,16 @@ class DockerOnlyTests(unittest.TestCase):
                      'lic-a9-joint-aaaaaaaaaaaa-evil',
                      'lic-a9-joint-AAAAAAAAAAAA', 'lic-a9-joint-ffffffffffff/../'):
             with self.subTest(name=name), self.assertRaises(ValueError):
-                runner.disposable_pg_command(name)
+                runner.disposable_pg_command(name, image=PG_PIN)
 
     def test_postgres_startup_mock_enforces_tmpfs_before_e2e(self):
         status, calls = self.simulate()
         self.assertEqual(status, 0)
         pg = next(args for args in calls
-                  if args[:2] == ['docker', 'run'] and runner.PG_IMAGE in args)
-        self.assertEqual(pg, runner.disposable_pg_command(pg[pg.index('--name') + 1]))
+                  if args[:2] == ['docker', 'run'] and
+                  f'PGDATA={runner.PGDATA_TEST_ONLY}' in args)
+        self.assertEqual(pg, runner.disposable_pg_command(pg[pg.index('--name') + 1],
+                                                          image=PG_PIN))
         self.assertIn('--tmpfs', pg)
         self.assertLess(next(i for i, args in enumerate(calls) if args == pg),
                         next(i for i, args in enumerate(calls) if '-json' in args))
@@ -80,19 +100,19 @@ class DockerOnlyTests(unittest.TestCase):
     def test_prevents_remote_network_and_relative_mounts(self):
         for name in ['host', 'none', 'container:production', 'container:lic-a9-joint-bad']:
             with self.subTest(name=name), self.assertRaises(ValueError):
-                runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), name, ['go', 'version'])
+                runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), name, ['go', 'version'], image=GO_PIN)
         with self.assertRaises(ValueError):
-            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'])
+            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
 
     def test_mounts_product_read_only_without_host_secrets(self):
-        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'])
+        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
         self.assertIn('type=bind,src=/product,dst=/product,readonly', cmd)
         self.assertIn('--cap-drop', cmd)
         self.assertIn('ALL', cmd)
         self.assertIn('no-new-privileges', cmd)
         self.assertNotIn('-p', cmd)
         self.assertNotIn('/var/run/docker.sock', ' '.join(cmd))
-        self.assertEqual(cmd[-3:], [runner.GO_IMAGE, 'go', 'version'])
+        self.assertEqual(cmd[-3:], [GO_PIN, 'go', 'version'])
 
     def test_rejects_inherited_remote_docker_target_before_any_calls(self):
         with (mock.patch.dict(os.environ, {'DOCKER_HOST': 'ssh://server'}, clear=True),
@@ -117,6 +137,9 @@ class DockerOnlyTests(unittest.TestCase):
         calls = []
         def fake_run(argv, **kwargs):
             calls.append(list(argv))
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
             if argv[:3] == ['docker', 'context', 'inspect']:
                 return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
             if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
@@ -141,11 +164,88 @@ class DockerOnlyTests(unittest.TestCase):
             result = runner.main(ARGS)
         return result, calls
 
+    def test_disposable_commands_use_immutable_ids_with_never_pull(self):
+        code, calls = self.simulate()
+        self.assertEqual(code, 0)
+        images = [
+            c for c in calls
+            if c[:2] == ['docker', 'run']
+        ]
+        self.assertTrue(images)
+        for argv in images:
+            self.assertIn('--pull=never', argv)
+            self.assertTrue(GO_PIN in argv or PG_PIN in argv)
+            self.assertNotIn(runner.GO_IMAGE, argv)
+            self.assertNotIn(runner.PG_IMAGE, argv)
+        self.assertTrue(any(PG_PIN in argv and '--network' in argv for argv in images))
+
+    def test_product_head_check_receives_independent_pin(self):
+        def checked(_, ref):
+            if ref == PRODUCT_HEAD_PIN:
+                raise ValueError('independent pin rejects checkout')
+        with (mock.patch.object(runner, 'check_checkout', side_effect=checked) as check,
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run') as execute,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(ARGS)
+        self.assertEqual(status, 3)
+        execute.assert_not_called()
+        self.assertEqual(check.call_count, 2)
+        self.assertEqual(check.call_args_list[0].args[1], runner.AUTHORITY_MERGED_SHA)
+        self.assertEqual(check.call_args_list[1].args[1], PRODUCT_HEAD_PIN)
+
+    def test_unreviewed_product_sha_refuses_before_docker(self):
+        args = ARGS.copy()
+        args[args.index('--expected-product-head') + 1] = 'main'
+        with (mock.patch.object(runner, 'check_checkout') as check,
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run') as execute,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(args)
+        self.assertEqual(status, 3)
+        self.assertEqual(check.call_count, 1)
+        execute.assert_not_called()
+
+    def test_missing_image_review_pin_refuses_before_docker(self):
+        args = ARGS.copy()
+        args[args.index('--expected-go-image-id') + 1] = 'golang:1.27.2-bookworm'
+        with (mock.patch.object(runner, 'check_checkout') as check,
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run') as execute,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(args)
+        self.assertEqual(status, 3)
+        self.assertEqual(check.call_count, 2)
+        execute.assert_not_called()
+
+    def test_wrong_local_image_refuses_before_any_container(self):
+        commands = []
+        def fake_run(argv, **kwargs):
+            commands.append(argv)
+            if argv[:3] == ['docker', 'context', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock')
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(argv, 0, stdout='sha256:' + 'd' * 64)
+            return subprocess.CompletedProcess(argv, 0, stdout='')
+        with (mock.patch.object(runner, 'check_checkout'),
+              mock.patch.object(runner, 'validate_authority_archive_provenance'),
+              mock.patch.object(runner, 'check_product_checkout'),
+              mock.patch.object(runner, 'run', side_effect=fake_run),
+              mock.patch.object(runner, 'install_a9_fixture') as fixture,
+              contextlib.redirect_stderr(io.StringIO())):
+            status = runner.main(ARGS)
+        self.assertEqual(status, 3)
+        fixture.assert_not_called()
+        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in commands))
+
     def test_compiler_runs_before_unpublished_database(self):
         code, calls = self.simulate()
         self.assertEqual(code, 0)
         compiler = next(i for i, c in enumerate(calls) if '^$' in c)
-        pg_start = next(i for i, c in enumerate(calls) if c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c)
+        pg_start = next(i for i, c in enumerate(calls) if c[:2] == ['docker', 'run'] and f'PGDATA={runner.PGDATA_TEST_ONLY}' in c)
         discover = next(i for i, c in enumerate(calls) if '-list' in c)
         e2e = next(i for i, c in enumerate(calls) if '-json' in c)
         stop = next(i for i, c in enumerate(calls) if c[:2] == ['docker', 'stop'])
@@ -213,6 +313,9 @@ class DockerOnlyTests(unittest.TestCase):
         )) + '\n'
         def fake_run(argv, **kwargs):
             calls.append(list(argv))
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
             if argv[:3] == ['docker', 'context', 'inspect']:
                 return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
             if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
@@ -247,6 +350,9 @@ class DockerOnlyTests(unittest.TestCase):
             capture = io.StringIO()
             def fake_run(argv, **kwargs):
                 calls.append(list(argv))
+                if argv[:3] == ['docker', 'image', 'inspect']:
+                    return subprocess.CompletedProcess(
+                        argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
                 if argv[:3] == ['docker', 'context', 'inspect']:
                     return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
                 if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
@@ -283,12 +389,14 @@ class DockerOnlyTests(unittest.TestCase):
             with self.subTest(version=unsupported):
                 status, calls = self.simulate(go_version=f'go version go{unsupported} linux/amd64\n')
                 self.assertEqual(status, 3)
-                self.assertFalse(any(c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c for c in calls))
+                self.assertFalse(any(c[:2] == ['docker', 'run'] and
+                                    f'PGDATA={runner.PGDATA_TEST_ONLY}' in c for c in calls))
 
     def test_zero_discovered_tests_refuses_before_database(self):
         code, calls = self.simulate(missing_discovery=True)
         self.assertEqual(code, 3)
-        self.assertFalse(any(c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c for c in calls))
+        self.assertFalse(any(c[:2] == ['docker', 'run'] and
+                                    f'PGDATA={runner.PGDATA_TEST_ONLY}' in c for c in calls))
 
     def test_package_pass_without_test_passes_is_not_e2e_success(self):
         code, calls = self.simulate(missing_passes=True)

@@ -22,6 +22,10 @@ from run_joint_postgres_e2e import (
     AUTHORITY_MERGED_SHA, check_checkout, check_product_checkout,
     validate_authority_archive_provenance, run,
 )
+from phase10_image_identity import (
+    GO_TAG, POSTGRES_TAG, reviewed_image_id, reviewed_product_head,
+    inspect_pinned_image,
+)
 
 GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
@@ -30,7 +34,7 @@ PGDATA_TEST_ONLY = '/tmp/lic-a9-postgres-data'
 PG_TMPFS = '/tmp:rw,nosuid,nodev,size=256m,mode=1777'
 
 
-def disposable_pg_command(container: str) -> list[str]:
+def disposable_pg_command(container: str, *, image: str) -> list[str]:
     """Unprivileged, fully ephemeral PG16 on an isolated network namespace.
 
     The official PG16 image declares a default data VOLUME. Running as the
@@ -40,8 +44,9 @@ def disposable_pg_command(container: str) -> list[str]:
     """
     if not re.fullmatch(r'lic-a9-joint-[0-9a-f]{12}', container):
         raise ValueError('unreviewed disposable PostgreSQL container name')
+    reviewed_image_id(image)
     return [
-        'docker', 'run', '-d', '--rm', '--name', container,
+        'docker', 'run', '--pull=never', '-d', '--rm', '--name', container,
         '--user', 'postgres', '--cap-drop', 'ALL',
         '--network', 'none', '--security-opt', 'no-new-privileges',
         '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
@@ -50,7 +55,7 @@ def disposable_pg_command(container: str) -> list[str]:
         '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
         '-e', f'POSTGRES_DB={PG_DATABASE}',
         '-e', f'PGDATA={PGDATA_TEST_ONLY}',
-        PG_IMAGE,
+        image,
         '-c', 'shared_buffers=32MB', '-c', 'max_connections=35',
     ]
 
@@ -208,14 +213,16 @@ def safe_failed_e2e_summary(exc: subprocess.CalledProcessError) -> str:
 
 
 def go_docker_command(fixture: Path, product: Path, cache: Path,
-                      network: str, command: list[str]) -> list[str]:
+                      network: str, command: list[str], *,
+                      image: str) -> list[str]:
     """Never mount host credentials; source product read-only and caches disposable."""
     if network != 'bridge' and not re.fullmatch(r'container:lic-a9-joint-[a-f0-9]{12}', network):
         raise ValueError('only disposable network namespaces are supported')
     if any(not p.is_absolute() for p in (fixture, product, cache)):
         raise ValueError('Docker source mounts must be absolute')
+    reviewed_image_id(image)
     return [
-        'docker', 'run', '--rm', '--network', network,
+        'docker', 'run', '--pull=never', '--rm', '--network', network,
         '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL',
         '--pids-limit', '256', '--memory', '2g', '--cpus', '2',
         '--user', f'{os.getuid()}:{os.getgid()}',
@@ -226,7 +233,7 @@ def go_docker_command(fixture: Path, product: Path, cache: Path,
         '--env', 'HOME=/tmp', '--env', f'GOCACHE={cache}/build',
         '--env', f'GOMODCACHE={cache}/mod',
         '--env', 'GOTOOLCHAIN=local', '--env', 'GOWORK=off',
-        '--env', 'GOTELEMETRY=off', GO_IMAGE,
+        '--env', 'GOTELEMETRY=off', image,
         *command,
     ]
 
@@ -246,6 +253,9 @@ def main(argv=None) -> int:
     parser.add_argument('--authority', type=Path, required=True)
     parser.add_argument('--product', type=Path, required=True)
     parser.add_argument('--acknowledge-disposable-host', action='store_true', required=True)
+    parser.add_argument('--expected-product-head', help='independently reviewed Product commit SHA')
+    parser.add_argument('--expected-go-image-id', help='out-of-band approved local Go Docker image ID')
+    parser.add_argument('--expected-pg-image-id', help='out-of-band approved local PG Docker image ID')
     args = parser.parse_args(argv)
     authority, product = args.authority.resolve(), args.product.resolve()
     pg_container = None
@@ -257,11 +267,22 @@ def main(argv=None) -> int:
         check_checkout(authority, AUTHORITY_MERGED_SHA)
         validate_authority_archive_provenance(authority)
         check_product_checkout(product)
+        # Exact HEAD protects reviewed test-script bytes as well as the
+        # existing changed-path fence. The pin must come from an independent
+        # reviewer, not from the checkout being tested.
+        expected_head = reviewed_product_head(args.expected_product_head)
+        check_checkout(product, expected_head)
+        approved_go = reviewed_image_id(args.expected_go_image_id)
+        approved_pg = reviewed_image_id(args.expected_pg_image_id)
         endpoint = run(['docker', 'context', 'inspect', '--format',
                         '{{ .Endpoints.docker.Host }}'], output=True).stdout.strip()
         if not re.fullmatch(r'unix:///[\w./-]+\.sock', endpoint):
             raise ValueError('only local Unix Docker socket is permitted')
         run(['docker', 'info'], output=True)
+        # Inspect both locally preloaded tags before any container begins.
+        # Use their externally approved immutable IDs, never the mutable tags.
+        go_image = inspect_pinned_image(GO_TAG, approved_go, run)
+        pg_image = inspect_pinned_image(POSTGRES_TAG, approved_pg, run)
         with tempfile.TemporaryDirectory(prefix='lic-a9-docker-only-') as temp:
             fixture = Path(temp) / 'fixture'
             cache = Path(temp) / 'go_cache'
@@ -269,14 +290,85 @@ def main(argv=None) -> int:
             prepare = product / 'tests/installationlicense/prepare_authority_fixture.py'
             run([sys.executable, '-B', str(prepare), str(authority), str(fixture)], timeout=90)
             install_a9_fixture(product, fixture)
-            version = run(go_docker_command(fixture, product, cache, 'bridge', ['go', 'version']),
+            version = run(go_docker_command(fixture, product, cache, 'bridge', ['go', 'version'],
+                                               image=go_image),
                           output=True, timeout=180).stdout
             if not re.search(r'\bgo version go1\.27\.2\b', version):
                 raise ValueError('container Go version not exactly 1.27.2')
             # Compile all imported real sources and populate only an isolated Go cache,
             # BEFORE any PostgreSQL service exists. Failures are not called E2E PASS.
             run(go_docker_command(fixture, product, cache, 'bridge',
-                                  ['go', 'test', '-count=1', '-run', '^$', './authority']),
+                                  ['go', 'test', '-count=1', '-run', '^$', './authority'],
+                                  image=go_image),
+                timeout=420)
+            discovered = run(go_docker_command(
+                fixture, product, cache, 'bridge',
+                ['go', 'test', '-list', COMBINED_FILTER, './authority'],
+                 image=go_image),
+                output=True, timeout=240).stdout
+            require_six_discovered_tests(discovered)
+            require_a9_discovered_tests(discovered)
+            pg_container = 'lic-a9-joint-' + uuid.uuid4().hex[:12]
+            # Postgres is network-isolated: NO -p / exposed host port, even loopback.
+            # Official postgres entrypoint drops root via gosu, which needs
+            # CAP_SETUID/CAP_SETGID. Run directly as its built-in unprivileged
+            # postgres user so the container can safely drop ALL capabilities.
+            run(disposable_pg_command(pg_container, image=pg_image), timeout=180)
+            deadline = time.monotonic() + 60
+            while True:
+                ready = subprocess.run(['docker', 'exec', pg_container, 'pg_isready',
+                                        '-h', '127.0.0.1', '-U', 'postgres', '-d', PG_DATABASE],
+                                       capture_output=True, text=True, timeout=12)
+                if ready.returncode == 0:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('PostgreSQL 16 isolated container did not become ready')
+                time.sleep(1)
+            # Join DB network namespace without publishing any port or providing
+            # outbound internet access. All dependencies were compiled beforehand.
+            cmd = go_docker_command(
+                fixture, product, cache, 'container:' + pg_container,
+                ['go', 'test', '-count=1', '-json', '-timeout', '8m',
+                 '-run', COMBINED_FILTER, './authority'], image=go_image)
+            image_index = cmd.index(go_image)
+            cmd[image_index:image_index] = [
+                '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
+                '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
+            ]
+            try:
+                executed = run(cmd, output=True, timeout=600).stdout
+            except subprocess.CalledProcessError as exc:
+                print('LIC_A9_TEST_FAILURE_SUMMARY: ' + safe_failed_e2e_summary(exc),
+                      file=sys.stderr)
+                raise
+            require_combined_passed_tests(executed)
+        outcome = 0
+    except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired,
+            subprocess.CalledProcessError) as exc:
+        print(f'NOT_PASS: {exc}', file=sys.stderr)
+    finally:
+        if pg_container is not None:
+            # Fail closed: a completed E2E test is NOT a success if its
+            # temporary database could not be stopped and removed.
+            try:
+                cleaned = subprocess.run(['docker', 'stop', pg_container],
+                                         capture_output=True, text=True, timeout=60)
+                if cleaned.returncode != 0:
+                    raise RuntimeError(cleaned.stderr or 'docker stop returned nonzero')
+            except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
+                print(f'NOT_PASS: disposable PostgreSQL cleanup was not confirmed: {exc}',
+                      file=sys.stderr)
+                outcome = 3
+    if outcome == 0:
+        # Emit PASS *only after* the disposable database cleanup succeeds.
+        emit_targeted_a9_result()
+    return outcome
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
+, './authority'],
+                                   image=go_image),
                 timeout=420)
             discovered = run(go_docker_command(
                 fixture, product, cache, 'bridge',
