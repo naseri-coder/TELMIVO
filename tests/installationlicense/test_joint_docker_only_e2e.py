@@ -45,8 +45,20 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(runner.GO_IMAGE, 'golang:1.27.2-bookworm')
         self.assertEqual(runner.PG_IMAGE, 'postgres:16')
 
+    def test_mutable_docker_tags_cannot_be_emitted(self):
+        with self.assertRaises(ValueError):
+            runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=runner.PG_IMAGE)
+        with self.assertRaises(ValueError):
+            runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
+                                     'bridge', ['go', 'version'], image=runner.GO_IMAGE)
+        with self.assertRaises(TypeError):
+            runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
+        with self.assertRaises(TypeError):
+            runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
+                                     'bridge', ['go', 'version'])
+
     def test_postgres_uses_ephemeral_tmpfs_instead_of_root_owned_image_volume(self):
-        argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
+        argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=PG_PIN)
         self.assertEqual(argv[:4], ['docker', 'run', '--pull=never', '-d'])
         self.assertIn('PGDATA=/tmp/lic-a9-postgres-data', argv)
         self.assertEqual(argv[argv.index('--tmpfs') + 1],
@@ -70,7 +82,7 @@ class DockerOnlyTests(unittest.TestCase):
                      'lic-a9-joint-aaaaaaaaaaaa-evil',
                      'lic-a9-joint-AAAAAAAAAAAA', 'lic-a9-joint-ffffffffffff/../'):
             with self.subTest(name=name), self.assertRaises(ValueError):
-                runner.disposable_pg_command(name)
+                runner.disposable_pg_command(name, image=PG_PIN)
 
     def test_postgres_startup_mock_enforces_tmpfs_before_e2e(self):
         status, calls = self.simulate()
@@ -88,19 +100,19 @@ class DockerOnlyTests(unittest.TestCase):
     def test_prevents_remote_network_and_relative_mounts(self):
         for name in ['host', 'none', 'container:production', 'container:lic-a9-joint-bad']:
             with self.subTest(name=name), self.assertRaises(ValueError):
-                runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), name, ['go', 'version'])
+                runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), name, ['go', 'version'], image=GO_PIN)
         with self.assertRaises(ValueError):
-            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'])
+            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
 
     def test_mounts_product_read_only_without_host_secrets(self):
-        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'])
+        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
         self.assertIn('type=bind,src=/product,dst=/product,readonly', cmd)
         self.assertIn('--cap-drop', cmd)
         self.assertIn('ALL', cmd)
         self.assertIn('no-new-privileges', cmd)
         self.assertNotIn('-p', cmd)
         self.assertNotIn('/var/run/docker.sock', ' '.join(cmd))
-        self.assertEqual(cmd[-3:], [runner.GO_IMAGE, 'go', 'version'])
+        self.assertEqual(cmd[-3:], [GO_PIN, 'go', 'version'])
 
     def test_rejects_inherited_remote_docker_target_before_any_calls(self):
         with (mock.patch.dict(os.environ, {'DOCKER_HOST': 'ssh://server'}, clear=True),
