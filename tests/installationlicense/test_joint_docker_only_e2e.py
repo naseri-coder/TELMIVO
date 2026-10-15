@@ -168,7 +168,10 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertTrue(any(PG_PIN in argv and '--network' in argv for argv in images))
 
     def test_product_head_check_receives_independent_pin(self):
-        with (mock.patch.object(runner, 'check_checkout', side_effect=ValueError('not exact')) as check,
+        def checked(_, ref):
+            if ref == PRODUCT_HEAD_PIN:
+                raise ValueError('independent pin rejects checkout')
+        with (mock.patch.object(runner, 'check_checkout', side_effect=checked) as check,
               mock.patch.object(runner, 'validate_authority_archive_provenance'),
               mock.patch.object(runner, 'check_product_checkout'),
               mock.patch.object(runner, 'run') as execute,
@@ -176,7 +179,9 @@ class DockerOnlyTests(unittest.TestCase):
             status = runner.main(ARGS)
         self.assertEqual(status, 3)
         execute.assert_not_called()
-        self.assertEqual(check.call_count, 1)  # Authority rejects first.
+        self.assertEqual(check.call_count, 2)
+        self.assertEqual(check.call_args_list[0].args[1], runner.AUTHORITY_MERGED_SHA)
+        self.assertEqual(check.call_args_list[1].args[1], PRODUCT_HEAD_PIN)
 
     def test_unreviewed_product_sha_refuses_before_docker(self):
         args = ARGS.copy()
