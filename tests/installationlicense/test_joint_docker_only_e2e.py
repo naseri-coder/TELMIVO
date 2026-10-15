@@ -113,6 +113,11 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertNotIn('-p', cmd)
         self.assertNotIn('/var/run/docker.sock', ' '.join(cmd))
         self.assertEqual(cmd[-3:], [GO_PIN, 'go', 'version'])
+        self.assertEqual(cmd[cmd.index('--network') + 1], 'none')
+        self.assertEqual(cmd.count('--network'), 1)
+        self.assertEqual(cmd.count('GOPROXY=off'), 1)
+        self.assertEqual(cmd.count('GOSUMDB=off'), 1)
+        self.assertEqual(cmd.count('GOTOOLCHAIN=local'), 1)
 
     def test_rejects_inherited_remote_docker_target_before_any_calls(self):
         with (mock.patch.dict(os.environ, {'DOCKER_HOST': 'ssh://server'}, clear=True),
