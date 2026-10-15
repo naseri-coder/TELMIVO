@@ -78,3 +78,22 @@ The full production release also requires independent recovery, live installer v
 | Real server, live data, signing keys or `main` mutations | NONE |
 
 **Stop at Phase17.** Do not mark it as actual infrastructure provisioning or advance to Phase18 until the independent host is designated and its prerequisites are genuinely satisfied.
+---
+
+## Phase18 — Complete installationlicense Python suite execution and targeted regression repair
+
+**2026-10-15/16; Draft test-only continuation.** **NO Production, no TELMIVO live host, no private signer, no `main` merge.**
+
+**Exact parent:** Phase17 Draft PR #71 HEAD `36b3fb75e8817908aa0083b84f1509d7142eb801`. The protected Product runtime remains `d88fdb2e4d34f18e8f9c8313f73db5b14a077d5a`; the Authority source remains `bfceaef06d41aa185677a796652d17b07979058a`.
+
+The **20 genuine Python source/test files** needed by `tests/installationlicense/` plus the anti-clone Go test template were recovered byte-for-byte from the authenticated GitHub connector into an isolated model-owned local container and individually Git-blob-hash checked. This is **not** a checkout of both complete Product/Authority runtime repositories. Source AST admission scanned all 20 Python files: `SYNTAX_AND_RUNNER_ENTRYPOINT_PASS_ONLY`.
+
+The first actual `python3 -B -m unittest discover -s . -p 'test_*.py' -v` run executed **189 tests: 188 PASS, 1 ERROR**. The isolated error in `test_early_argv_check_rejects_same_source` was a stale test-only argv: since Phase15 the runner requires `--reviewed-module-cache` and `--expected-module-cache-sha256`, but this one mock test continued to call it without those arguments and received `SystemExit: 2` from `argparse` instead of the expected fail-closed `3` from identical checkouts.
+
+**Minimal exact correction:** start from the already complete mocked `ARGS` fixture, replace only the `--authority` and `--product` path values with the same synthetic path, and retain existing `runner.main(args) == 3` plus zero Docker calls assertions. No security gate was loosened. The corrected `test_joint_docker_only_e2e.py` Git Blob SHA is `6851d2e0402bc0c7b096e71aba60e0500535215d`. The full suite was rerun on that exact committed byte sequence: **189/189 PASS, zero failures/errors**; independent AST scan **PASS**.
+
+Full local evidence log SHA256: `d8c5ed2a3e0b9ceb5ab8f4d30503cee1c06617401f0bc9a6d545f712191e0ea0`. The initial one-error log SHA256: `909fce3e9d6545c19f6d2c701b82af837a0993dedcaef36827db5ae93a9f3b25`. All 21 relevant files were independently checked against exact GitHub Git Blob IDs. Under the immutable hardened runtime ancestor, the entire Product test-only changed-file set remains **32/32 explicitly allowed files**. Phase18 changes only the existing test and this already allowlisted acceptance document; it neither adds paths nor changes Go/runtime/SQL/deploy/module configuration.
+
+**Boundaries:** Go 1.23.2 synthetic tests included in the Python suite do **not** exercise the real Authority/client Go 1.27.2+PostgreSQL16 integration. The separate real eight-case LIC-A8/A9 E2E, full Product/Authority application tests, independently designated host, Go/PG image/module approval and production release gates remain **NOT_RUN / NO_GO**. No Docker daemon or connected live TELMIVO server was accessed.
+
+**Phase18 verdict:** `INSTALLATIONLICENSE_PYTHON_SUITE_189_PASS` / `TARGETED_TEST_BUG_FIXED` / `REAL_CROSSREPO_E2E_NOT_RUN` / `PRODUCTION_NO_GO`.
