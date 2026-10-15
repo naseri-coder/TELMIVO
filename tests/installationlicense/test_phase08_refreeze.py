@@ -39,7 +39,7 @@ class Phase08RefreezeTests(unittest.TestCase):
 
     def test_allowlist_only_reviewed_tests_docs_not_runtime(self):
         values = runner.EXPECTED_PRODUCT_TEST_DELTA
-        self.assertEqual(len(values), 27)
+        self.assertEqual(len(values), 29)
         self.assertTrue(all(x.startswith('tests/installationlicense/') for x in values))
         self.assertFalse(any(x.startswith(('internal/', 'cmd/', 'deploy/', 'pkg/'))
                              or x in ('go.mod', 'go.sum') for x in values))
