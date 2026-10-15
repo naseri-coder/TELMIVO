@@ -30,6 +30,8 @@ REQUIRED = frozenset({
     'phase15_reviewed_module_cache.py',
     'test_phase15_reviewed_module_cache.py',
     'phase16_real_go_offline_cache_probe.py',
+    'phase17_disposable_host_preflight.py',
+    'test_phase17_disposable_host_preflight.py',
 })
 
 
