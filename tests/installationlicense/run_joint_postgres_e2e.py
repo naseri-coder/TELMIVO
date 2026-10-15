@@ -15,13 +15,23 @@ import tempfile
 import time
 import uuid
 
-AUTHORITY_MERGED_SHA = '939d14800c602dd9c31ff23fdf6e0688a440d4c2'
+AUTHORITY_MERGED_SHA = 'd4cff712d39e21f934afb0f43ee36a376f1e5345'
 PRODUCT_MERGED_SHA = 'bc417045ca5e1b91a2377aba6dece348699f7bf4'
 FIXTURE_PREPARER_BLOB = 'be27fbdf5871ee54e35ef9302d2749a67b1725e9'
 AUTHORITY_ARCHIVE_SHA = '68cdb6996f85981c36dd20ecb7435ec010351e9b'
+# Explicit exact-path allowlist for PR32 -> Phase01 PR50. The tested
+# Authority runtime is still archived at AUTHORITY_ARCHIVE_SHA; new build tools
+# and offline validation tests are NOT imported into the joint Go fixture.
+# Never relax this to a broad docs/tests/tools path-prefix allowance.
 EXPECTED_AUTHORITY_NONRUNTIME_DELTA = frozenset({
     'docs/development/LIC_A9_PHASE2B_AUTHORITY_PG16_CI_BLOCKER_20261014.md',
     'internal/domain/phase2b_safety_test.go',
+    'docs/development/LIC_A9_PHASE01_CANONICAL_CONSOLIDATION_20261015.md',
+    'docs/release/lic-a9-offline-preinstall-bundle-check.md',
+    'tests/online_install_bundle_test.py',
+    'tests/release_test.py',
+    'tools/build-release',
+    'tools/verify-online-install-bundle',
 })
 
 
@@ -38,10 +48,11 @@ def validate_authority_archive_provenance(
         raise ValueError(
             'Authority fixture archive and merged source differ unexpectedly: '
             + ','.join(sorted(changed.symmetric_difference(allowed_delta))))
-    # A distinct merged commit is allowed only with precisely these nonruntime files.
-    if any(not (name.startswith('docs/') or name.endswith('_test.go'))
-           for name in changed):
-        raise ValueError('Authority runtime source changed since archived commit')
+    # This exact pin admits the eight *reviewed* paths above, not arbitrary
+    # release tools, migration SQL, Go runtime, deployment or secrets.
+    # Check the exact changed set above; never allow a partial/subset match.
+    if any(name not in EXPECTED_AUTHORITY_NONRUNTIME_DELTA for name in changed):
+        raise ValueError('Authority changed outside exact Phase01 allowlist')
 
 
 
