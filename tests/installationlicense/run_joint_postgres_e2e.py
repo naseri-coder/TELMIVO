@@ -45,6 +45,9 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/PHASE10_IMMUTABLE_E2E_PROVENANCE_20261015.md',
     'tests/installationlicense/PHASE11_RUNNER_SYNTAX_RECOVERY_20261015.md',
     'tests/installationlicense/PHASE12_PYTHON_EXECUTABLE_ENTRYPOINT_20261015.md',
+    'tests/installationlicense/PHASE13_OFFLINE_GO_ISOLATION_20261015.md',
+    'tests/installationlicense/phase13_offline_go_policy.py',
+    'tests/installationlicense/test_phase13_offline_go_policy.py',
     'tests/installationlicense/phase11_python_source_gate.py',
     'tests/installationlicense/test_phase11_python_source_gate.py',
 })
