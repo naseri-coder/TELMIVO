@@ -127,6 +127,7 @@ class Phase02AuthorityPinTests(unittest.TestCase):
             )
 
     def test_git_checkout_requires_exact_clean_commit(self):
+        self.write("test-note.txt", "TEST_ONLY commit marker\n")
         self.commit()
         merged = cmd(self.root, "rev-parse", "HEAD")
         runner.check_checkout(self.root, merged)
