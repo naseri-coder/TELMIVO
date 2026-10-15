@@ -327,6 +327,23 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertIn('LIC_A8_LEGACY_HOST_GO127_PG16_SMOKE_COMMAND_COMPLETED_TEST_COUNT_UNVERIFIED', source)
         self.assertIn('LIC_A9_ANTI_CLONE_CONCURRENCY_E2E_NOT_TESTED', source)
 
+    def test_malformed_go_json_event_field_types_fail_closed(self):
+        runner.require_combined_passed_tests(COMBINED_EVENTS)
+        malformed = (
+            {'Action': 'pass', 'Test': []},
+            {'Action': 'run', 'Test': 123},
+            {'Action': [], 'Test': None},
+            {'Action': None, 'Test': None},
+            {'Action': 'pass', 'Test': {'untrusted': 'value'}},
+        )
+        for event in malformed:
+            with self.subTest(event=event), self.assertRaisesRegex(
+                    ValueError, 'malformed Go E2E action/test identity'):
+                runner.require_combined_passed_tests(json.dumps(event))
+        with self.assertRaisesRegex(ValueError, 'all eight individual test run/pass events'):
+            runner.require_combined_passed_tests(
+                json.dumps({'Action': 'pass', 'Package': 'example/joint'}))
+
     def test_targeted_a9_success_requires_eight_real_events(self):
         runner.require_six_discovered_tests(GO_DISCOVERY)
         runner.require_a9_discovered_tests(GO_DISCOVERY)
