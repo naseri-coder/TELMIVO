@@ -12,8 +12,14 @@ from unittest import mock
 import run_joint_docker_only_e2e as runner
 
 
+GO_PIN = 'sha256:' + 'a' * 64
+PG_PIN = 'sha256:' + 'b' * 64
+PRODUCT_HEAD_PIN = 'c' * 40
 ARGS = ['--authority', '/tmp/authority-fixture', '--product', '/tmp/product-fixture',
-        '--acknowledge-disposable-host']
+        '--acknowledge-disposable-host',
+        '--expected-product-head', PRODUCT_HEAD_PIN,
+        '--expected-go-image-id', GO_PIN,
+        '--expected-pg-image-id', PG_PIN]
 
 GO_DISCOVERY = "\n".join(sorted(runner.COMBINED_TESTS)) + "\nok\n"
 GO_SUCCESS_EVENTS = "\n".join(
@@ -41,7 +47,7 @@ class DockerOnlyTests(unittest.TestCase):
 
     def test_postgres_uses_ephemeral_tmpfs_instead_of_root_owned_image_volume(self):
         argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
-        self.assertEqual(argv[:3], ['docker', 'run', '-d'])
+        self.assertEqual(argv[:4], ['docker', 'run', '--pull=never', '-d'])
         self.assertIn('PGDATA=/tmp/lic-a9-postgres-data', argv)
         self.assertEqual(argv[argv.index('--tmpfs') + 1],
                          '/tmp:rw,nosuid,nodev,size=256m,mode=1777')
@@ -70,8 +76,10 @@ class DockerOnlyTests(unittest.TestCase):
         status, calls = self.simulate()
         self.assertEqual(status, 0)
         pg = next(args for args in calls
-                  if args[:2] == ['docker', 'run'] and runner.PG_IMAGE in args)
-        self.assertEqual(pg, runner.disposable_pg_command(pg[pg.index('--name') + 1]))
+                  if args[:2] == ['docker', 'run'] and
+                  f'PGDATA={runner.PGDATA_TEST_ONLY}' in args)
+        self.assertEqual(pg, runner.disposable_pg_command(pg[pg.index('--name') + 1],
+                                                          image=PG_PIN))
         self.assertIn('--tmpfs', pg)
         self.assertLess(next(i for i, args in enumerate(calls) if args == pg),
                         next(i for i, args in enumerate(calls) if '-json' in args))
@@ -117,6 +125,9 @@ class DockerOnlyTests(unittest.TestCase):
         calls = []
         def fake_run(argv, **kwargs):
             calls.append(list(argv))
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
             if argv[:3] == ['docker', 'context', 'inspect']:
                 return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
             if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
@@ -145,7 +156,7 @@ class DockerOnlyTests(unittest.TestCase):
         code, calls = self.simulate()
         self.assertEqual(code, 0)
         compiler = next(i for i, c in enumerate(calls) if '^$' in c)
-        pg_start = next(i for i, c in enumerate(calls) if c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c)
+        pg_start = next(i for i, c in enumerate(calls) if c[:2] == ['docker', 'run'] and f'PGDATA={runner.PGDATA_TEST_ONLY}' in c)
         discover = next(i for i, c in enumerate(calls) if '-list' in c)
         e2e = next(i for i, c in enumerate(calls) if '-json' in c)
         stop = next(i for i, c in enumerate(calls) if c[:2] == ['docker', 'stop'])
@@ -213,6 +224,9 @@ class DockerOnlyTests(unittest.TestCase):
         )) + '\n'
         def fake_run(argv, **kwargs):
             calls.append(list(argv))
+            if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
             if argv[:3] == ['docker', 'context', 'inspect']:
                 return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
             if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
@@ -247,7 +261,10 @@ class DockerOnlyTests(unittest.TestCase):
             capture = io.StringIO()
             def fake_run(argv, **kwargs):
                 calls.append(list(argv))
-                if argv[:3] == ['docker', 'context', 'inspect']:
+                if argv[:3] == ['docker', 'image', 'inspect']:
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
+            if argv[:3] == ['docker', 'context', 'inspect']:
                     return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
                 if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
                     return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.2 linux/amd64\n')
@@ -283,12 +300,14 @@ class DockerOnlyTests(unittest.TestCase):
             with self.subTest(version=unsupported):
                 status, calls = self.simulate(go_version=f'go version go{unsupported} linux/amd64\n')
                 self.assertEqual(status, 3)
-                self.assertFalse(any(c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c for c in calls))
+                self.assertFalse(any(c[:2] == ['docker', 'run'] and
+                                    f'PGDATA={runner.PGDATA_TEST_ONLY}' in c for c in calls))
 
     def test_zero_discovered_tests_refuses_before_database(self):
         code, calls = self.simulate(missing_discovery=True)
         self.assertEqual(code, 3)
-        self.assertFalse(any(c[:2] == ['docker', 'run'] and runner.PG_IMAGE in c for c in calls))
+        self.assertFalse(any(c[:2] == ['docker', 'run'] and
+                                    f'PGDATA={runner.PGDATA_TEST_ONLY}' in c for c in calls))
 
     def test_package_pass_without_test_passes_is_not_e2e_success(self):
         code, calls = self.simulate(missing_passes=True)
