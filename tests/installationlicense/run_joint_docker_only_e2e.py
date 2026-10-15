@@ -27,6 +27,9 @@ from phase10_image_identity import (
     inspect_pinned_image,
 )
 from phase11_python_source_gate import audit as audit_python_sources
+from phase13_offline_go_policy import (
+    validate_go_network, offline_go_env_flags, audit_go_docker_argv,
+)
 
 GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
@@ -217,12 +220,11 @@ def go_docker_command(fixture: Path, product: Path, cache: Path,
                       network: str, command: list[str], *,
                       image: str) -> list[str]:
     """Never mount host credentials; source product read-only and caches disposable."""
-    if network != 'bridge' and not re.fullmatch(r'container:lic-a9-joint-[a-f0-9]{12}', network):
-        raise ValueError('only disposable network namespaces are supported')
+    validate_go_network(network)
     if any(not p.is_absolute() for p in (fixture, product, cache)):
         raise ValueError('Docker source mounts must be absolute')
     reviewed_image_id(image)
-    return [
+    cmd = [
         'docker', 'run', '--pull=never', '--rm', '--network', network,
         '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL',
         '--pids-limit', '256', '--memory', '2g', '--cpus', '2',
@@ -233,10 +235,11 @@ def go_docker_command(fixture: Path, product: Path, cache: Path,
         '--workdir', str(fixture),
         '--env', 'HOME=/tmp', '--env', f'GOCACHE={cache}/build',
         '--env', f'GOMODCACHE={cache}/mod',
-        '--env', 'GOTOOLCHAIN=local', '--env', 'GOWORK=off',
-        '--env', 'GOTELEMETRY=off', image,
+        *offline_go_env_flags(), image,
         *command,
     ]
+    audit_go_docker_argv(cmd)
+    return cmd
 
 
 def safe_host() -> None:
@@ -294,19 +297,19 @@ def main(argv=None) -> int:
             prepare = product / 'tests/installationlicense/prepare_authority_fixture.py'
             run([sys.executable, '-B', str(prepare), str(authority), str(fixture)], timeout=90)
             install_a9_fixture(product, fixture)
-            version = run(go_docker_command(fixture, product, cache, 'bridge', ['go', 'version'],
+            version = run(go_docker_command(fixture, product, cache, 'none', ['go', 'version'],
                                                image=go_image),
                           output=True, timeout=180).stdout
             if not re.search(r'\bgo version go1\.27\.2\b', version):
                 raise ValueError('container Go version not exactly 1.27.2')
             # Compile all imported real sources and populate only an isolated Go cache,
             # BEFORE any PostgreSQL service exists. Failures are not called E2E PASS.
-            run(go_docker_command(fixture, product, cache, 'bridge',
+            run(go_docker_command(fixture, product, cache, 'none',
                                   ['go', 'test', '-count=1', '-run', '^$', './authority'],
                                   image=go_image),
                 timeout=420)
             discovered = run(go_docker_command(
-                fixture, product, cache, 'bridge',
+                fixture, product, cache, 'none',
                 ['go', 'test', '-list', COMBINED_FILTER, './authority'],
                  image=go_image),
                 output=True, timeout=240).stdout
@@ -337,7 +340,6 @@ def main(argv=None) -> int:
             image_index = cmd.index(go_image)
             cmd[image_index:image_index] = [
                 '--env', f'LIC_A8_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/{PG_DATABASE}?sslmode=disable',
-                '--env', 'GOPROXY=off', '--env', 'GOSUMDB=off',
             ]
             try:
                 executed = run(cmd, output=True, timeout=600).stdout
