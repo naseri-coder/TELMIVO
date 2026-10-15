@@ -17,7 +17,9 @@ BLOCKING_ENV = (
 )
 
 
-def scan(which=shutil.which, env=None):
+def scan(which=None, env=None):
+    if which is None:
+        which = shutil.which
     if env is None:
         env = os.environ
     inherited = [name for name in BLOCKING_ENV if env.get(name)]
