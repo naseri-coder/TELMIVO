@@ -37,12 +37,24 @@ class Phase08RefreezeTests(unittest.TestCase):
         self.assertIn('sha = "' + runner.AUTHORITY_MERGED_SHA + '"', src)
         self.assertNotIn('sha = "68cdb6996f85981c36dd20ecb7435ec010351e9b"', src)
 
-    def test_allowlist_only_reviewed_tests_docs_not_runtime(self):
+    def test_allowlist_exact_phase19_runtime_security_exception(self):
         values = runner.EXPECTED_PRODUCT_TEST_DELTA
-        self.assertEqual(len(values), 32)
-        self.assertTrue(all(x.startswith('tests/installationlicense/') for x in values))
-        self.assertFalse(any(x.startswith(('internal/', 'cmd/', 'deploy/', 'pkg/'))
+        self.assertEqual(len(values), 35)
+        reviewed_exception = frozenset({
+            'internal/platform/installationlicense/state.go',
+            'internal/platform/installationlicense/phase19_session_fencing_test.go',
+        })
+        non_test_paths = frozenset(x for x in values
+                                   if not x.startswith('tests/installationlicense/'))
+        self.assertEqual(non_test_paths, reviewed_exception)
+        self.assertFalse(any(x.startswith(('cmd/', 'deploy/', 'pkg/'))
                              or x in ('go.mod', 'go.sum') for x in values))
+        self.assertIn('tests/installationlicense/PHASE19_RUNTIME_SESSION_SECURITY_ACCEPTANCE_20261016.md', values)
+
+    def test_missing_phase19_security_fix_path_blocks(self):
+        self.make_test_delta('internal/platform/installationlicense/state.go')
+        with self.assertRaises(ValueError):
+            runner.check_product_checkout(self.root, self.base)
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='phase08-git-only-')
@@ -74,7 +86,7 @@ class Phase08RefreezeTests(unittest.TestCase):
                 path.write_text('TEST ONLY fixture\n')
         return self.commit()
 
-    def test_exact_full_test_delta_passes_without_touching_runtime(self):
+    def test_exact_reviewed_test_and_phase19_runtime_delta_passes(self):
         self.make_test_delta()
         runner.check_product_checkout(self.root, self.base)
 
