@@ -37,6 +37,9 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/test_joint_runner.py',
     'tests/installationlicense/test_phase02_authority_pin.py',
     'tests/installationlicense/test_phase08_refreeze.py',
+    'tests/installationlicense/PHASE09_DISPOSABLE_E2E_EXECUTION_20261015.md',
+    'tests/installationlicense/phase09_host_requirements.py',
+    'tests/installationlicense/test_phase09_host_requirements.py',
 })
 
 def validate_authority_archive_provenance(
