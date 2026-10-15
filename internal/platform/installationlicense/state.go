@@ -310,6 +310,13 @@ func (m *Manager) decisionLocked() (Decision, error) {
 	if (m.cfg.RequireConcurrency || h.ConcurrencyGeneration > 0) && x.Version != 2 {
 		return Decision{State: "RESTRICTED", Reason: "CONCURRENCY_REFRESH_REQUIRED", RefreshDue: true}, ErrRestricted
 	}
+	// A concurrency token is bound to the process session that requested it.
+	// A cloned or restarted runtime cannot perform protected effects using the
+	// previous process's signed lease before obtaining its own fresh lease.
+	// Validate after cryptographic verification, without trusting local claims.
+	if x.Version == 2 && x.RuntimeSessionID != m.runtimeSession {
+		return Decision{State: "RESTRICTED", Reason: "CONCURRENCY_REFRESH_REQUIRED", RefreshDue: true}, ErrRestricted
+	}
 	allowed := false
 	for _, cap := range x.Capabilities {
 		if cap == "product.use" {
