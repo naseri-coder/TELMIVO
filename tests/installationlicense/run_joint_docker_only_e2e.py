@@ -122,6 +122,11 @@ def require_combined_passed_tests(stdout: str) -> None:
         if not isinstance(event, dict):
             raise ValueError('malformed Go event object')
         action, name = event.get('Action'), event.get('Test')
+        # Go's JSON schema uses strings for Action and optional Test.
+        # Non-string / unhashable input must fail closed as an ordinary
+        # validation error, never crash with TypeError/AttributeError.
+        if not isinstance(action, str) or (name is not None and not isinstance(name, str)):
+            raise ValueError('malformed Go E2E action/test identity')
         if action in ('fail', 'skip'):
             raise ValueError('Go test skipped or failed')
         if name is None and action == 'pass':
