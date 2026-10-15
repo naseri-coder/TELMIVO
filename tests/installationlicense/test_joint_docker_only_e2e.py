@@ -50,12 +50,12 @@ class DockerOnlyTests(unittest.TestCase):
             runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=runner.PG_IMAGE)
         with self.assertRaises(ValueError):
             runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
-                                     'bridge', ['go', 'version'], image=runner.GO_IMAGE)
+                                     'none', ['go', 'version'], image=runner.GO_IMAGE)
         with self.assertRaises(TypeError):
             runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
         with self.assertRaises(TypeError):
             runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'),
-                                     'bridge', ['go', 'version'])
+                                     'none', ['go', 'version'])
 
     def test_postgres_uses_ephemeral_tmpfs_instead_of_root_owned_image_volume(self):
         argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff', image=PG_PIN)
@@ -98,14 +98,14 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(sum(args[:2] == ['docker', 'stop'] for args in calls), 1)
 
     def test_prevents_remote_network_and_relative_mounts(self):
-        for name in ['host', 'none', 'container:production', 'container:lic-a9-joint-bad']:
+        for name in ['host', 'bridge', 'container:production', 'container:lic-a9-joint-bad']:
             with self.subTest(name=name), self.assertRaises(ValueError):
                 runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), name, ['go', 'version'], image=GO_PIN)
         with self.assertRaises(ValueError):
-            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
+            runner.go_docker_command(Path('fixture'), Path('/product'), Path('/cache'), 'none', ['go', 'version'], image=GO_PIN)
 
     def test_mounts_product_read_only_without_host_secrets(self):
-        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'bridge', ['go', 'version'], image=GO_PIN)
+        cmd = runner.go_docker_command(Path('/fixture'), Path('/product'), Path('/cache'), 'none', ['go', 'version'], image=GO_PIN)
         self.assertIn('type=bind,src=/product,dst=/product,readonly', cmd)
         self.assertIn('--cap-drop', cmd)
         self.assertIn('ALL', cmd)
