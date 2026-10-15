@@ -43,6 +43,10 @@ The existing `test_joint_docker_only_e2e.py` now tests the constructed argv, inv
 2. A separate local ephemeral Go 1.23.2 module generated **eight synthetic test stubs with the same Go test names** as the frozen runner. Real `go test -list` and `go test -json -run` executed: **8/8 individual run/pass events observed**, package pass observed. This tests Go output/event formatting and selection only. It is **not** any of the real Authority/Product eight E2E tests, does not compile their actual runtime code, and does not involve PostgreSQL16.
 3. GitHub confirms Phase09 changes are limited to test code, test utilities and documentation. Source SHA/diff confirmation is separate from functional Go/DB E2E.
 
+## Phase09 exact-source refreeze adjustment
+
+Phase08 allowed exactly 11 reviewed `tests/installationlicense/` paths. Phase09 adds three new test/doc-only files (`phase09_host_requirements.py`, `test_phase09_host_requirements.py` and this document). The original 11 paths remain unchanged as names; the authoritative `EXPECTED_PRODUCT_TEST_DELTA` in `run_joint_postgres_e2e.py` now enumerates **14 literal paths**, and the synthetic exact Git-fence count assertion was updated from 11 to 14. Modified Docker runner, phase08 regression test, and source pin runner are already within the original 11. No dynamic prefix allowance or runtime/module/deployment path is added. The new explicit 14-path equality must be verified against the final GitHub branch diff before any real test.
+
 ## Actual joint-E2E gates (NOT_RUN)
 
 - Exact Authority PR55 and Product Phase09 clean Git checkout available in same isolated Linux host: NOT_READY locally.
