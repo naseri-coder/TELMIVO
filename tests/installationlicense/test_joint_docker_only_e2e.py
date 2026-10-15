@@ -262,9 +262,9 @@ class DockerOnlyTests(unittest.TestCase):
             def fake_run(argv, **kwargs):
                 calls.append(list(argv))
                 if argv[:3] == ['docker', 'image', 'inspect']:
-                return subprocess.CompletedProcess(
-                    argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
-            if argv[:3] == ['docker', 'context', 'inspect']:
+                    return subprocess.CompletedProcess(
+                        argv, 0, stdout=GO_PIN if argv[-1] == runner.GO_IMAGE else PG_PIN)
+                if argv[:3] == ['docker', 'context', 'inspect']:
                     return subprocess.CompletedProcess(argv, 0, stdout='unix:///var/run/docker.sock\n')
                 if argv[:2] == ['docker', 'run'] and 'go' in argv and 'version' in argv:
                     return subprocess.CompletedProcess(argv, 0, stdout='go version go1.27.2 linux/amd64\n')
