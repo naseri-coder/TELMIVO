@@ -100,12 +100,17 @@ class RunnerTests(unittest.TestCase):
                             root / 'tests' / 'installationlicense' / 'prepare_authority_fixture.py')
             subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
             subprocess.run(commit, check=True)
-            runner.check_product_checkout(root, baseline)
+            # Synthetic source tree declares its own exact two-file delta.
+            synthetic_delta = frozenset({
+                'tests/installationlicense/new_runner.py',
+                'tests/installationlicense/prepare_authority_fixture.py',
+            })
+            runner.check_product_checkout(root, baseline, synthetic_delta)
             (root / 'internal' / 'core.go').write_text('package changed\n')
             subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
             subprocess.run(commit, check=True)
-            with self.assertRaises(subprocess.CalledProcessError):
-                runner.check_product_checkout(root, baseline)
+            with self.assertRaises(ValueError):
+                runner.check_product_checkout(root, baseline, synthetic_delta)
 
     def test_actual_git_archive_delta_only_docs_and_tests(self):
         with tempfile.TemporaryDirectory(prefix='lic-a9-authority-provenance-') as temp:
