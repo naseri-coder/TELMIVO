@@ -166,7 +166,7 @@ func (m *Manager) lock(fn func() error) error {
 	f := os.NewFile(uintptr(fd), "lock")
 	defer f.Close()
 	var s syscall.Stat_t
-	if syscall.Fstat(fd, &s) != nil || s.Mode&syscall.S_IFMT != syscall.S_IFREG || s.Mode&0077 != 0 || int(s.Uid) != os.Geteuid() {
+	if syscall.Fstat(fd, &s) != nil || s.Mode&syscall.S_IFMT != syscall.S_IFREG || s.Nlink != 1 || s.Mode&0077 != 0 || int(s.Uid) != os.Geteuid() {
 		return ErrState
 	}
 	if e = syscall.Flock(fd, syscall.LOCK_EX); e != nil {
@@ -183,7 +183,7 @@ func (m *Manager) read(name string, v any) error {
 	f := os.NewFile(uintptr(fd), name)
 	defer f.Close()
 	var s syscall.Stat_t
-	if syscall.Fstat(fd, &s) != nil || s.Mode&syscall.S_IFMT != syscall.S_IFREG || s.Mode&0077 != 0 || int(s.Uid) != os.Geteuid() || s.Size > 262144 {
+	if syscall.Fstat(fd, &s) != nil || s.Mode&syscall.S_IFMT != syscall.S_IFREG || s.Nlink != 1 || s.Mode&0077 != 0 || int(s.Uid) != os.Geteuid() || s.Size > 262144 {
 		return ErrState
 	}
 	b, e := io.ReadAll(io.LimitReader(f, 262145))
