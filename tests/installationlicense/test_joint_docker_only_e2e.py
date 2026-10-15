@@ -39,6 +39,44 @@ class DockerOnlyTests(unittest.TestCase):
         self.assertEqual(runner.GO_IMAGE, 'golang:1.27.2-bookworm')
         self.assertEqual(runner.PG_IMAGE, 'postgres:16')
 
+    def test_postgres_uses_ephemeral_tmpfs_instead_of_root_owned_image_volume(self):
+        argv = runner.disposable_pg_command('lic-a9-joint-aabbccddeeff')
+        self.assertEqual(argv[:3], ['docker', 'run', '-d'])
+        self.assertIn('PGDATA=/tmp/lic-a9-postgres-data', argv)
+        self.assertEqual(argv[argv.index('--tmpfs') + 1],
+                         '/tmp:rw,nosuid,nodev,size=256m,mode=1777')
+        self.assertEqual(argv[argv.index('--user') + 1], 'postgres')
+        self.assertEqual(argv[argv.index('--cap-drop') + 1], 'ALL')
+        self.assertEqual(argv[argv.index('--network') + 1], 'none')
+        self.assertEqual(argv[argv.index('--memory') + 1], '512m')
+        self.assertIn('--rm', argv)
+        self.assertNotIn('--privileged', argv)
+        self.assertNotIn('--volume', argv)
+        self.assertNotIn('--mount', argv)
+        self.assertNotIn('-v', argv)
+        self.assertNotIn('-p', argv)
+        self.assertNotIn('PGPASSWORD=', ' '.join(argv))
+        self.assertEqual(argv[argv.index('--label') + 1],
+                         'telmivo.purpose=lic-a9-disposable-joint-e2e')
+
+    def test_postgres_rejects_unreviewed_container_identity_without_side_effects(self):
+        for name in ('', 'production', 'lic-a9-joint-evil', 'lic-a9-joint-aaaa',
+                     'lic-a9-joint-aaaaaaaaaaaa-evil',
+                     'lic-a9-joint-AAAAAAAAAAAA', 'lic-a9-joint-ffffffffffff/../'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                runner.disposable_pg_command(name)
+
+    def test_postgres_startup_mock_enforces_tmpfs_before_e2e(self):
+        status, calls = self.simulate()
+        self.assertEqual(status, 0)
+        pg = next(args for args in calls
+                  if args[:2] == ['docker', 'run'] and runner.PG_IMAGE in args)
+        self.assertEqual(pg, runner.disposable_pg_command(pg[pg.index('--name') + 1]))
+        self.assertIn('--tmpfs', pg)
+        self.assertLess(next(i for i, args in enumerate(calls) if args == pg),
+                        next(i for i, args in enumerate(calls) if '-json' in args))
+        self.assertEqual(sum(args[:2] == ['docker', 'stop'] for args in calls), 1)
+
     def test_prevents_remote_network_and_relative_mounts(self):
         for name in ['host', 'none', 'container:production', 'container:lic-a9-joint-bad']:
             with self.subTest(name=name), self.assertRaises(ValueError):

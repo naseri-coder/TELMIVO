@@ -26,6 +26,35 @@ from run_joint_postgres_e2e import (
 GO_IMAGE = 'golang:1.27.2-bookworm'
 PG_IMAGE = 'postgres:16'
 PG_DATABASE = 'lic_a9_joint_test'
+PGDATA_TEST_ONLY = '/tmp/lic-a9-postgres-data'
+PG_TMPFS = '/tmp:rw,nosuid,nodev,size=256m,mode=1777'
+
+
+def disposable_pg_command(container: str) -> list[str]:
+    """Unprivileged, fully ephemeral PG16 on an isolated network namespace.
+
+    The official PG16 image declares a default data VOLUME. Running as the
+    postgres user may not be able to chown that freshly created mount. Force
+    an empty private PGDATA subdirectory on writable *container-only* tmpfs.
+    This function never starts Docker; it only constructs reviewable argv.
+    """
+    if not re.fullmatch(r'lic-a9-joint-[0-9a-f]{12}', container):
+        raise ValueError('unreviewed disposable PostgreSQL container name')
+    return [
+        'docker', 'run', '-d', '--rm', '--name', container,
+        '--user', 'postgres', '--cap-drop', 'ALL',
+        '--network', 'none', '--security-opt', 'no-new-privileges',
+        '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
+        '--tmpfs', PG_TMPFS,
+        '--label', 'telmivo.purpose=lic-a9-disposable-joint-e2e',
+        '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
+        '-e', f'POSTGRES_DB={PG_DATABASE}',
+        '-e', f'PGDATA={PGDATA_TEST_ONLY}',
+        PG_IMAGE,
+        '-c', 'shared_buffers=32MB', '-c', 'max_connections=35',
+    ]
+
+
 E2E_TESTS = frozenset(f'TestE2E{i}' for i in range(1, 7))
 A9_TESTS = frozenset({'TestLICA9CrossRepoRealLeaseAndRestart', 'TestLICA9CrossRepoClonedGenerationFenced'})
 COMBINED_TESTS = E2E_TESTS | A9_TESTS
@@ -260,14 +289,7 @@ def main(argv=None) -> int:
             # Official postgres entrypoint drops root via gosu, which needs
             # CAP_SETUID/CAP_SETGID. Run directly as its built-in unprivileged
             # postgres user so the container can safely drop ALL capabilities.
-            run(['docker', 'run', '-d', '--rm', '--name', pg_container,
-                 '--user', 'postgres', '--cap-drop', 'ALL',
-                 '--network', 'none', '--security-opt', 'no-new-privileges',
-                 '--pids-limit', '128', '--memory', '512m', '--cpus', '1',
-                 '--label', 'telmivo.purpose=lic-a9-disposable-joint-e2e',
-                 '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
-                 '-e', f'POSTGRES_DB={PG_DATABASE}', PG_IMAGE,
-                 '-c', 'shared_buffers=32MB', '-c', 'max_connections=35'], timeout=180)
+            run(disposable_pg_command(pg_container), timeout=180)
             deadline = time.monotonic() + 60
             while True:
                 ready = subprocess.run(['docker', 'exec', pg_container, 'pg_isready',
