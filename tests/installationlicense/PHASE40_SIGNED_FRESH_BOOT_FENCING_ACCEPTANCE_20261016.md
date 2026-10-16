@@ -30,7 +30,7 @@ This phase adds:
 - Five Phase39 synthetic effect gate regression tests: `-race -count=1` **5/5 PASS**, log SHA256 **`b670b27172ec0504c69ab1dab7990395f9b4e78330c86d87bb1c416e6a77414a`**.
 - `go vet ./...`: **PASS**, `gofmt -l` for new/modified files: **no output**.
 - Six new tests cover missing/wrong challenge; legitimate signed challenge; signed future FENCE pre-recorded before crash and rejected after restart; durable unresolved record blocking future epoch even with fresh signature; real kernel-unprivileged outsider cannot advance epoch; boot mode immutability; and stale requests never reaching the optional synthetic Phase39 callback after restart.
-- A two-pass repetition of five initial Phase40 tests passed, but the later **six-test two-pass attempt** hit the container's execution time cap and produced **no verdict**. A full all-phase suite similarly hit a time limit at a Phase38 crash test; **NO FULL-SUITE PASS** is claimed. Only the above isolated completed suites count.
+- A two-pass repetition of five initial Phase40 tests passed, but the later **six-test two-pass attempt** hit the container's execution time cap and produced **no verdict**. An earlier full all-phase attempt also reached the model's execution time limit before finishing the Phase38 crash test; that incomplete attempt was not treated as PASS. **A subsequent longer-budget full suite completed successfully (verified below).**
 
 ## Critical limitations — NOT RELEASE ACCEPTANCE
 
@@ -41,3 +41,24 @@ This phase adds:
 - Only root-owned ephemeral test directories and disposable synthetic Ed25519 signers used. No Production server, deleted Authority VPS, main merge, actions, release signing or deployment.
 
 **Disposition:** isolated Linux root multi-UID *strict-mode* security contract accepted; real Product/Authority and deployment gates remain **NO-GO**. Stop after Phase40.
+
+
+## Additional independent verification completed after the initial report
+
+The entire exact-source, standalone Linux Go1.23.2 nested module was rerun from start to finish with **real root / actual kernel UID worker/outsider isolation** and the Race Detector. A short-budget earlier timeout was **not** a failed security assertion.
+
+```sh
+cd tests/installationlicense/phase38_supervisor_durable_bridge
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOWORK=off go vet ./...
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOWORK=off go test -race -count=1 -timeout=150s -v ./...
+```
+
+- `go vet` PASS and `gofmt -l bridge.go bridge_test.go phase39_gate_test.go phase40_fresh_boot_test.go` produced **no output**.
+- **Full Phase38+39+40 result: 26/26 named tests PASS**, with no SKIP or FAIL, including Phase38's actual abruptly terminated supervisor child and cross-UID tests, five Phase39 synthetic gate checks and six Phase40 strict-boot checks. Two of the 15 Phase38 functions are test-process helper routines; **no external provider or live Product effect** was invoked.
+- Final output: `PASS` and `ok telmivo.local/lic-a9-phase38-supervisor-durable-bridge 64.849s` (shell status **0**, no Race Detector reports).
+- Exact complete-suite log SHA256: `400c4b85db480857e3d31b3f7cfc724191f3b06229b50538ddda0bbc3fc5f4a6`.
+- Six Phase40-only re-run with `-race`: **6/6 PASS**, `ok ... 18.230s`, log SHA256 `1a84cb103c54230e86b11a62acda5f1fa4877bb4635040f2483712e65dd64e1d`.
+- Phase39-only re-run with `-race`: **5/5 PASS**, `ok ... 10.126s`, log SHA256 `c6f0c7dd7a1ea1da0e160aa641a1cdb89a1075ef73d6b59bcc42bafe8f8a24ef`.
+- Confirmed GitHub blobs unchanged and byte-for-byte equal to the test files: `bridge.go` `3fdd151390329bf4766d61f20f2f1b0018362f55`; `phase40_fresh_boot_test.go` `742c9fe86a9aeb480ce62a5ab54664648df6da8d`.
+
+**Release status unchanged: REAL Product Go1.27 Linux root `Manager.Effect` + Race Detector NOT_RUN; real Authority fresh-challenge grant NOT_IMPLEMENTED; Production NO-GO.**
