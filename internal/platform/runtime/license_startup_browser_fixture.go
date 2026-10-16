@@ -15,19 +15,19 @@ import (
 func openStartupLicense(role string, c config.Config) (*installationlicense.Manager, *installationlicense.Client, func(), bool, error) {
 	noop := func() {}
 	admission := installationlicense.BrowserTestAdmission{
-		Executable: os.Args[0],
-		Role: role,
-		Environment: c.Environment,
+		Executable:         os.Args[0],
+		Role:               role,
+		Environment:        c.Environment,
 		LicenseEnvironment: os.Getenv("TELMIVO_LICENSE_ENVIRONMENT"),
-		OptIn: os.Getenv("TELMIVO_LIC_A9_BROWSER_TEST"),
-		Synthetic: os.Getenv("SYNTHETIC_MODE"),
-		HTTPAddr: c.HTTPAddr,
-		DatabaseURL: c.DatabaseURL,
-		TestDatabaseURL: os.Getenv("TEST_DATABASE_URL"),
-		TestMigrationURL: os.Getenv("TEST_MIGRATION_DATABASE_URL"),
-		RedisURL: c.RedisURL,
-		NATSURL: c.NATSURL,
-		MiniAppURL: c.MiniAppURL,
+		OptIn:              os.Getenv("TELMIVO_LIC_A9_BROWSER_TEST"),
+		Synthetic:          os.Getenv("SYNTHETIC_MODE"),
+		HTTPAddr:           c.HTTPAddr,
+		DatabaseURL:        c.DatabaseURL,
+		TestDatabaseURL:    os.Getenv("TEST_DATABASE_URL"),
+		TestMigrationURL:   os.Getenv("TEST_MIGRATION_DATABASE_URL"),
+		RedisURL:           c.RedisURL,
+		NATSURL:            c.NATSURL,
+		MiniAppURL:         c.MiniAppURL,
 	}
 	if !admission.Allowed() {
 		return nil, nil, noop, true, errors.New("TEST_BROWSER_API_LICENSE_ADMISSION_DENIED")
