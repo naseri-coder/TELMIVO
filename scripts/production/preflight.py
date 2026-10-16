@@ -68,6 +68,10 @@ def reject_test_fixture_configuration(env):
     forbidden = {
         "TELMIVO_LIC_A9_BROWSER_TEST",
         "TELMIVO_LIC_A9_NATIVE_FIXTURE",
+        "TEST_GROUP_AUTHORITY_FIXTURE",
+        "TEST_DOWNLOADER_FIXTURE",
+        "TEST_BOT_FACTORY_FIXTURE",
+        "TEST_CONTENT_PLUGIN_FIXTURE",
         "TEST_DATABASE_URL",
         "TEST_MIGRATION_DATABASE_URL",
         "TEST_RESTORE_DATABASE_URL",
@@ -80,7 +84,7 @@ def reject_test_fixture_configuration(env):
     selected = sorted(forbidden.intersection(env))
     if selected:
         raise PreflightError("test-only/Go build controls in production environment: " + ", ".join(selected))
-    if env.get("TELMIVO_LICENSE_ENVIRONMENT") == "TEST":
+    if env.get("TELMIVO_LICENSE_ENVIRONMENT", "").upper() == "TEST":
         raise PreflightError("TEST-only V2 license environment forbidden in production")
 
 
