@@ -80,8 +80,7 @@ func TestPhase24QueuedRequestMustNotExecuteAfterShutdownInitiated(t *testing.T) 
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
-	_, err = conn.Write([]byte(`{"protocol":"` + protocol + `","operation":"` + operation + `","id":"` + strings.Repeat("8", 32) + `"}` + "
-"))
+	_, err = conn.Write([]byte(`{"protocol":"` + protocol + `","operation":"` + operation + `","id":"` + strings.Repeat("8", 32) + `"}` + "\n"))
 	if err != nil {
 		b.mu.Unlock()
 		t.Fatal(err)
