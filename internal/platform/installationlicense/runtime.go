@@ -17,10 +17,12 @@ type runtimeBinding struct {
 
 var (
 	installedRuntime atomic.Pointer[runtimeBinding]
-	// Hold a read lease across a protected effect, so InstallRuntime(nil)
-	// cannot finish while an already admitted callback is still running.
-	// Do not call InstallRuntime from inside a RuntimeEffect callback.
-	runtimeGate sync.RWMutex
+	// A mutex and active-effect counter avoid RWMutex writer-preference
+	// deadlocks when a protected callback performs a nested CheckRuntime.
+	// Do not call InstallRuntime synchronously inside a protected callback.
+	runtimeGate sync.Mutex
+	runtimeActive int
+	runtimeDrained = sync.NewCond(&runtimeGate)
 )
 
 // InstallRuntime is a one-way process-wide authority transition:
@@ -42,7 +44,11 @@ func InstallRuntime(m *Manager) {
 	if m == previous.manager {
 		return // idempotent installation of the same verified owner
 	}
-	installedRuntime.Store(&runtimeBinding{}) // revoke or reject foreign rebind
+	// Deny new admissions before waiting for previously admitted effects.
+	installedRuntime.Store(&runtimeBinding{})
+	for runtimeActive > 0 {
+		runtimeDrained.Wait()
+	}
 }
 
 // runtimeForEffect permits only the installed process-wide Manager. In
@@ -67,7 +73,7 @@ func runtimeForEffect(ctx context.Context, globallyRequired bool, global *Manage
 }
 
 // runtimeForCurrentEffect loads a single coherent installation snapshot.
-// Callers must hold runtimeGate.RLock through the protected effect.
+// Callers must hold runtimeGate while reserving an effect admission.
 func runtimeForCurrentEffect(ctx context.Context) (*Manager, error) {
 	binding := installedRuntime.Load()
 	if binding == nil {
@@ -77,8 +83,8 @@ func runtimeForCurrentEffect(ctx context.Context) (*Manager, error) {
 }
 
 func CheckRuntime(ctx context.Context) error {
-	runtimeGate.RLock()
-	defer runtimeGate.RUnlock()
+	runtimeGate.Lock()
+	defer runtimeGate.Unlock()
 	m, err := runtimeForCurrentEffect(ctx)
 	if err != nil {
 		return err
@@ -89,12 +95,23 @@ func CheckRuntime(ctx context.Context) error {
 	return nil
 }
 func RuntimeEffect(ctx context.Context, fn func() error) error {
-	runtimeGate.RLock()
-	defer runtimeGate.RUnlock()
+	runtimeGate.Lock()
 	m, err := runtimeForCurrentEffect(ctx)
 	if err != nil {
+		runtimeGate.Unlock()
 		return err
 	}
+	runtimeActive++
+	runtimeGate.Unlock()
+
+	defer func() {
+		runtimeGate.Lock()
+		runtimeActive--
+		if runtimeActive == 0 {
+			runtimeDrained.Broadcast()
+		}
+		runtimeGate.Unlock()
+	}()
 	return m.Effect(ctx, fn)
 }
 func HTTP(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {
