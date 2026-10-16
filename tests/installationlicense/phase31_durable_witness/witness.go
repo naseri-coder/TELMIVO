@@ -117,8 +117,7 @@ func (w *Witness) withLock(fn func() error) error {
 	defer syscall.Flock(fd, syscall.LOCK_UN)
 	return fn()
 }
-func encode(v any) []byte { b, _ := json.Marshal(v); return append(b, '
-') }
+func encode(v any) []byte { b, _ := json.Marshal(v); return append(b, '\n') }
 func (w *Witness) read(name string) ([]byte, error) {
 	fd, e := syscall.Openat(int(w.dir.Fd()), name, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 	if e != nil {
