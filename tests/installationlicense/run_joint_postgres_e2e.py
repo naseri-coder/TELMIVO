@@ -59,6 +59,11 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     # Phase22: signed fixture tests expose the unresolved multiworker liveness contract.
     'internal/platform/installationlicense/phase22_multiworker_session_contract_test.go',
     'tests/installationlicense/PHASE22_MULTIWORKER_LIVENESS_ACCEPTANCE_20261016.md',
+    # Phase23: separate test-only Go module, never Product runtime behavior.
+    'tests/installationlicense/phase23_broker_proof/go.mod',
+    'tests/installationlicense/phase23_broker_proof/broker.go',
+    'tests/installationlicense/phase23_broker_proof/broker_test.go',
+    'tests/installationlicense/PHASE23_SINGLE_EFFECT_OWNER_ARCHITECTURE_20261016.md',
     'tests/installationlicense/PHASE19_RUNTIME_SESSION_SECURITY_ACCEPTANCE_20261016.md',
     'tests/installationlicense/phase16_real_go_offline_cache_probe.py',
     'tests/installationlicense/phase15_reviewed_module_cache.py',
