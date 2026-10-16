@@ -12,7 +12,7 @@ import (
 
 func (cl *Client) Concurrency(ctx context.Context) error {
 	var body []byte
-	err := cl.manager.lock(func() error {
+	err := cl.manager.administrativeLock(ctx, func() error {
 		i, s, h, e := cl.manager.load()
 		if e != nil {
 			return e

@@ -134,7 +134,7 @@ func terminal(code string) bool {
 }
 func (cl *Client) mutate(ctx context.Context, kind string, body []byte) error {
 	m := cl.manager
-	return m.lock(func() error {
+	return m.administrativeLock(ctx, func() error {
 		i, s, h, e := m.load()
 		if e != nil {
 			return e
@@ -208,7 +208,7 @@ func (cl *Client) mutate(ctx context.Context, kind string, body []byte) error {
 }
 func (cl *Client) Activate(ctx context.Context, code, license string, epoch int64) error {
 	var i Identity
-	if e := cl.manager.lock(func() error { return cl.manager.read("identity.json", &i) }); e != nil {
+	if e := cl.manager.administrativeLock(ctx, func() error { return cl.manager.read("identity.json", &i) }); e != nil {
 		return e
 	}
 	if !c.ValidID(license) || epoch < 1 || len(code) == 0 || len(code) > 512 {
@@ -231,7 +231,7 @@ func (cl *Client) Activate(ctx context.Context, code, license string, epoch int6
 }
 func (cl *Client) registered(ctx context.Context, kind string) error {
 	var body []byte
-	e := cl.manager.lock(func() error {
+	e := cl.manager.administrativeLock(ctx, func() error {
 		_, s, h, e := cl.manager.load()
 		if e != nil {
 			return e
@@ -259,7 +259,7 @@ func (cl *Client) Refresh(ctx context.Context) error {
 		return cl.registered(ctx, "refresh")
 	}
 	var pending bool
-	if e := cl.manager.lock(func() error {
+	if e := cl.manager.administrativeLock(ctx, func() error {
 		_, s, _, e := cl.manager.load()
 		pending = s.Pending != nil && s.Pending.Kind == "concurrency"
 		return e
@@ -277,7 +277,7 @@ func (cl *Client) Refresh(ctx context.Context) error {
 func (cl *Client) Deactivate(ctx context.Context) error { return cl.registered(ctx, "deactivate") }
 func (cl *Client) Status(ctx context.Context) error {
 	m := cl.manager
-	return m.lock(func() error {
+	return m.administrativeLock(ctx, func() error {
 		i, s, h, e := m.load()
 		if e != nil {
 			return e
