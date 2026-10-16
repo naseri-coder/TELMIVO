@@ -35,18 +35,19 @@ var idRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,96}$`)
 var ErrBoundary = errors.New("PHASE38_UNTRUSTED_BOUNDARY")
 
 type Claim struct {
-	Protocol     string `json:"protocol"`
-	Action       string `json:"action"`
-	Installation string `json:"installation"`
-	Owner        string `json:"owner"`
-	Session      string `json:"session"`
-	Epoch        uint64 `json:"epoch"`
-	RequestID    string `json:"request_id"`
-	Tenant       string `json:"tenant"`
-	Actor        string `json:"actor"`
-	Resource     string `json:"resource"`
-	NotBefore    int64  `json:"not_before"`
-	Expires      int64  `json:"expires"`
+	Protocol      string `json:"protocol"`
+	Action        string `json:"action"`
+	Installation  string `json:"installation"`
+	Owner         string `json:"owner"`
+	Session       string `json:"session"`
+	Epoch         uint64 `json:"epoch"`
+	BootChallenge string `json:"boot_challenge,omitempty"`
+	RequestID     string `json:"request_id"`
+	Tenant        string `json:"tenant"`
+	Actor         string `json:"actor"`
+	Resource      string `json:"resource"`
+	NotBefore     int64  `json:"not_before"`
+	Expires       int64  `json:"expires"`
 }
 type ReceiptBody struct {
 	RequestID  string `json:"request_id"`
@@ -96,21 +97,23 @@ type record struct {
 }
 
 type Bridge struct {
-	mu           sync.Mutex
-	dir          *os.File
-	socket       *net.UnixListener
-	socketName   string
-	socketDir    string
-	installation string
-	readyEpoch   uint64 // volatile: restart quarantines old signed session until a fresh FENCE
-	workerUID    uint32
-	issuer       ed25519.PublicKey
-	provider     ed25519.PublicKey
-	handlers     sync.WaitGroup
-	done         chan struct{}
-	effectGate   func(context.Context, Claim) error // INTEGRATION TEST ONLY; set before Start
-	started      bool
-	closed       bool
+	mu            sync.Mutex
+	dir           *os.File
+	socket        *net.UnixListener
+	socketName    string
+	socketDir     string
+	installation  string
+	readyEpoch    uint64 // volatile: restart quarantines old signed session until a fresh FENCE
+	bootChallenge string // 256-bit process-ephemeral; never persisted or reused
+	strictBoot    bool   // additional test-only fence challenge requirement
+	workerUID     uint32
+	issuer        ed25519.PublicKey
+	provider      ed25519.PublicKey
+	handlers      sync.WaitGroup
+	done          chan struct{}
+	effectGate    func(context.Context, Claim) error // INTEGRATION TEST ONLY; set before Start
+	started       bool
+	closed        bool
 }
 
 func checkDir(path string, mode os.FileMode, uid, gid uint32) error {
@@ -164,7 +167,12 @@ func Open(socketDir, journalDir, installation string, workerUID uint32, issuer, 
 	if e != nil {
 		return nil, ErrBoundary
 	}
-	b := &Bridge{dir: os.NewFile(uintptr(fd), "supervisor-journal"), socketDir: socketDir, installation: installation, workerUID: workerUID, issuer: append(ed25519.PublicKey(nil), issuer...), provider: append(ed25519.PublicKey(nil), provider...), done: make(chan struct{})}
+	var bootBytes [32]byte
+	if _, e = rand.Read(bootBytes[:]); e != nil {
+		syscall.Close(fd)
+		return nil, ErrBoundary
+	}
+	b := &Bridge{dir: os.NewFile(uintptr(fd), "supervisor-journal"), socketDir: socketDir, installation: installation, workerUID: workerUID, issuer: append(ed25519.PublicKey(nil), issuer...), provider: append(ed25519.PublicKey(nil), provider...), done: make(chan struct{}), bootChallenge: hex.EncodeToString(bootBytes[:])}
 	// The first open creates a permanent lock marker. Missing epoch with an
 	// existing marker is CORRUPT, never reset silently to epoch zero.
 	lockfd, e := syscall.Openat(fd, "_root.lock", syscall.O_CREAT|syscall.O_EXCL|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
@@ -230,6 +238,36 @@ func (b *Bridge) SetIntegrationTestEffectGate(fn func(context.Context, Claim) er
 	}
 	b.effectGate = fn
 	return nil
+}
+
+// EnableTestFreshBootFence opts this standalone NONPRODUCTION bridge into a
+// signed fresh-boot challenge requirement. Existing Phase38/39 compatibility
+// tests remain unchanged. A Product release MUST NOT rely on opt-in wiring.
+func (b *Bridge) EnableTestFreshBootFence() error {
+	if os.Geteuid() != 0 {
+		return ErrBoundary
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.started || b.closed || b.strictBoot || b.bootChallenge == "" {
+		return ErrBoundary
+	}
+	b.strictBoot = true
+	return nil
+}
+
+// TestBootChallenge exposes a process-unique 256-bit challenge ONLY to this
+// local root test harness. No remote Authority challenge/grant flow exists.
+func (b *Bridge) TestBootChallenge() (string, error) {
+	if os.Geteuid() != 0 {
+		return "", ErrBoundary
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed || !b.strictBoot {
+		return "", ErrBoundary
+	}
+	return b.bootChallenge, nil
 }
 func (b *Bridge) Address() string { return b.socketName }
 func (b *Bridge) Start() {
@@ -473,6 +511,13 @@ func (b *Bridge) apply(c Claim, receipt *Receipt, reply func(string)) error {
 	}
 	switch c.Action {
 	case "FENCE":
+		// A signed future FENCE from the previous supervisor boot MUST NOT
+		// authorize an old session after a crash/restart, even if its epoch
+		// is ahead of the journal. Challenge is part of Ed25519-signed Claim.
+		if b.strictBoot && (len(c.BootChallenge) != 64 || c.BootChallenge != b.bootChallenge) {
+			reply("DENIED_FRESH_BOOT_CHALLENGE")
+			return nil
+		}
 		if c.RequestID != "" || c.Tenant != "" || c.Actor != "" || c.Resource != "" || receipt != nil || state.Epoch == ^uint64(0) || c.Epoch != state.Epoch+1 {
 			reply("DENIED_EPOCH")
 			return nil
