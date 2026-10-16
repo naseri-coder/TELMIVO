@@ -92,6 +92,7 @@ func TestLICA9Phase51ESignedV2BusyAdministrationNeverCallsAuthority(t *testing.T
 	}{
 		{"refresh-mutation", func(ctx context.Context) error { return cl.mutate(ctx, "refresh", []byte("{}")) }},
 		{"status", func(ctx context.Context) error { return cl.Status(ctx) }},
+		{"activation", func(ctx context.Context) error { return cl.Activate(ctx, "synthetic-test-code", "invalid-id", 1) }},
 		{"concurrency", func(ctx context.Context) error { return cl.Concurrency(ctx) }},
 		{"refresh", func(ctx context.Context) error { return cl.Refresh(ctx) }},
 		{"deactivate", func(ctx context.Context) error { return cl.Deactivate(ctx) }},
