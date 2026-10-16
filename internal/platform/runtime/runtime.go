@@ -46,7 +46,13 @@ func Run(role string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	license, licenseClient, licenseErr := installationlicense.OpenEnvironment()
+	license, licenseClient, cleanupLicense, strictTestStartup, licenseErr := openStartupLicense(role, c)
+	defer cleanupLicense()
+	if strictTestStartup && licenseErr != nil {
+		// Deliberately fail before the API listens; test-tagged binaries must
+		// never serve requests with a synthetic or absent license by fallback.
+		return licenseErr
+	}
 	if licenseErr != nil {
 		license = nil
 		licenseClient = nil
