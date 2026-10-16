@@ -14,13 +14,10 @@ func Middleware(m *Manager, next http.Handler) http.Handler {
 		d := Decision{State: "RESTRICTED", Reason: "CONFIGURATION_INVALID"}
 		if m != nil {
 			r = r.WithContext(WithManager(r.Context(), m))
-			d = m.Decision()
-			// A signed Manager may still be valid after the process Runtime
-			// has been terminally restricted. HTTP mutations must not treat
-			// that signed state as a process-level authorization grant.
-			if CheckRuntime(r.Context()) != nil {
-				d = Decision{State: "RESTRICTED", Reason: "RUNTIME_RESTRICTED"}
-			}
+			// One process-bound nonblocking signed decision controls the
+			// response. Do not call the blocking Manager.Decision from a
+			// nested external-effect callback while it holds the file lock.
+			d = RuntimeDecision(r.Context())
 		}
 		if r.Method == "GET" && r.URL.Path == "/health/license" {
 			w.Header().Set("Content-Type", "application/json")
