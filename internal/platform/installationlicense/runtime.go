@@ -6,15 +6,20 @@ import (
 	"sync/atomic"
 )
 
-var runtimeRequired atomic.Bool
-var runtimeManager atomic.Pointer[Manager]
+// A nil atomic pointer means that InstallRuntime was never called. After the
+// first installation, even a nil Manager is represented by a non-nil binding:
+// the process must remain restricted. Publish the entire pair atomically so
+// authorization never observes a mixed generation during a replacement.
+type runtimeBinding struct {
+	manager *Manager
+}
 
-// InstallRuntime enables a permanent process-wide license guard. Publish the
-// requirement first: a concurrent effect cannot see an unguarded window.
-// A nil manager leaves protected work restricted.
+var installedRuntime atomic.Pointer[runtimeBinding]
+
+// InstallRuntime publishes one immutable binding; a nil Manager is a durable
+// process-local restriction, not an opt-out of license enforcement.
 func InstallRuntime(m *Manager) {
-	runtimeRequired.Store(true)
-	runtimeManager.Store(m)
+	installedRuntime.Store(&runtimeBinding{manager: m})
 }
 
 // runtimeForEffect defaults to denial. A manager explicitly bound to context
@@ -46,8 +51,19 @@ func runtimeForEffect(ctx context.Context, globallyRequired bool, global *Manage
 	return m, nil
 }
 
+// runtimeForCurrentEffect reads one coherent installation snapshot. In a
+// separate isolated worker with no global installation, an explicit context
+// Manager is still individually checked; no Manager always denies.
+func runtimeForCurrentEffect(ctx context.Context) (*Manager, error) {
+	binding := installedRuntime.Load()
+	if binding == nil {
+		return runtimeForEffect(ctx, false, nil)
+	}
+	return runtimeForEffect(ctx, true, binding.manager)
+}
+
 func CheckRuntime(ctx context.Context) error {
-	m, err := runtimeForEffect(ctx, runtimeRequired.Load(), runtimeManager.Load())
+	m, err := runtimeForCurrentEffect(ctx)
 	if err != nil {
 		return err
 	}
@@ -57,7 +73,7 @@ func CheckRuntime(ctx context.Context) error {
 	return nil
 }
 func RuntimeEffect(ctx context.Context, fn func() error) error {
-	m, err := runtimeForEffect(ctx, runtimeRequired.Load(), runtimeManager.Load())
+	m, err := runtimeForCurrentEffect(ctx)
 	if err != nil {
 		return err
 	}
