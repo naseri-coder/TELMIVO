@@ -3,32 +3,52 @@ package installationlicense
 import (
 	"context"
 	"net/http"
+	"sync"
 	"sync/atomic"
 )
 
-// A nil atomic pointer means that InstallRuntime was never called. After the
-// first installation, even a nil Manager is represented by a non-nil binding:
-// the process must remain restricted. Publish the entire pair atomically so
-// authorization never observes a mixed generation during a replacement.
+// A nil pointer means the process has not installed its license Manager.
+// One successful installation may be followed only by terminal restriction.
+// A nil installation or attempted foreign replacement is terminal until process
+// restart; no local Context can override it.
 type runtimeBinding struct {
 	manager *Manager
 }
 
-var installedRuntime atomic.Pointer[runtimeBinding]
+var (
+	installedRuntime atomic.Pointer[runtimeBinding]
+	// Hold a read lease across a protected effect, so InstallRuntime(nil)
+	// cannot finish while an already admitted callback is still running.
+	// Do not call InstallRuntime from inside a RuntimeEffect callback.
+	runtimeGate sync.RWMutex
+)
 
-// InstallRuntime publishes one immutable binding; a nil Manager is a durable
-// process-local restriction, not an opt-out of license enforcement.
+// InstallRuntime is a one-way process-wide authority transition:
+// uninitialized -> installed / restricted; installed -> restricted.
+// An attempted replacement with a different Manager fails closed.
+// Reinstalling a restricted process never re-enables effects.
 func InstallRuntime(m *Manager) {
-	installedRuntime.Store(&runtimeBinding{manager: m})
+	runtimeGate.Lock()
+	defer runtimeGate.Unlock()
+
+	previous := installedRuntime.Load()
+	if previous == nil {
+		installedRuntime.Store(&runtimeBinding{manager: m})
+		return
+	}
+	if previous.manager == nil {
+		return // already terminally restricted
+	}
+	if m == previous.manager {
+		return // idempotent installation of the same verified owner
+	}
+	installedRuntime.Store(&runtimeBinding{}) // revoke or reject foreign rebind
 }
 
-// runtimeForEffect defaults to denial. A manager explicitly bound to context
-// can authorize an effect through its own durable verification even before an
-// application-wide manager is installed (e.g. a test or an isolated worker).
-// Once installed, the process-wide Manager is authoritative: a foreign or
-// locally supplied Manager cannot override a restricted global installation.
-// Before installation, a deliberately bound Manager may still be used by
-// isolated workers, subject to that Manager's own verified lease.
+// runtimeForEffect permits only the installed process-wide Manager. In
+// particular, even a signed Context-bound Manager cannot authorize an effect
+// before InstallRuntime. Test/isolated work should explicitly install a
+// Manager in a separate process rather than bypassing startup.
 func runtimeForEffect(ctx context.Context, globallyRequired bool, global *Manager) (*Manager, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -36,24 +56,18 @@ func runtimeForEffect(ctx context.Context, globallyRequired bool, global *Manage
 	if required, _ := ctx.Value(requiredKey{}).(bool); required && FromContext(ctx) == nil {
 		return nil, ErrRestricted
 	}
-	m := FromContext(ctx)
-	if globallyRequired {
-		// An installed restricted/nil runtime is process-wide authority.
-		// A foreign context-bound Manager must never override it.
-		if global == nil || (m != nil && m != global) {
-			return nil, ErrRestricted
-		}
-		return global, nil
-	}
-	if m == nil {
+	if !globallyRequired {
 		return nil, ErrRestricted
 	}
-	return m, nil
+	m := FromContext(ctx)
+	if global == nil || (m != nil && m != global) {
+		return nil, ErrRestricted
+	}
+	return global, nil
 }
 
-// runtimeForCurrentEffect reads one coherent installation snapshot. In a
-// separate isolated worker with no global installation, an explicit context
-// Manager is still individually checked; no Manager always denies.
+// runtimeForCurrentEffect loads a single coherent installation snapshot.
+// Callers must hold runtimeGate.RLock through the protected effect.
 func runtimeForCurrentEffect(ctx context.Context) (*Manager, error) {
 	binding := installedRuntime.Load()
 	if binding == nil {
@@ -63,6 +77,8 @@ func runtimeForCurrentEffect(ctx context.Context) (*Manager, error) {
 }
 
 func CheckRuntime(ctx context.Context) error {
+	runtimeGate.RLock()
+	defer runtimeGate.RUnlock()
 	m, err := runtimeForCurrentEffect(ctx)
 	if err != nil {
 		return err
@@ -73,6 +89,8 @@ func CheckRuntime(ctx context.Context) error {
 	return nil
 }
 func RuntimeEffect(ctx context.Context, fn func() error) error {
+	runtimeGate.RLock()
+	defer runtimeGate.RUnlock()
 	m, err := runtimeForCurrentEffect(ctx)
 	if err != nil {
 		return err
