@@ -345,13 +345,18 @@ func (m *Manager) Decision() Decision {
 // Never wait on a second independently opened flock from inside that effect.
 func (m *Manager) decisionNonblocking() Decision {
 	d := Decision{State: "RESTRICTED", Reason: "STATE_INVALID"}
-	if e := m.lockMode(syscall.LOCK_EX|syscall.LOCK_NB, func() error {
+	acquired := false
+	e := m.lockMode(syscall.LOCK_EX|syscall.LOCK_NB, func() error {
+		acquired = true
 		var err error
 		d, err = m.decisionLocked()
 		return err
-	}); e != nil {
+	})
+	if e != nil && !acquired {
 		return Decision{State: "RESTRICTED", Reason: "STATE_LOCK_UNAVAILABLE"}
 	}
+	// Retain the real reason (expiry, session replay, cancellation of lease)
+	// if a locked decision was evaluated but returned a restriction error.
 	return d
 }
 
