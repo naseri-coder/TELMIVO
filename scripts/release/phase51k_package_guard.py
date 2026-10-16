@@ -54,9 +54,10 @@ def verify(archive: Path, externally_pinned_manifest_sha256: str):
                 if path not in FILES | {MANIFEST} or path in seen:
                     _reject("unexpected or duplicate member: " + path[:160])
                 seen.add(path)
-                if not member.isfile() or member.issym() or member.islnk():
+                if member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE):
                     _reject("non-regular archive member")
-                if member.uid != 0 or member.gid != 0 or member.mode & 0o777 not in (0o644, 0o755):
+                expected_mode = 0o644 if path == MANIFEST else 0o755
+                if member.uid != 0 or member.gid != 0 or member.mode & 0o777 != expected_mode:
                     _reject("unsafe owner or member mode")
                 if member.pax_headers:
                     _reject("extended archive headers not permitted")
@@ -96,7 +97,8 @@ def verify(archive: Path, externally_pinned_manifest_sha256: str):
     except (ValueError, UnicodeDecodeError) as exc:
         _reject("invalid or duplicate manifest JSON: " + str(exc))
     if (not isinstance(manifest, dict) or set(manifest) != {"schema", "product", "go", "files"}
-        or manifest["schema"] != 1 or manifest["product"] != "TELMIVO_BACKEND"
+        or type(manifest["schema"]) is not int or manifest["schema"] != 1
+        or manifest["product"] != "TELMIVO_BACKEND"
         or manifest["go"] != "go1.27.2" or not isinstance(manifest["files"], dict)
         or set(manifest["files"]) != FILES):
         _reject("manifest identity/toolchain/file set invalid")
