@@ -65,11 +65,15 @@ type phase36Relay struct {
 
 func phase36OpenRelay(t *testing.T, manager *Manager, pub ed25519.PublicKey) *phase36Relay {
 	t.Helper()
-	directory := filepath.Join(t.TempDir(), "owner-only")
-	if err := os.Mkdir(directory, 0700); err != nil {
+	// Android/Termux has a limited AF_UNIX pathname length. The very long
+	// t.TempDir() path for named tests can exceed sockaddr_un.sun_path.
+	// Use a short, private, disposable socket directory instead.
+	directory, err := os.MkdirTemp("", "lic36-")
+	if err != nil {
 		t.Fatal(err)
 	}
-	address := filepath.Join(directory, "test-owner.sock")
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	address := filepath.Join(directory, "owner.sock")
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: address, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
