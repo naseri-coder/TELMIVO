@@ -108,6 +108,7 @@ type Bridge struct {
 	provider     ed25519.PublicKey
 	handlers     sync.WaitGroup
 	done         chan struct{}
+	effectGate   func(context.Context, Claim) error // INTEGRATION TEST ONLY; set before Start
 	started      bool
 	closed       bool
 }
@@ -210,6 +211,24 @@ func Open(socketDir, journalDir, installation string, workerUID uint32, issuer, 
 	b.socket = ln
 	b.socketName = name
 	return b, nil
+}
+// SetIntegrationTestEffectGate optionally connects the root-owned durable
+// reservation to the genuine Product Manager.Effect via a caller-supplied
+// closure. This bridge is a standalone TEST module, not deployed Product code.
+// The gate is called only AFTER an fsync-backed journal reservation and only
+// for a peer-verified, signature-verified, domain-allowed APPLY. Gate errors
+// stay UNKNOWN: never retry an external effect or claim it settled.
+func (b *Bridge) SetIntegrationTestEffectGate(fn func(context.Context, Claim) error) error {
+	if fn == nil || os.Geteuid() != 0 {
+		return ErrBoundary
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.started || b.closed || b.effectGate != nil {
+		return ErrBoundary
+	}
+	b.effectGate = fn
+	return nil
 }
 func (b *Bridge) Address() string { return b.socketName }
 func (b *Bridge) Start() {
@@ -497,8 +516,15 @@ func (b *Bridge) apply(c Claim, receipt *Receipt, reply func(string)) error {
 		if b.writeExclusive(name, record{Version: recordVersion, RequestID: c.RequestID, ClaimHash: digest(c)}) != nil {
 			return ErrBoundary
 		}
+		if b.effectGate != nil {
+			// The journal reservation is already durable BEFORE the real Manager
+			// makes any admission decision. We intentionally do not distinguish
+			// gate failure from uncertain provider outcome at the IPC boundary:
+			// neither case authorizes a retry of the same RequestID.
+			_ = b.effectGate(context.Background(), c)
+		}
 		reply("RECONCILE_REQUIRED")
-		return nil // NO real external callback or auto-retry
+		return nil // NEVER claim a verified real external effect
 	case "CONFIRM":
 		if receipt == nil || !idRE.MatchString(c.RequestID) || !b.receiptValid(*receipt) {
 			reply("DENIED_PROVIDER_PROOF")
