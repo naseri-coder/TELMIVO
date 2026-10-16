@@ -7,7 +7,20 @@ ALTER TABLE outbox_events
  ADD COLUMN delivery_state text NOT NULL DEFAULT 'READY',
  ADD COLUMN delivery_attempted_at timestamptz;
 
--- Existing acknowledged rows are not eligible for new delivery.
+-- PRE-UPGRADE SAFETY: an old Relay may have sent to JetStream but lost
+-- the acknowledgment before saving published_at. Its attempts counter is
+-- durable even when the broker outcome is not. Quarantine ALL preexisting
+-- unacknowledged attempts, including attempts with an expired lease. The
+-- timestamp is the quarantine migration observation time, NOT proof of
+-- a historical broker send timestamp. Manual broker/consumer reconciliation
+-- is mandatory before any independent disposition; never auto-reopen READY.
+-- Old Relay processes MUST be stopped and fenced before this migration.
+UPDATE outbox_events SET delivery_state='UNKNOWN',
+ delivery_attempted_at=clock_timestamp()
+ WHERE published_at IS NULL AND attempts>0;
+
+-- Only historically acknowledged rows are known to have published; these
+-- rows already have their actual successful publication timestamp.
 UPDATE outbox_events SET delivery_state='PUBLISHED',
  delivery_attempted_at=published_at
  WHERE published_at IS NOT NULL;
