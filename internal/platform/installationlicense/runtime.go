@@ -82,6 +82,19 @@ func runtimeForCurrentEffect(ctx context.Context) (*Manager, error) {
 	return runtimeForEffect(ctx, true, binding.manager)
 }
 
+// RuntimeDecision returns the actual installed Manager's signed decision when
+// the state lock is available. A busy installation lock fails closed rather
+// than deadlocking an already-authorized callback that performs a nested read.
+func RuntimeDecision(ctx context.Context) Decision {
+	runtimeGate.Lock()
+	defer runtimeGate.Unlock()
+	m, err := runtimeForCurrentEffect(ctx)
+	if err != nil {
+		return Decision{State: "RESTRICTED", Reason: "RUNTIME_RESTRICTED"}
+	}
+	return m.decisionNonblocking()
+}
+
 func CheckRuntime(ctx context.Context) error {
 	runtimeGate.Lock()
 	defer runtimeGate.Unlock()
@@ -89,7 +102,7 @@ func CheckRuntime(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if m.Decision().State == "RESTRICTED" {
+	if m.decisionNonblocking().State == "RESTRICTED" {
 		return ErrRestricted
 	}
 	return nil
