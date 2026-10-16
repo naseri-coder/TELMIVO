@@ -15,6 +15,7 @@ func phase51HSetValidTestGate(t *testing.T) {
 	t.Helper()
 	t.Setenv("TELMIVO_ENV", "test")
 	t.Setenv("TELMIVO_LICENSE_ENVIRONMENT", "TEST")
+	t.Setenv("SYNTHETIC_MODE", "true")
 	t.Setenv("TELMIVO_LIC_A9_NATIVE_FIXTURE", "YES")
 	t.Setenv("TEST_DATABASE_URL", phase51HNativeURL)
 	t.Setenv("TEST_MIGRATION_DATABASE_URL", phase51HMigrationURL)
