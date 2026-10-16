@@ -8,7 +8,8 @@ ALTER TABLE outbox_events
  ADD COLUMN delivery_attempted_at timestamptz;
 
 -- Existing acknowledged rows are not eligible for new delivery.
-UPDATE outbox_events SET delivery_state='PUBLISHED'
+UPDATE outbox_events SET delivery_state='PUBLISHED',
+ delivery_attempted_at=published_at
  WHERE published_at IS NOT NULL;
 
 ALTER TABLE outbox_events
