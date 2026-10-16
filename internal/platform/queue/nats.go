@@ -81,7 +81,7 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 	defer tx.Rollback(ctx)
 	// Claim only one row per transaction. A crash after claiming cannot
 	// quarantine unrelated unattempted rows from the same batch.
-	rows, e := tx.Query(ctx, "SELECT id::text,COALESCE(workspace_id::text,''),subject,event_type,correlation_id,payload FROM outbox_events WHERE delivery_state='READY' AND published_at IS NULL AND available_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED")
+	rows, e := tx.Query(ctx, outboxSelectReadySQL)
 	if e != nil {
 		return e
 	}
@@ -106,7 +106,7 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 	for _, x := range batch {
 		// This immutable pre-transport UNKNOWN fence is COMMITTED before
 		// calling JetStream. Even a crash during PublishMsg is not replayed.
-		tag, updateErr := tx.Exec(ctx, "UPDATE outbox_events SET delivery_state='UNKNOWN',delivery_attempted_at=clock_timestamp(),lease_until=clock_timestamp()+interval '60 seconds',lease_owner=$2,attempts=attempts+1 WHERE id=$1 AND delivery_state='READY' AND published_at IS NULL", x.event.ID, owner)
+		tag, updateErr := tx.Exec(ctx, outboxClaimUnknownSQL, x.event.ID, owner)
 		if updateErr != nil {
 			return updateErr
 		}
@@ -131,7 +131,7 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 		}
 		// JetStream acknowledged receipt. Mark PUBLISHED only while the same
 		// owner still holds the matching unknown-attempt fence.
-		tag, updateErr := db.Pool.Exec(ctx, "UPDATE outbox_events SET delivery_state='PUBLISHED',published_at=clock_timestamp(),lease_until=NULL,lease_owner=NULL WHERE id=$1 AND delivery_state='UNKNOWN' AND published_at IS NULL AND lease_owner=$2", x.event.ID, owner)
+		tag, updateErr := db.Pool.Exec(ctx, outboxConfirmPublishedSQL, x.event.ID, owner)
 		if updateErr != nil || tag.RowsAffected() != 1 {
 			// A lost DB acknowledgment cannot revoke or replay a published
 			// broker message. The UNKNOWN row remains for reconciliation.
