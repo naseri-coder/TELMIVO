@@ -38,6 +38,11 @@ type phase39Fixture struct {
 }
 
 func phase39FixtureOpen(t *testing.T) *phase39Fixture {
+	return phase39FixtureOpenMode(t, false)
+}
+
+// Phase41 test gate: strict fresh-boot identity while preserving legacy tests.
+func phase39FixtureOpenMode(t *testing.T, strictBoot bool) *phase39Fixture {
 	t.Helper()
 	if os.Geteuid() != 0 {
 		t.Skip("LIC_A9_PHASE39_NOT_RUN: actual root UID and Linux required")
@@ -77,6 +82,11 @@ func phase39FixtureOpen(t *testing.T) *phase39Fixture {
 	f.server, e = bridge.Open(f.socketDir, f.journalDir, "installationA", phase39WorkerUID, f.issuer.Public().(ed25519.PublicKey), f.provider.Public().(ed25519.PublicKey))
 	if e != nil {
 		t.Fatal(e)
+	}
+	if strictBoot {
+		if e = f.server.EnableTestFreshBootFence(); e != nil {
+			t.Fatal(e)
+		}
 	}
 	if e = f.server.SetIntegrationTestEffectGate(func(ctx context.Context, c bridge.Claim) error {
 		if c.Session != f.manager.runtimeSession {
