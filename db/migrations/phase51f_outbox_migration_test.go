@@ -18,6 +18,11 @@ func TestLICA9Phase51FOutboxMigrationContract(t *testing.T) {
 		"ADD COLUMN delivery_attempted_at timestamptz",
 		"delivery_state='PUBLISHED'",
 		"delivery_attempted_at=published_at",
+		"UPDATE outbox_events SET delivery_state='UNKNOWN'",
+		"delivery_attempted_at=clock_timestamp()",
+		"WHERE published_at IS NULL AND attempts>0",
+		"CHECK (delivery_state<>'READY' OR attempts=0)",
+		"outbox attempt increment requires READY to UNKNOWN fence",
 		"CHECK (delivery_state IN ('READY','UNKNOWN','PUBLISHED'))",
 		"CHECK ((delivery_state='PUBLISHED')=(published_at IS NOT NULL))",
 		"CREATE INDEX outbox_delivery_ready",
@@ -33,11 +38,12 @@ func TestLICA9Phase51FOutboxMigrationContract(t *testing.T) {
 			t.Errorf("outbox migration lost invariant %q", fragment)
 		}
 	}
+	quarantine := strings.Index(sql, "UPDATE outbox_events SET delivery_state='UNKNOWN'")
 	backfill := strings.Index(sql, "UPDATE outbox_events SET delivery_state='PUBLISHED'")
 	constraint := strings.Index(sql, "ADD CONSTRAINT outbox_delivery_attempt_consistency")
 	trigger := strings.Index(sql, "CREATE TRIGGER outbox_delivery_transition")
-	if backfill < 0 || constraint <= backfill || trigger <= constraint {
-		t.Fatalf("historical PUBLISHED backfill must precede constraints/transition trigger")
+	if quarantine < 0 || backfill <= quarantine || constraint <= backfill || trigger <= constraint {
+		t.Fatalf("legacy unacknowledged attempts must be quarantined before published backfill and constraints")
 	}
 	if strings.Contains(sql, "DROP TABLE outbox_events") || strings.Contains(sql, "TRUNCATE") {
 		t.Fatal("outbox migration contains destructive operation")

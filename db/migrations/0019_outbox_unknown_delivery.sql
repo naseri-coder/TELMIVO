@@ -7,7 +7,20 @@ ALTER TABLE outbox_events
  ADD COLUMN delivery_state text NOT NULL DEFAULT 'READY',
  ADD COLUMN delivery_attempted_at timestamptz;
 
--- Existing acknowledged rows are not eligible for new delivery.
+-- PRE-UPGRADE SAFETY: an old Relay may have sent to JetStream but lost
+-- the acknowledgment before saving published_at. Its attempts counter is
+-- durable even when the broker outcome is not. Quarantine ALL preexisting
+-- unacknowledged attempts, including attempts with an expired lease. The
+-- timestamp is the quarantine migration observation time, NOT proof of
+-- a historical broker send timestamp. Manual broker/consumer reconciliation
+-- is mandatory before any independent disposition; never auto-reopen READY.
+-- Old Relay processes MUST be stopped and fenced before this migration.
+UPDATE outbox_events SET delivery_state='UNKNOWN',
+ delivery_attempted_at=clock_timestamp()
+ WHERE published_at IS NULL AND attempts>0;
+
+-- Only historically acknowledged rows are known to have published; these
+-- rows already have their actual successful publication timestamp.
 UPDATE outbox_events SET delivery_state='PUBLISHED',
  delivery_attempted_at=published_at
  WHERE published_at IS NOT NULL;
@@ -18,7 +31,9 @@ ALTER TABLE outbox_events
  ADD CONSTRAINT outbox_delivery_published_consistency
  CHECK ((delivery_state='PUBLISHED')=(published_at IS NOT NULL)),
  ADD CONSTRAINT outbox_delivery_attempt_consistency
- CHECK (delivery_state='READY' OR delivery_attempted_at IS NOT NULL);
+ CHECK (delivery_state='READY' OR delivery_attempted_at IS NOT NULL),
+ ADD CONSTRAINT outbox_delivery_ready_pristine
+ CHECK (delivery_state<>'READY' OR attempts=0);
 
 -- A partially acknowledged request is quarantined before transport. Explicit
 -- proof of delivery/absence is required for any external reconciliation.
@@ -34,6 +49,12 @@ BEGIN
    RAISE EXCEPTION 'unknown outbox attempt is durable and requires reconciliation';
   END IF;
   RETURN OLD;
+ END IF;
+ -- An old Relay binary ignores delivery_state and attempts to increment
+ -- attempts on READY/UNKNOWN. Reject that update *before* it can publish.
+ IF OLD.delivery_state IN ('READY','UNKNOWN')
+    AND NEW.delivery_state=OLD.delivery_state AND NEW.attempts<>OLD.attempts THEN
+  RAISE EXCEPTION 'outbox attempt increment requires READY to UNKNOWN fence';
  END IF;
  IF OLD.delivery_state='PUBLISHED' AND NEW.delivery_state<>'PUBLISHED' THEN
   RAISE EXCEPTION 'published outbox event cannot be reopened';
