@@ -3,7 +3,6 @@ package installationlicense
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -23,9 +22,7 @@ func TestLICA9Phase03HardlinkedLicenseFilesFailClosed(t *testing.T) {
 			}
 			source := filepath.Join(m.cfg.Directory, name)
 			alias := filepath.Join(t.TempDir(), "hardlinked-alias")
-			if e := os.Link(source, alias); e != nil {
-				t.Fatal("hardlink attack fixture could not be created", e)
-			}
+			phase35RequireHardlinkFixture(t, source, alias)
 			if d := m.Decision(); d.State != "RESTRICTED" {
 				t.Fatal("hardlinked licensing file did not restrict", name, d)
 			}
@@ -61,9 +58,7 @@ func TestLICA9Phase03HardlinkedRefreshLeaderFailsClosed(t *testing.T) {
 	}
 	source := filepath.Join(m.cfg.Directory, "refresh-leader")
 	alias := filepath.Join(t.TempDir(), "aliased-refresh-leader")
-	if e := os.Link(source, alias); e != nil {
-		t.Fatal("failed to construct same-filesystem hardlink fixture", e)
-	}
+	phase35RequireHardlinkFixture(t, source, alias)
 	leader, e := m.acquireRefreshLeader()
 	if leader != nil {
 		leader.Close()
