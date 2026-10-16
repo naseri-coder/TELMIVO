@@ -1,8 +1,7 @@
 #!/bin/sh
 set -eu
-python3 - <<'PYCODE'
-import os,urllib.parse
-for name in ['TEST_DATABASE_URL','TEST_MIGRATION_DATABASE_URL']:
- u=urllib.parse.urlparse(os.environ.get(name,''))
- if u.hostname not in ('127.0.0.1','localhost','postgres') or u.path!='/telmivo_test': raise SystemExit('Explicit isolated telmivo_test URLs are required')
-PYCODE
+# Exact native target admission without connecting to any service.
+# Reject URI query-host overrides, remote DNS aliases, production DB names,
+# wrong migration roles, and inherited non-test destinations.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+exec python3 "$SCRIPT_DIR/phase51l_test_target.py"
