@@ -10,6 +10,7 @@ def safe():
         "TEST_NATS_URL": "nats://127.0.0.1:4222",
         "TELMIVO_ENV": "test",
         "TELMIVO_LICENSE_ENVIRONMENT": "TEST",
+        "SYNTHETIC_MODE": "true",
     }
 
 class NativeTargets(unittest.TestCase):
