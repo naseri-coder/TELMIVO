@@ -36,9 +36,30 @@ services:
       retries: 3
       test: [CMD-SHELL, "kill -0 1"]
 
+  media-volume-init:
+    image: ${TELMIVO_BACKEND_IMAGE:?immutable backend image required}
+    user: "0:0"
+    restart: "no"
+    network_mode: none
+    command:
+      - sh
+      - -ec
+      - chown 10001:10001 /var/lib/telmivo/media /var/lib/telmivo/work && chmod 0750 /var/lib/telmivo/media /var/lib/telmivo/work
+    volumes:
+      - media-storage:/var/lib/telmivo/media
+      - media-work:/var/lib/telmivo/work
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt:
+      - no-new-privileges:true
+
   media-worker:
     <<: *app
     command: [/app/media-worker]
+    depends_on:
+      media-volume-init:
+        condition: service_completed_successfully
     volumes:
       - media-storage:/var/lib/telmivo/media
       - media-work:/var/lib/telmivo/work
@@ -102,7 +123,7 @@ services:
       - /tmp:rw,noexec,nosuid,size=16m
       - /var/cache/nginx:rw,noexec,nosuid,size=16m
       - /var/run:rw,noexec,nosuid,size=4m
-      - /etc/nginx/conf.d:rw,noexec,nosuid,size=1m
+      - /etc/nginx/conf.d:rw,noexec,nosuid,size=1m,uid=101,gid=101,mode=0775
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true

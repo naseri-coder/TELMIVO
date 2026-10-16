@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/naseri-coder/TELMIVO/internal/domains/accessgates"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 	"net/http"
 	"time"
@@ -35,8 +36,11 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 		return errors.New("Telegram request invalid")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, e := c.http.Do(req)
+	resp, e := installationlicense.HTTP(ctx, c.http, req)
 	if e != nil {
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			return e
+		}
 		return errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}
 	defer resp.Body.Close()
@@ -65,11 +69,19 @@ func (c *Client) call(ctx context.Context, method string, payload any, result an
 	}
 	return nil
 }
+func messagePayload(m telegram.Message) map[string]any {
+	payload := map[string]any{"chat_id": m.ChatID, "text": m.Text}
+	if m.Markup != nil {
+		payload["reply_markup"] = m.Markup
+	}
+	return payload
+}
+
 func (c *Client) Send(ctx context.Context, m telegram.Message) (int64, error) {
 	var out struct {
 		ID int64 `json:"message_id"`
 	}
-	e := c.call(ctx, "sendMessage", map[string]any{"chat_id": m.ChatID, "text": m.Text, "reply_markup": m.Markup}, &out)
+	e := c.call(ctx, "sendMessage", messagePayload(m), &out)
 	if e == nil && out.ID <= 0 {
 		e = errors.New("TELEGRAM_DELIVERY_UNKNOWN")
 	}

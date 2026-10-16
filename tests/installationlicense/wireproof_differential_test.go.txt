@@ -1,0 +1,46 @@
+package wireproof
+
+import (
+ "bytes"
+ "crypto/ed25519"
+ "crypto/sha256"
+ "testing"
+)
+
+func TestCrossRepositorySignedInputs(t *testing.T) {
+ seed := make([]byte, ed25519.SeedSize)
+ for n := range seed { seed[n] = byte(n) }
+ secret := ed25519.NewKeyFromSeed(seed)
+ install := Identity{ID:"22222222-2222-4222-8222-222222222222", PrivateKey:secret}
+ p := Proof{
+  InstallationID:install.ID,
+  Timestamp:"1728936000000",
+  Nonce:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  IdempotencyKey:"11111111-1111-4111-8111-111111111111",
+  PublicKey:install.PublicKey(),
+ }
+ cases := []struct{name,method,path,query,key string;body []byte}{
+  {"activate","POST","/v1/licenses/activate","",p.IdempotencyKey,[]byte("{\"authority_epoch\":1}")},
+  {"refresh","POST","/v1/licenses/refresh","",p.IdempotencyKey,[]byte("{\"activation_id\":\"aaaa\",\"authority_epoch\":1}")},
+  {"deactivate","POST","/v1/licenses/deactivate","",p.IdempotencyKey,[]byte("{\"activation_id\":\"aaaa\"}")},
+  {"concurrency","POST","/v1/licenses/concurrency","",p.IdempotencyKey,[]byte("{\"request_id\":\"aaaa\"}")},
+  {"status","GET","/v1/licenses/status","activation_id=11111111-1111-4111-8111-111111111111","",nil},
+  {"utf8","POST","/v1/licenses/activate","",p.IdempotencyKey,[]byte("{\"label\":\"درود\"}")},
+  {"binary","POST","/v1/licenses/refresh","",p.IdempotencyKey,[]byte{0,255,123,125,13,10}},
+ }
+ for _,tc := range cases { t.Run(tc.name,func(t *testing.T){
+  p.IdempotencyKey = tc.key
+  product := proof(install,tc.method,tc.path,tc.query,p.Timestamp,p.Nonce,tc.key,tc.body)
+  authority := SigningInput(tc.method,tc.path,tc.query,tc.body,p)
+  if !bytes.Equal(product,authority) {
+   t.Fatalf("proof divergence product=%x authority=%x",sha256.Sum256(product),sha256.Sum256(authority))
+  }
+  signature := ed25519.Sign(secret,product)
+  if !ed25519.Verify(p.PublicKey,authority,signature) { t.Fatal("authority did not verify client signed input") }
+  modified := append([]byte(nil),tc.body...)
+  if len(modified)==0 {modified=[]byte{1}} else {modified[0]^=1}
+  if ed25519.Verify(p.PublicKey,SigningInput(tc.method,tc.path,tc.query,modified,p),signature) {
+   t.Fatal("authority incorrectly accepted altered payload")
+  }
+ }) }
+}

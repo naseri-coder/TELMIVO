@@ -88,7 +88,7 @@ if __name__ == "__main__":
                 raise ValueError("ACCESS_RESTRICTED")
             result = {"title": str(info.get("title", "media"))[:200], "duration": info.get("duration") or 0, "formats": []}
             for f in info.get("formats", [])[:200]:
-                result["formats"].append({k: f.get(k) for k in ("format_id", "ext", "protocol", "url", "vcodec", "acodec", "filesize", "height", "has_drm")})
+                result["formats"].append({k: f.get(k) for k in ("format_id", "ext", "protocol", "url", "vcodec", "acodec", "filesize", "filesize_approx", "height", "has_drm")})
             print(json.dumps(result))
     except Exception as exc:
         # Error text is used privately only for category mapping, never emitted or logged.

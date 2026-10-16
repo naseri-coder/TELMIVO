@@ -93,6 +93,33 @@ func TestR3FinalExternalEffectFence(t *testing.T) {
 		t.Fatal("failed external attempt replayed")
 	}
 
+	// A transport-classified UNKNOWN commits durable domain evidence, retains
+	// scrubbed uncertainty evidence, ACKs the broker attempt and never resends.
+	classified := makeEvent()
+	handler = func(c context.Context, tx pgx.Tx, e queue.Envelope) error {
+		calls.Add(1)
+		_, err := tx.Exec(c, "INSERT INTO notifications(workspace_id,user_id,message_key,parameters,status,idempotency_key) VALUES($1,$2,'bot.menu','{}','UNKNOWN',$3)", u.WorkspaceID, u.UserID, e.ID)
+		if err != nil {
+			return err
+		}
+		return queue.ErrExternalOutcomeUnknown
+	}
+	must(t, queue.Process(ctx, db, "r3-final-external", classified, true, handler))
+	must(t, queue.Process(ctx, db, "r3-final-external", classified, true, handler))
+	if calls.Load() != 3 {
+		t.Fatal("classified unknown external effect replayed")
+	}
+	var status string
+	must(t, owner.Pool.QueryRow(ctx, "SELECT status FROM notifications WHERE workspace_id=$1 AND idempotency_key=$2", u.WorkspaceID, classified.ID).Scan(&status))
+	if status != "UNKNOWN" {
+		t.Fatal("classified unknown outcome not persisted", status)
+	}
+	var unknownEvidence int
+	must(t, db.Pool.QueryRow(ctx, "SELECT count(*) FROM dead_letter_events WHERE consumer='r3-final-external' AND event_id=$1 AND error_code='EXTERNAL_OUTCOME_UNCONFIRMED'", classified.ID).Scan(&unknownEvidence))
+	if unknownEvidence != 1 {
+		t.Fatal("classified unknown lost uncertainty evidence")
+	}
+
 	// Concurrent deliveries race on the durable fence; exactly one may send.
 	success := makeEvent()
 	var sent atomic.Int64

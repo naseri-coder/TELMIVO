@@ -9,6 +9,7 @@ import (
 	platform "github.com/naseri-coder/TELMIVO/internal/domains/pluginplatform"
 	tg "github.com/naseri-coder/TELMIVO/internal/integrations/telegram"
 	cred "github.com/naseri-coder/TELMIVO/internal/platform/crypto"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	"github.com/naseri-coder/TELMIVO/internal/platform/testfixtures"
 	gate "github.com/naseri-coder/TELMIVO/internal/plugins/accessgate"
@@ -114,6 +115,11 @@ func (a *API) contentWebhook(w http.ResponseWriter, r *http.Request) {
 	var u contentplugins.Update
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&u) != nil {
 		fail(w, 400, "invalid")
+		return
+	}
+	if installationlicense.CheckRuntime(r.Context()) != nil {
+		w.Header().Set("X-Telmivo-License", "restricted")
+		w.WriteHeader(200)
 		return
 	}
 	if e := s.HandleUpdate(r.Context(), sdk.Scope{AccountID: account, BotID: bot, PluginID: files.ID}, "customer-telegram-update", u); e != nil {

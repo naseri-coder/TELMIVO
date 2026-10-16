@@ -3,19 +3,26 @@ package telegram
 import (
 	"context"
 	"errors"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"time"
+
+	transport "github.com/naseri-coder/TELMIVO/internal/platform/telegram"
 )
 
-// BroadcastReply classifies only explicit Telegram rejection as safely retryable.
-func (c *Client) BroadcastReply(ctx context.Context, user int64, text string) (int64, string, time.Duration) {
-	if user <= 0 || len(text) == 0 || len(text) > 4000 {
+// SendClassified sends one Telegram message and classifies the transport result
+// without exposing Telegram response text or token-bearing URLs.
+func (c *Client) SendClassified(ctx context.Context, message transport.Message) (int64, string, time.Duration) {
+	if message.ChatID == 0 || len(message.Text) == 0 || len(message.Text) > 4000 {
 		return 0, "DELIVERY_FAILED", 0
 	}
 	var out struct {
 		ID int64 `json:"message_id"`
 	}
-	e := c.call(ctx, "sendMessage", map[string]any{"chat_id": user, "text": text}, &out)
+	e := c.call(ctx, "sendMessage", messagePayload(message), &out)
 	if e != nil {
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			return 0, "DELIVERY_FAILED", 0
+		}
 		var api *APIError
 		if errors.As(e, &api) {
 			if api.Code == 429 {
@@ -41,4 +48,9 @@ func (c *Client) BroadcastReply(ctx context.Context, user int64, text string) (i
 		return 0, "DELIVERY_OUTCOME_UNKNOWN", 0
 	}
 	return out.ID, "DELIVERY_ACKNOWLEDGED", 0
+}
+
+// BroadcastReply classifies only explicit Telegram rejection as safely retryable.
+func (c *Client) BroadcastReply(ctx context.Context, user int64, text string) (int64, string, time.Duration) {
+	return c.SendClassified(ctx, transport.Message{ChatID: user, Text: text})
 }

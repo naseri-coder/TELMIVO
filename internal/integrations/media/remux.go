@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ func Remux(ctx context.Context, input, output string, max int64, format Format) 
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
-	if cmd.Run() != nil {
+	if installationlicense.RuntimeEffect(ctx, cmd.Run) != nil {
 		if ctx.Err() != nil {
 			return "", Failure("PROCESSING_TIMEOUT")
 		}

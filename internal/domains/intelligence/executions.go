@@ -9,6 +9,7 @@ import (
 	provider "github.com/naseri-coder/TELMIVO/internal/platform/ai"
 	"github.com/naseri-coder/TELMIVO/internal/platform/businessevents"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	assistant "github.com/naseri-coder/TELMIVO/internal/plugins/aiassistant"
 	workflow "github.com/naseri-coder/TELMIVO/internal/plugins/automation"
@@ -146,10 +147,10 @@ func (s *Service) Run(ctx context.Context, actor string, scope sdk.Scope, id str
 		if retry {
 			x.Attempt++
 			x.Steps = x.Steps[:len(x.Steps)-1]
-			return s.persistStep(context.WithoutCancel(ctx), runner, scope, id, x, "QUEUED", code, false)
+			return s.persistStep(installationlicense.Settlement(context.WithoutCancel(ctx)), runner, scope, id, x, "QUEUED", code, false)
 		}
 		if e != nil {
-			finish := s.persistStep(context.WithoutCancel(ctx), runner, scope, id, x, "FAILED", code, true)
+			finish := s.persistStep(installationlicense.Settlement(context.WithoutCancel(ctx)), runner, scope, id, x, "FAILED", code, true)
 			if finish != nil {
 				return finish
 			}
@@ -160,7 +161,7 @@ func (s *Service) Run(ctx context.Context, actor string, scope sdk.Scope, id str
 			return e
 		}
 	}
-	return s.persistStep(context.WithoutCancel(ctx), runner, scope, id, x, "SUCCEEDED", "", true)
+	return s.persistStep(installationlicense.Settlement(context.WithoutCancel(ctx)), runner, scope, id, x, "SUCCEEDED", "", true)
 }
 func (s *Service) persistStep(ctx context.Context, actor string, scope sdk.Scope, id string, x Execution, state, code string, done bool) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

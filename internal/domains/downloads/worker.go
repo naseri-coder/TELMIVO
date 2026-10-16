@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/naseri-coder/TELMIVO/internal/domains/jobs"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/storage"
@@ -163,6 +164,9 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				if installationlicense.CheckRuntime(ctx) != nil {
+					continue
+				}
 				e := w.tx(ctx, heartbeatWork, func(tx pgx.Tx) error {
 					var cancelled bool
 					if e := tx.QueryRow(ctx, "SELECT cancel_requested FROM download_jobs WHERE id=$1", id).Scan(&cancelled); e != nil {
@@ -187,12 +191,12 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 	}()
 	defer func() { cancel(); <-heartbeatDone }()
 	finalize := func(state, code, outcome string, mid int64) error {
-		final, stop := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
+		final, stop := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(parent)), 10*time.Second)
 		defer stop()
 		return w.finish(final, x, state, code, outcome, mid)
 	}
 	if x.State == "EXPIRED_RESERVATION" {
-		return finalize("FAILED", "QUOTA_RESERVATION_EXPIRED", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "QUOTA_RESERVATION_EXPIRED", "DELIVERY_PENDING", 0)
 	}
 	if x.State == "UPLOADING" {
 		return finalize("FAILED", "DELIVERY_OUTCOME_UNKNOWN", "DELIVERY_OUTCOME_UNKNOWN", 0)
@@ -202,12 +206,12 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 	}
 	s, e := media.Detect(x.URL)
 	if e != nil {
-		return finalize("FAILED", "INVALID_URL", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "INVALID_URL", "DELIVERY_PENDING", 0)
 	}
 	if x.State == "QUEUED" || x.State == "ANALYZING" {
 		if x.State == "QUEUED" {
 			if e = w.step(ctx, &x, "ANALYZING"); e != nil {
-				return finalize("FAILED", "ANALYSIS_FAILED", "DELIVERY_FAILED", 0)
+				return finalize("FAILED", "ANALYSIS_FAILED", "DELIVERY_PENDING", 0)
 			}
 		}
 		workerDiagnostic("downloader_analysis_started", x)
@@ -226,10 +230,10 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 
 		workerDiagnostic("downloader_analysis_completed", x, "result", diagnosticResult(err), "format_count", len(a.Formats), "elapsed_ms", time.Since(analysisStarted).Milliseconds())
 		if err != nil {
-			return finalize("FAILED", category(err, "ANALYSIS_FAILED"), "DELIVERY_FAILED", 0)
+			return finalize("FAILED", category(err, "ANALYSIS_FAILED"), "DELIVERY_PENDING", 0)
 		}
 		if len(a.Formats) == 0 || len(a.Formats) > 12 {
-			return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_FAILED", 0)
+			return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_PENDING", 0)
 		}
 		e = w.tx(ctx, x, func(tx pgx.Tx) error {
 			var cancelled bool
@@ -272,7 +276,7 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		return e
 	}
 	if x.State == "AWAITING_FORMAT" && x.Selected == "" {
-		return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_PENDING", 0)
 	}
 	var selected media.Format
 	for _, f := range x.Formats {
@@ -281,67 +285,114 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		}
 	}
 	if selected.ID == "" {
-		return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "FORMAT_UNAVAILABLE", "DELIVERY_PENDING", 0)
 	}
 	if x.State == "AWAITING_FORMAT" {
 		if e = w.step(ctx, &x, "DOWNLOADING"); e != nil {
-			return finalize("FAILED", "DOWNLOAD_FAILED", "DELIVERY_FAILED", 0)
+			return finalize("FAILED", "DOWNLOAD_FAILED", "DELIVERY_PENDING", 0)
 		}
 	}
 	// Only trusted UUID and numeric generation derive paths; human metadata never does.
 	dir := filepath.Join(w.Root, x.ID, strconv.FormatInt(x.Lease.Generation, 10))
 	if e = os.MkdirAll(dir, 0700); e != nil {
-		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
 	}
 	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "asset")
-	file, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if e != nil {
-		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_FAILED", 0)
-	}
-	e = w.Adapter.Fetch(ctx, s, selected, file, w.MaxBytes)
-	closeErr := file.Close()
-	if e == nil {
-		e = closeErr
-	}
-	if e != nil {
-		return finalize("FAILED", category(e, "DOWNLOAD_FAILED"), "DELIVERY_FAILED", 0)
-	}
-	asset, e := media.Validate(ctx, path, w.MaxBytes, selected)
-	if e != nil {
-		return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_FAILED", 0)
-	}
-	if selected.Processing {
-		if e = w.step(ctx, &x, "PROCESSING"); e != nil {
-			return finalize("FAILED", "PROCESSING_FAILED", "DELIVERY_FAILED", 0)
+	var asset media.Asset
+	if selected.ProcessingPlan == "mux-av" {
+		composite, ok := w.Adapter.(media.CompositeAdapter)
+		if !ok {
+			return finalize("FAILED", "PROCESSING_FAILED", "DELIVERY_PENDING", 0)
 		}
-		path, e = media.Remux(ctx, path, filepath.Join(dir, "processed"), w.MaxBytes, selected)
+		videoPath := filepath.Join(dir, "video")
+		audioPath := filepath.Join(dir, "audio")
+		videoFile, openErr := os.OpenFile(videoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if openErr != nil {
+			return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
+		}
+		audioFile, audioErr := os.OpenFile(audioPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if audioErr != nil {
+			videoFile.Close()
+			return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
+		}
+		e = composite.FetchComposite(ctx, s, selected, videoFile, audioFile, w.MaxBytes)
+		videoCloseErr := videoFile.Close()
+		audioCloseErr := audioFile.Close()
+		if e == nil {
+			e = videoCloseErr
+		}
+		if e == nil {
+			e = audioCloseErr
+		}
 		if e != nil {
-			return finalize("FAILED", category(e, "PROCESSING_FAILED"), "DELIVERY_FAILED", 0)
+			return finalize("FAILED", category(e, "DOWNLOAD_FAILED"), "DELIVERY_PENDING", 0)
+		}
+		if e = w.step(ctx, &x, "PROCESSING"); e != nil {
+			return finalize("FAILED", "PROCESSING_FAILED", "DELIVERY_PENDING", 0)
+		}
+		path, e = media.MuxAV(ctx, videoPath, audioPath, path, w.MaxBytes)
+		if e != nil {
+			return finalize("FAILED", category(e, "PROCESSING_FAILED"), "DELIVERY_PENDING", 0)
 		}
 		outputFormat := selected
 		outputFormat.Processing = false
-		outputFormat.SourceContainer = ""
+		outputFormat.ProcessingPlan = ""
+		outputFormat.VideoSourceID = ""
+		outputFormat.AudioSourceID = ""
 		asset, e = media.Validate(ctx, path, w.MaxBytes, outputFormat)
 		if e != nil {
-			return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_FAILED", 0)
+			return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_PENDING", 0)
+		}
+	} else {
+		file, openErr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if openErr != nil {
+			return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
+		}
+		e = w.Adapter.Fetch(ctx, s, selected, file, w.MaxBytes)
+		closeErr := file.Close()
+		if e == nil {
+			e = closeErr
+		}
+		if e != nil {
+			return finalize("FAILED", category(e, "DOWNLOAD_FAILED"), "DELIVERY_PENDING", 0)
+		}
+		asset, e = media.Validate(ctx, path, w.MaxBytes, selected)
+		if e != nil {
+			return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_PENDING", 0)
+		}
+		if selected.Processing {
+			if e = w.step(ctx, &x, "PROCESSING"); e != nil {
+				return finalize("FAILED", "PROCESSING_FAILED", "DELIVERY_PENDING", 0)
+			}
+			path, e = media.Remux(ctx, path, filepath.Join(dir, "processed"), w.MaxBytes, selected)
+			if e != nil {
+				return finalize("FAILED", category(e, "PROCESSING_FAILED"), "DELIVERY_PENDING", 0)
+			}
+			outputFormat := selected
+			outputFormat.Processing = false
+			outputFormat.SourceContainer = ""
+			asset, e = media.Validate(ctx, path, w.MaxBytes, outputFormat)
+			if e != nil {
+				return finalize("FAILED", category(e, "INVALID_MEDIA"), "DELIVERY_PENDING", 0)
+			}
 		}
 	}
 	key, e := storage.ObjectKey(workspace, x.ID+":"+strconv.FormatInt(x.Lease.Generation, 10))
 	if e != nil {
-		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
 	}
 	f, e := os.Open(path)
 	if e != nil {
-		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
 	}
 	e = w.Storage.Put(ctx, workspace, key, f, storage.Metadata{Size: asset.Bytes, ContentType: asset.ContentType, ExpiresAt: time.Now().Add(w.Timeout)})
 	f.Close()
 	if e != nil {
-		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "TEMP_STORAGE_FAILED", "DELIVERY_PENDING", 0)
 	}
 	defer func() {
-		clean, stop := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
+		clean, stop := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(parent)), 5*time.Second)
 		defer stop()
 		w.Storage.Delete(clean, workspace, key)
 	}()
@@ -367,7 +418,7 @@ func (w *Worker) RunOne(parent context.Context, u, workspace, id string) error {
 		return e
 	})
 	if e != nil {
-		return finalize("FAILED", "DOWNLOAD_CANCELLED", "DELIVERY_FAILED", 0)
+		return finalize("FAILED", "DOWNLOAD_CANCELLED", "DELIVERY_PENDING", 0)
 	}
 	// UPLOADING is the durable point of no cancellation. A crash after this marker
 	// becomes unknown on reclaim and cannot blindly repeat an external upload.
@@ -419,9 +470,11 @@ func (w *Worker) Poll(ctx context.Context, concurrency int) (pollErr error) {
 	if concurrency < 1 || concurrency > 32 {
 		return database.ErrInvalid
 	}
-	if e := w.Cleanup(ctx); e != nil {
-		slog.Info("downloader diagnostic", "event", "downloader_cleanup_failed", "result", diagnosticResult(e))
-		return e
+	if installationlicense.CheckRuntime(ctx) == nil {
+		if e := w.Cleanup(ctx); e != nil {
+			slog.Info("downloader diagnostic", "event", "downloader_cleanup_failed", "result", diagnosticResult(e))
+			return e
+		}
 	}
 	lastCleanup := time.Now()
 	var running sync.WaitGroup

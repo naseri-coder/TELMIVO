@@ -3,7 +3,9 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/naseri-coder/TELMIVO/internal/integrations/media"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -66,8 +68,11 @@ func (c MediaClient) DeliverMedia(ctx context.Context, chat int64, a media.Asset
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	client := &http.Client{Transport: c.transport, Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, e := client.Do(req)
+	resp, e := installationlicense.HTTP(ctx, client, req)
 	if e != nil {
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			return bad, e
+		}
 		return media.DeliveryResult{Outcome: "DELIVERY_OUTCOME_UNKNOWN"}, nil
 	}
 	defer resp.Body.Close()

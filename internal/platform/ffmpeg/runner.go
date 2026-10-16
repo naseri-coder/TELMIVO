@@ -3,6 +3,7 @@ package ffmpeg
 import (
 	"context"
 	"errors"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,7 +50,7 @@ func (r *Runner) Process(ctx context.Context, input string) (string, error) {
 	limited, cancel := context.WithTimeout(ctx, r.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(limited, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-i", real, "-map_metadata", "-1", "-c", "copy", "-fs", "104857600", output)
-	if e = cmd.Run(); e != nil {
+	if e = installationlicense.RuntimeEffect(ctx, cmd.Run); e != nil {
 		return "", errors.New("media processing failed")
 	}
 	// Caller must ingest the file before returning; persistence belongs to the storage adapter.

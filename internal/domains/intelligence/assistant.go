@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	provider "github.com/naseri-coder/TELMIVO/internal/platform/ai"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	sdk "github.com/naseri-coder/TELMIVO/internal/platform/plugincontract"
 	assistant "github.com/naseri-coder/TELMIVO/internal/plugins/aiassistant"
 	"github.com/naseri-coder/TELMIVO/internal/plugins/crm"
@@ -291,7 +292,7 @@ func (s *Service) Chat(ctx context.Context, actor string, scope sdk.Scope, in Ch
 		}
 		out.Text = ""
 	}
-	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	finalCtx, cancel := context.WithTimeout(installationlicense.Settlement(context.WithoutCancel(ctx)), 5*time.Second)
 	defer cancel()
 	finish := s.DB.Tenant(finalCtx, actor, scope.AccountID, false, func(tx pgx.Tx) error {
 		if err := s.lock(finalCtx, tx, scope); err != nil {
