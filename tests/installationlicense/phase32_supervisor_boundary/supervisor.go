@@ -29,8 +29,8 @@ import (
 	witness "telmivo.local/lic-a9-phase31-durable-witness"
 )
 
-const Protocol = "TELMIVO_PHASE32_TEST_RPC_V1"
-const domain = "TELMIVO_PHASE32_TEST_REQUEST\x00"
+const Protocol = "TELMIVO_PHASE33_TEST_RPC_V1"
+const domain = "TELMIVO_PHASE33_TEST_REQUEST\x00"
 const maxFrame = 2048
 const ActionFence = "FENCE_SYNTHETIC_EPOCH"
 const ActionApply = "APPLY_SYNTHETIC_RECORD"
@@ -49,6 +49,9 @@ type Claim struct {
 	Epoch         uint64 `json:"epoch"`
 	PreviousEpoch uint64 `json:"previous_epoch"`
 	RequestID     string `json:"request_id"`
+	WorkspaceID   string `json:"workspace_id"`
+	ActorID       string `json:"actor_id"`
+	ResourceID    string `json:"resource_id"`
 	NotBefore     int64  `json:"not_before"`
 	ExpiresAt     int64  `json:"expires_at"`
 }
@@ -64,17 +67,31 @@ func SignedTestWire(c Claim, private ed25519.PrivateKey) Wire {
 }
 
 type Server struct {
-	listener     *net.UnixListener
-	socketPath   string
-	witness      *witness.Witness
-	issuer       ed25519.PublicKey
-	installation string
-	allowedUID   uint32
-	allowedGID   uint32
-	readyEpoch   atomic.Uint64
-	handlers     sync.WaitGroup
-	mu           sync.Mutex
-	closed       bool
+	listener      *net.UnixListener
+	socketPath    string
+	witness       *witness.Witness
+	issuer        ed25519.PublicKey
+	installation  string
+	allowedUID    uint32
+	allowedGID    uint32
+	readyEpoch    atomic.Uint64
+	activeOwner   string
+	activeSession string
+	effect        EffectGate
+	policy        DomainPolicy
+	handlers      sync.WaitGroup
+	mu            sync.Mutex
+	closed        bool
+}
+
+// EffectGate is signature-compatible with the genuine Product Manager.Effect.
+// Real Product Go1.27/signed-session implementation is NOT exercised here.
+// If no EffectGate or final DomainPolicy is configured, synthetic Apply DENIES.
+type EffectGate interface {
+	Effect(context.Context, func() error) error
+}
+type DomainPolicy interface {
+	Authorize(context.Context, Claim) error
 }
 
 // Open is deliberately restricted to an isolated root-owned Linux supervisor.
@@ -121,6 +138,19 @@ func Open(socketDir, witnessRoot, installation string, allowedUID, allowedGID ui
 	s.readyEpoch.Store(0)
 	return s, nil
 }
+// OpenSecured uses the same isolated listener, but requires an explicit final
+// license Effect gate and domain policy before permitting any synthetic Apply.
+func OpenSecured(socketDir, witnessRoot, installation string, allowedUID, allowedGID uint32, issuer ed25519.PublicKey, effect EffectGate, policy DomainPolicy) (*Server, error) {
+	if effect == nil || policy == nil {
+		return nil, ErrUnsafe
+	}
+	s, err := Open(socketDir, witnessRoot, installation, allowedUID, allowedGID, issuer)
+	if err != nil {
+		return nil, err
+	}
+	s.effect, s.policy = effect, policy
+	return s, nil
+}
 func (s *Server) Address() string { return s.socketPath }
 func (s *Server) Close() {
 	s.mu.Lock()
@@ -130,6 +160,8 @@ func (s *Server) Close() {
 	}
 	s.closed = true
 	s.readyEpoch.Store(0)
+	s.activeOwner = ""
+	s.activeSession = ""
 	s.listener.Close()
 	s.mu.Unlock()
 	s.handlers.Wait()
@@ -182,11 +214,11 @@ func allowedWire(raw []byte, pub ed25519.PublicKey, installation string) (Claim,
 	}
 	switch c.Action {
 	case ActionFence:
-		if c.PreviousEpoch == ^uint64(0) || c.PreviousEpoch+1 != c.Epoch || c.RequestID != "" {
+		if c.PreviousEpoch == ^uint64(0) || c.PreviousEpoch+1 != c.Epoch || c.RequestID != "" || c.WorkspaceID != "" || c.ActorID != "" || c.ResourceID != "" {
 			return Claim{}, false
 		}
 	case ActionApply:
-		if !idRule.MatchString(c.RequestID) || c.PreviousEpoch >= c.Epoch {
+		if !idRule.MatchString(c.RequestID) || !idRule.MatchString(c.WorkspaceID) || !idRule.MatchString(c.ActorID) || !idRule.MatchString(c.ResourceID) || c.PreviousEpoch >= c.Epoch {
 			return Claim{}, false
 		}
 	default:
@@ -219,24 +251,52 @@ func (s *Server) handle(conn *net.UnixConn) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	// No callback or unsafe external effect is accepted from client JSON.
+	// Dispatch is serialized through s.mu: an in-flight Apply cannot race a
+	// session/epoch handoff between its signed claim check and final Effect.
+	// No arbitrary callback or real external effect is accepted from wire JSON.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		reply(conn, "DENIED_STOPPED")
+		return
+	}
 	if c.Action == ActionFence {
+		if c.Epoch <= s.readyEpoch.Load() {
+			reply(conn, "DENIED_FENCE")
+			return
+		}
 		err = s.witness.Fence(ctx, c.Epoch)
 		if err != nil {
 			reply(conn, "DENIED_FENCE")
 			return
 		}
+		s.activeOwner, s.activeSession = c.Owner, c.Session
 		s.readyEpoch.Store(c.Epoch)
 		reply(conn, "FENCED_TEST_ONLY")
 		return
 	}
-	if s.readyEpoch.Load() != c.Epoch {
-		reply(conn, "DENIED_NOT_READY_OR_STALE")
+	if s.readyEpoch.Load() != c.Epoch || s.activeOwner != c.Owner || s.activeSession != c.Session {
+		reply(conn, "DENIED_NOT_READY_OR_STALE_SESSION")
 		return
 	}
-	err = s.witness.Apply(ctx, c.Epoch, c.RequestID)
+	if s.effect == nil || s.policy == nil {
+		reply(conn, "DENIED_FINAL_EFFECT_NOT_WIRED")
+		return
+	}
+	// The real Product Manager.Effect has the same method signature and must
+	// perform the final signed lease and runtime-session recheck in its own lock.
+	// Policy check and mock file-backed synthetic effect run INSIDE that callback.
+	err = s.effect.Effect(ctx, func() error {
+		if e := ctx.Err(); e != nil {
+			return e
+		}
+		if e := s.policy.Authorize(ctx, c); e != nil {
+			return e
+		}
+		return s.witness.Apply(ctx, c.Epoch, c.RequestID)
+	})
 	if err != nil {
-		reply(conn, "DENIED_STALE_REPLAY_OR_IO")
+		reply(conn, "DENIED_FINAL_GATE_POLICY_OR_REPLAY")
 		return
 	}
 	reply(conn, "APPLIED_SYNTHETIC_TEST_ONLY")
