@@ -44,9 +44,14 @@ func Open(raw string) (*Client, error) {
 	}
 	return &Client{Conn: n, JS: js}, nil
 }
-func (c *Client) Ensure() error {
-	_, e := c.JS.AddStream(&nats.StreamConfig{Name: "TELMIVO", Subjects: []string{"telmivo.jobs.>", "telmivo.events.>"}, Storage: nats.FileStorage, Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, MaxBytes: 512 << 20, Duplicates: 24 * time.Hour})
-	return e
+// Ensure may create a JetStream stream and therefore MUST be admitted as a
+// signed external effect. Never bootstrap broker state without the installed
+// Manager's current authorization, including during restricted startup.
+func (c *Client) Ensure(ctx context.Context) error {
+	return installationlicense.RuntimeEffect(ctx, func() error {
+		_, e := c.JS.AddStream(&nats.StreamConfig{Name: "TELMIVO", Subjects: []string{"telmivo.jobs.>", "telmivo.events.>"}, Storage: nats.FileStorage, Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, MaxBytes: 512 << 20, Duplicates: 24 * time.Hour})
+		return e
+	})
 }
 // Publish is the final process-wide signed-license fence for NATS effects.
 // Relay preflight is not an authorization lease: revocation can occur after
@@ -156,18 +161,25 @@ func (c *Client) ConsumeExternal(ctx context.Context, db *database.Store, subjec
 }
 
 func (c *Client) consume(ctx context.Context, db *database.Store, subject, durable string, handler Handler, external bool) error {
-	// Explicitly create the durable, then bind: unsubscribe must not delete it.
-	info, err := c.JS.ConsumerInfo("TELMIVO", durable)
-	if errors.Is(err, nats.ErrConsumerNotFound) {
-		info, err = c.JS.AddConsumer("TELMIVO", &nats.ConsumerConfig{Durable: durable, FilterSubject: subject, AckPolicy: nats.AckExplicitPolicy, AckWait: 30 * time.Second, MaxDeliver: 6, MaxAckPending: 32, BackOff: []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second, 5 * time.Second, 6 * time.Second}})
-	}
-	if err != nil {
-		return err
-	}
-	if info.Config.FilterSubject != subject || info.Config.AckPolicy != nats.AckExplicitPolicy || info.Config.MaxDeliver != 6 {
-		return errors.New("durable consumer configuration mismatch")
-	}
-	sub, err := c.JS.PullSubscribe(subject, durable, nats.Bind("TELMIVO", durable))
+	// All ConsumerInfo/AddConsumer/PullSubscribe requests happen under the
+	// process-wide signed effect fence. No broker call is allowed on a
+	// restricted/uninstalled/revoked license. The subscription is bound to
+	// an existing durable; its eventual Unsubscribe only releases the handle.
+	var sub *nats.Subscription
+	err := installationlicense.RuntimeEffect(ctx, func() error {
+		info, e := c.JS.ConsumerInfo("TELMIVO", durable)
+		if errors.Is(e, nats.ErrConsumerNotFound) {
+			info, e = c.JS.AddConsumer("TELMIVO", &nats.ConsumerConfig{Durable: durable, FilterSubject: subject, AckPolicy: nats.AckExplicitPolicy, AckWait: 30 * time.Second, MaxDeliver: 6, MaxAckPending: 32, BackOff: []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second, 5 * time.Second, 6 * time.Second}})
+		}
+		if e != nil {
+			return e
+		}
+		if info.Config.FilterSubject != subject || info.Config.AckPolicy != nats.AckExplicitPolicy || info.Config.MaxDeliver != 6 {
+			return errors.New("durable consumer configuration mismatch")
+		}
+		sub, e = c.JS.PullSubscribe(subject, durable, nats.Bind("TELMIVO", durable))
+		return e
+	})
 	if err != nil {
 		return err
 	}
@@ -181,7 +193,22 @@ func (c *Client) consume(ctx context.Context, db *database.Store, subject, durab
 				continue
 			}
 		}
-		msgs, e := sub.Fetch(1, nats.MaxWait(time.Second))
+		// The earlier CheckRuntime is advisory only. A signed license can
+		// be revoked between that check and the next broker request.
+		var msgs []*nats.Msg
+		e := installationlicense.RuntimeEffect(ctx, func() error {
+			var fetchErr error
+			msgs, fetchErr = sub.Fetch(1, nats.MaxWait(time.Second))
+			return fetchErr
+		})
+		if errors.Is(e, installationlicense.ErrRestricted) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+				continue
+			}
+		}
 		if errors.Is(e, nats.ErrTimeout) {
 			continue
 		}
@@ -205,7 +232,7 @@ func (c *Client) consume(ctx context.Context, db *database.Store, subject, durab
 				return ctx.Err()
 			}
 			if e == nil {
-				if e = m.AckSync(nats.Context(ctx)); e != nil {
+				if e = installationlicense.RuntimeEffect(ctx, func() error { return m.AckSync(nats.Context(ctx)) }); e != nil {
 					return e
 				}
 				continue
@@ -219,15 +246,20 @@ func (c *Client) consume(ctx context.Context, db *database.Store, subject, durab
 					h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", meta.Stream, meta.Sequence.Stream)))
 					id = fmt.Sprintf("%x-%x-%x-%x-%x", h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
 				}
-				_, e = db.Pool.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING", durable, id, code, map[string]any{"stream_sequence": meta.Sequence.Stream})
+				e = installationlicense.RuntimeEffect(ctx, func() error {
+					_, writeErr := db.Pool.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING", durable, id, code, map[string]any{"stream_sequence": meta.Sequence.Stream})
+					if writeErr != nil {
+						return writeErr
+					}
+					return m.Term()
+				})
 				if e != nil {
 					return e
 				}
-				if e = m.Term(); e != nil {
-					return e
-				}
 			} else {
-				if e = m.NakWithDelay(time.Duration(meta.NumDelivered) * time.Second); e != nil {
+				if e = installationlicense.RuntimeEffect(ctx, func() error {
+					return m.NakWithDelay(time.Duration(meta.NumDelivered) * time.Second)
+				}); e != nil {
 					return e
 				}
 			}

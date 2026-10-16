@@ -86,7 +86,10 @@ func Run(role string) error {
 		return e
 	}
 	defer q.Conn.Close()
-	if e = q.Ensure(); e != nil {
+	// A restricted installation still serves read-only license diagnostics.
+	// Stream creation must be denied by the signed RuntimeEffect gate;
+	// suppress ONLY that denial, never broker/configuration failures.
+	if e = q.Ensure(ctx); e != nil && !errors.Is(e, installationlicense.ErrRestricted) {
 		return e
 	}
 	ident := &identity.Service{DB: db, Admins: c.AdminIDs, SessionTTL: c.SessionTTL}
