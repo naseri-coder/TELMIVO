@@ -54,7 +54,18 @@ run() {
   "$@" 2>&1 | tee -a "$run_dir/$label.log"
 }
 run real_phase34_manager go test -count=1 -timeout=300s -run '^TestLICA9Phase34' ./internal/platform/installationlicense
-run full_license_package go test -count=1 -timeout=420s ./internal/platform/installationlicense
+run full_license_package go test -v -count=1 -timeout=420s ./internal/platform/installationlicense
 run license_vet go vet ./internal/platform/installationlicense
 ( cd "$run_dir"; sha256sum metadata.log real_phase34_manager.log full_license_package.log license_vet.log > SHA256SUMS )
-printf 'LIC_A9_TERMUX_FUNCTIONAL_PASS_NOT_RACE_NOT_PRODUCTION head=%s logs=%s\n' "$head" "$run_dir"
+# Go can report PASS while it has skipped security cases. Show explicit partial
+# acceptance whenever ANY test was skipped; Android's blocked hardlink attack
+# remains unverified even if all other security and business tests succeeded.
+if grep -Fq -- '--- SKIP:' "$run_dir/full_license_package.log"; then
+  if grep -Fq 'LIC_A9_ANDROID_HARDLINK_FIXTURE_UNAVAILABLE' "$run_dir/full_license_package.log"; then
+    printf 'LIC_A9_TERMUX_PARTIAL_FUNCTIONAL_PASS_ANDROID_HARDLINK_SKIPPED_NOT_RACE_NOT_PRODUCTION head=%s logs=%s\n' "$head" "$run_dir"
+  else
+    printf 'LIC_A9_TERMUX_PARTIAL_FUNCTIONAL_PASS_TESTS_SKIPPED_NOT_RACE_NOT_PRODUCTION head=%s logs=%s\n' "$head" "$run_dir"
+  fi
+else
+  printf 'LIC_A9_TERMUX_FUNCTIONAL_PASS_NOT_RACE_NOT_PRODUCTION head=%s logs=%s\n' "$head" "$run_dir"
+fi
