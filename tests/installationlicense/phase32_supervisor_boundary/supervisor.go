@@ -151,6 +151,7 @@ func OpenSecured(socketDir, witnessRoot, installation string, allowedUID, allowe
 	s.effect, s.policy = effect, policy
 	return s, nil
 }
+
 func (s *Server) Address() string { return s.socketPath }
 func (s *Server) Close() {
 	s.mu.Lock()
