@@ -165,6 +165,13 @@ func (m *Manager) lock(fn func() error) error {
 // lockMode preserves the same ownership/regular-file/hardlink checks for both
 // blocking mutation/effect locks and nonblocking authorization probes.
 func (m *Manager) lockMode(mode int, fn func() error) error {
+	return m.lockModeWithWait(context.Background(), mode, 0, nil, fn)
+}
+
+// lockModeWithWait retains every file identity/ownership check from lockMode.
+// Only external Effect/Accept admission uses the time-bounded variant;
+// state mutations and the signed verification remain under the acquired lock.
+func (m *Manager) lockModeWithWait(ctx context.Context, mode int, maxWait time.Duration, busy error, fn func() error) error {
 	fd, e := syscall.Open(filepath.Join(m.cfg.Directory, "lock"), syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
 	if e != nil {
 		return ErrState
@@ -175,8 +182,16 @@ func (m *Manager) lockMode(mode int, fn func() error) error {
 	if syscall.Fstat(fd, &s) != nil || s.Mode&syscall.S_IFMT != syscall.S_IFREG || s.Nlink != 1 || s.Mode&0077 != 0 || int(s.Uid) != os.Geteuid() {
 		return ErrState
 	}
-	if e = syscall.Flock(fd, mode); e != nil {
-		return ErrState
+	if maxWait > 0 {
+		e = acquireExclusiveFlock(ctx, fd, maxWait, busy)
+	} else {
+		e = syscall.Flock(fd, mode)
+		if e != nil {
+			e = ErrState
+		}
+	}
+	if e != nil {
+		return e
 	}
 	defer syscall.Flock(fd, syscall.LOCK_UN)
 	return fn()
@@ -364,8 +379,11 @@ func (m *Manager) decisionNonblocking() Decision {
 // Effect serializes the final local authoritative recheck with state updates
 // across all roles sharing this installation directory. Existing domain outcome
 // and idempotency fences remain responsible for durable external outcomes.
+// Effect bounds waiting to enter the existing exclusive signed-state
+// critical section. A recursive call can no longer hang indefinitely.
+// A timeout denies execution; the protected callback is never retried.
 func (m *Manager) Effect(ctx context.Context, fn func() error) error {
-	return m.lock(func() error {
+	return m.lockModeWithWait(ctx, syscall.LOCK_EX, 2*time.Second, ErrRestricted, func() error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -375,8 +393,13 @@ func (m *Manager) Effect(ctx context.Context, fn func() error) error {
 		return fn()
 	})
 }
+// Accept is bounded too: a recursive Accept never waits forever on the
+// Effect callback's existing file lock. ErrPending means no state was changed;
+// the caller may retry under explicit owner policy, never by blind retry.
 func (m *Manager) Accept(envelope []byte) error {
-	return m.lock(func() error { return m.acceptLocked(envelope) })
+	return m.lockModeWithWait(context.Background(), syscall.LOCK_EX, 2*time.Second, ErrPending, func() error {
+		return m.acceptLocked(envelope)
+	})
 }
 func (m *Manager) acceptLocked(envelope []byte) error {
 	i, s, h, e := m.load()
