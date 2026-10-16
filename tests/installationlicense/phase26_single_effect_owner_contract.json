@@ -1,0 +1,166 @@
+{
+  "schema": "TELMIVO_LIC_A9_PHASE26_SINGLE_EFFECT_OWNER_CONTRACT_V1",
+  "scope": "DESIGN_ONLY_NONPRODUCTION",
+  "source_pins": {
+    "product_parent": "153021a4ecf19686075633b10fddf6d3ff0f3299",
+    "authority_review": "d6960982e322d4458c7d963bb153f205a1f8fb59",
+    "phase19_runtime_guard_blob": "c5c81548a1b063825eccc9c3d69cc6006160d4cd",
+    "phase24_test_broker_blob": "6b1f920f0017f2f39cc0b11bbb40c1c262a37685"
+  },
+  "choice": "ONE_LICENSED_EFFECT_OWNER_PER_INSTALLATION_WITH_AUTHENTICATED_LOCAL_COMMAND_DISPATCH",
+  "authority_protocol": "TELMIVO_CONCURRENT_INSTALLATION_LEASE_V1",
+  "architecture": {
+    "effect_owner_count": 1,
+    "worker_may_hold_lease": false,
+    "worker_may_hold_installation_private_key": false,
+    "worker_may_call_manager_effect": false,
+    "effect_owner_must_use_real_manager_effect": true,
+    "shared_lease_bypass": false,
+    "allowed_transport": "UNIX_DOMAIN_SOCKET_ONLY",
+    "remote_tcp_listener": false,
+    "peer_uid_alone_is_authentication": false,
+    "untyped_callbacks": false,
+    "owner_instance_on_restart": "NEW_RUNTIME_SESSION_AND_FRESH_AUTHORITY_SIGNED_LEASE"
+  },
+  "isolation": {
+    "separate_worker_unix_identities": true,
+    "owned_root_only": true,
+    "shared_writable_owner_directory": false,
+    "fd_relative_path_resolution_required": true,
+    "symlink_ancestry_accepted": false,
+    "owner_lock_lifetime": "THROUGH_ALL_IN_FLIGHT_HANDLERS",
+    "peer_os_credentials_required": true,
+    "client_key_pop_required": true,
+    "server_side_worker_identity_map": true
+  },
+  "request": {
+    "protocol": "TELMIVO_LIC_A9_EFFECT_DISPATCH_V1",
+    "max_frame_bytes": 16384,
+    "canonical_strict_json": true,
+    "duplicate_json_fields": "DENY",
+    "unknown_json_fields": "DENY",
+    "operations": "FINITE_VERSIONED_ALLOWLIST",
+    "arbitrary_shell_or_callback": "DENY",
+    "required_fields": [
+      "protocol",
+      "request_id",
+      "worker_id",
+      "installation_id",
+      "workspace_id",
+      "actor_id",
+      "operation",
+      "resource_id",
+      "payload_sha256",
+      "nonce",
+      "expires_at_unix_ms",
+      "authentication"
+    ],
+    "authentication": "PER_WORKER_PROOF_OF_POSSESSION",
+    "request_lifetime": "SHORT_REPLAY_BOUNDED",
+    "nonce_reuse": "DENY",
+    "payload_digest_validated_against_server_lookup": true
+  },
+  "gates": [
+    "PEER_IDENTITY",
+    "WORKER_PROOF_OF_POSSESSION",
+    "ENROLLED_WORKER_ROLE",
+    "TENANT_WORKSPACE_BINDING",
+    "ACTOR_RBAC",
+    "PLAN_AND_PLUGIN_ENTITLEMENT",
+    "DOMAIN_QUOTAS",
+    "DOMAIN_RESOURCE_POLICY",
+    "FRESH_SIGNED_OWNER_SESSION",
+    "REAL_MANAGER_EFFECT_AT_FINAL_EFFECT_POINT",
+    "DURABLE_INTENT_AND_OUTCOME_POLICY",
+    "CURRENT_OWNER_FENCING_TOKEN"
+  ],
+  "lifecycle": {
+    "states": [
+      "STARTING",
+      "ACTIVE",
+      "DRAINING",
+      "FENCED",
+      "RECOVERING"
+    ],
+    "transitions": [
+      [
+        "STARTING",
+        "ACTIVE"
+      ],
+      [
+        "STARTING",
+        "FENCED"
+      ],
+      [
+        "ACTIVE",
+        "DRAINING"
+      ],
+      [
+        "ACTIVE",
+        "FENCED"
+      ],
+      [
+        "DRAINING",
+        "FENCED"
+      ],
+      [
+        "FENCED",
+        "RECOVERING"
+      ],
+      [
+        "RECOVERING",
+        "ACTIVE"
+      ],
+      [
+        "RECOVERING",
+        "FENCED"
+      ]
+    ],
+    "allow_active_without_signed_session": false,
+    "leader_takeover_requires_new_signed_lease": true,
+    "lease_generation_must_increase": true,
+    "stale_owner_effect": "DENY",
+    "blocked_follower_direct_effect": "DENY"
+  },
+  "effects": {
+    "durable_intent_before_external_effect": true,
+    "domain_ledger_required": true,
+    "idempotency_key_required": true,
+    "ambiguous_result": "RECONCILE_REQUIRED",
+    "ambiguous_automatic_retry": false,
+    "exactly_once_claim": false,
+    "fencing_epoch_check_before_effect": true,
+    "fencing_supported_external_provider_required_for_unconditional_failover": true,
+    "unsupported_provider": "PAUSE_AND_RECONCILE_BEFORE_NEW_EFFECTS",
+    "cancellation_after_commit": "UNKNOWN_OUTCOME_PENDING_RECONCILIATION"
+  },
+  "failure_policy": {
+    "missing_auth": "DENY",
+    "bad_frame": "DENY",
+    "wrong_workspace": "DENY",
+    "revoked_actor": "DENY",
+    "expired_lease": "DENY",
+    "stale_runtime_session": "DENY",
+    "worker_with_stolen_peer_uid": "DENY",
+    "broker_unavailable": "DENY_NO_LOCAL_FALLBACK",
+    "owner_crash": "FENCE_UNTIL_NEW_SIGNED_OWNER",
+    "authority_unavailable": "NO_NEW_LEASE_WITHOUT_AUTHORITY",
+    "clock_rollback": "DENY",
+    "unknown_outcome": "NO_BLIND_RETRY"
+  },
+  "evidence": {
+    "real_product_go127": "NOT_RUN",
+    "real_crossrepo_pg16": "NOT_RUN",
+    "multiworker_live_integration": "NOT_RUN",
+    "broker_security_qualified": "NOT_RUN",
+    "recovery": "NOT_VERIFIED",
+    "release": "NO_GO"
+  },
+  "permissions": {
+    "merge_main": false,
+    "github_actions": false,
+    "deploy": false,
+    "production_keys": false,
+    "install": false
+  }
+}
