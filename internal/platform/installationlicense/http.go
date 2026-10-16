@@ -13,8 +13,14 @@ func Middleware(m *Manager, next http.Handler) http.Handler {
 		r = r.WithContext(RequireContext(r.Context()))
 		d := Decision{State: "RESTRICTED", Reason: "CONFIGURATION_INVALID"}
 		if m != nil {
-			d = m.Decision()
 			r = r.WithContext(WithManager(r.Context(), m))
+			d = m.Decision()
+			// A signed Manager may still be valid after the process Runtime
+			// has been terminally restricted. HTTP mutations must not treat
+			// that signed state as a process-level authorization grant.
+			if CheckRuntime(r.Context()) != nil {
+				d = Decision{State: "RESTRICTED", Reason: "RUNTIME_RESTRICTED"}
+			}
 		}
 		if r.Method == "GET" && r.URL.Path == "/health/license" {
 			w.Header().Set("Content-Type", "application/json")
