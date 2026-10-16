@@ -54,6 +54,10 @@ if [[ "$1" == env && "$2" == GOOS ]]; then echo android; exit; fi
 if [[ "$1" == test || "$1" == vet ]]; then
   printf '%s\\n' "$*" >> "$PHASE35_MOCK_CALLS"
   if [[ "${PHASE35_MOCK_FAIL:-}" == YES ]]; then exit 13; fi
+  if [[ "${PHASE35_MOCK_SKIP:-}" == YES && "$1" == test && "$*" == *-v* ]]; then
+    echo '--- SKIP: TestLICA9Phase03HardlinkedRefreshLeaderFailsClosed (0.00s)'
+    echo 'LIC_A9_ANDROID_HARDLINK_FIXTURE_UNAVAILABLE: synthetic blocked kernel hardlink'
+  fi
   echo 'MOCK_ONLY_DOES_NOT_EXECUTE_GO_TESTS'; exit
 fi
 exit 12
@@ -103,10 +107,16 @@ exit 12
         calls = self.mock_calls.read_text().splitlines()
         self.assertEqual(len(calls), 3)
         self.assertTrue(calls[0].startswith('test -count=1 -timeout=300s -run ^TestLICA9Phase34'))
-        self.assertTrue(calls[1].startswith('test -count=1 -timeout=420s'))
+        self.assertTrue(calls[1].startswith('test -v -count=1 -timeout=420s'))
         self.assertTrue(calls[2].startswith('vet'))
         self.assertIn('FUNCTIONAL_PASS_NOT_RACE_NOT_PRODUCTION', result.stdout)
         self.assertNotIn('-race', ' '.join(calls))
+
+    def test_mock_security_skips_cannot_claim_full_acceptance(self):
+        result = self.checked(PHASE35_MOCK_SKIP='YES')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('LIC_A9_TERMUX_PARTIAL_FUNCTIONAL_PASS_ANDROID_HARDLINK_SKIPPED', result.stdout)
+        self.assertNotIn('LIC_A9_TERMUX_FUNCTIONAL_PASS_NOT_RACE_NOT_PRODUCTION', result.stdout)
 
     def test_mock_failure_no_success_marker(self):
         result = self.checked(PHASE35_MOCK_FAIL='YES')
