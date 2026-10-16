@@ -7,3 +7,17 @@ node_modules
 !.env.example
 .data
 .tmp
+
+# Never send private release material, test evidence or reviews to builders.
+# Backend builder explicitly copies cmd/, internal/, db/ and selected scripts.
+tests/
+docs/
+.github/
+scripts/test/
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.bundle
+**/*.patch
+**/*.zip
