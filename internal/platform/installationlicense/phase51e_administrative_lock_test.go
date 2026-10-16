@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -127,6 +126,3 @@ func TestLICA9Phase51ESignedV2BusyAdministrationNeverCallsAuthority(t *testing.T
 	}
 }
 
-// Ensure no external request to Authority or private host was made while tests
-// run; all network is an in-memory transport, and no real signing key is used.
-var _ = os.ErrNotExist
