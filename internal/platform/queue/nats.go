@@ -28,6 +28,10 @@ type Client struct {
 	JS   nats.JetStreamContext
 }
 
+// No transport error can prove that JetStream rejected the request. This
+// sentinel signals durable quarantine: never retry without reconciliation.
+var ErrOutboxDeliveryUnknown = errors.New("OUTBOX_DELIVERY_UNKNOWN_RECONCILIATION_REQUIRED")
+
 func Open(raw string) (*Client, error) {
 	n, e := nats.Connect(raw, nats.Timeout(3*time.Second), nats.MaxReconnects(5), nats.ReconnectWait(time.Second))
 	if e != nil {
@@ -75,7 +79,9 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 		return e
 	}
 	defer tx.Rollback(ctx)
-	rows, e := tx.Query(ctx, "SELECT id::text,COALESCE(workspace_id::text,''),subject,event_type,correlation_id,payload FROM outbox_events WHERE published_at IS NULL AND available_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 8 FOR UPDATE SKIP LOCKED")
+	// Claim only one row per transaction. A crash after claiming cannot
+	// quarantine unrelated unattempted rows from the same batch.
+	rows, e := tx.Query(ctx, "SELECT id::text,COALESCE(workspace_id::text,''),subject,event_type,correlation_id,payload FROM outbox_events WHERE delivery_state='READY' AND published_at IS NULL AND available_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED")
 	if e != nil {
 		return e
 	}
@@ -98,11 +104,19 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 		return e
 	}
 	for _, x := range batch {
-		if _, e = tx.Exec(ctx, "UPDATE outbox_events SET lease_until=now()+interval '60 seconds',lease_owner=$2,attempts=attempts+1 WHERE id=$1", x.event.ID, owner); e != nil {
-			return e
+		// This immutable pre-transport UNKNOWN fence is COMMITTED before
+		// calling JetStream. Even a crash during PublishMsg is not replayed.
+		tag, updateErr := tx.Exec(ctx, "UPDATE outbox_events SET delivery_state='UNKNOWN',delivery_attempted_at=clock_timestamp(),lease_until=clock_timestamp()+interval '60 seconds',lease_owner=$2,attempts=attempts+1 WHERE id=$1 AND delivery_state='READY' AND published_at IS NULL", x.event.ID, owner)
+		if updateErr != nil {
+			return updateErr
+		}
+		if tag.RowsAffected() != 1 {
+			return ErrOutboxDeliveryUnknown
 		}
 	}
 	if e = tx.Commit(ctx); e != nil {
+		// The claim commit outcome is ambiguous. No network I/O occurred.
+		// Do NOT infer eligibility for retry or send a message on this path.
 		return e
 	}
 	for _, x := range batch {
@@ -110,14 +124,18 @@ func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 		e = c.Publish(publishCtx, x.subject, x.event)
 		cancel()
 		if e != nil {
-			_, releaseErr := db.Pool.Exec(ctx, "UPDATE outbox_events SET lease_until=NULL,lease_owner=NULL,available_at=now()+LEAST(attempts,60)*interval '1 second' WHERE id=$1 AND lease_owner=$2", x.event.ID, owner)
-			if releaseErr != nil {
-				return releaseErr
-			}
-			return e
+			// Unknown broker outcome, even on timeout/connection failure.
+			// Leave the durable UNKNOWN row quarantined, retaining the lease
+			// owner and attempt evidence for operator reconciliation.
+			return ErrOutboxDeliveryUnknown
 		}
-		if _, e = db.Pool.Exec(ctx, "UPDATE outbox_events SET published_at=now(),lease_until=NULL,lease_owner=NULL WHERE id=$1 AND lease_owner=$2", x.event.ID, owner); e != nil {
-			return e
+		// JetStream acknowledged receipt. Mark PUBLISHED only while the same
+		// owner still holds the matching unknown-attempt fence.
+		tag, updateErr := db.Pool.Exec(ctx, "UPDATE outbox_events SET delivery_state='PUBLISHED',published_at=clock_timestamp(),lease_until=NULL,lease_owner=NULL WHERE id=$1 AND delivery_state='UNKNOWN' AND published_at IS NULL AND lease_owner=$2", x.event.ID, owner)
+		if updateErr != nil || tag.RowsAffected() != 1 {
+			// A lost DB acknowledgment cannot revoke or replay a published
+			// broker message. The UNKNOWN row remains for reconciliation.
+			return ErrOutboxDeliveryUnknown
 		}
 	}
 	return nil
