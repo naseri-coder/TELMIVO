@@ -31,8 +31,8 @@ func TestLICA9Phase45ContextRequiresExplicitManager(t *testing.T) {
 	if got, err := runtimeForEffect(required, true, m); got != nil || !errors.Is(err, ErrRestricted) {
 		t.Fatalf("required context used global fallback: %v %v", got, err)
 	}
-	if got, err := runtimeForEffect(WithManager(required, m), false, nil); got != m || err != nil {
-		t.Fatalf("explicit valid manager failed: %v %v", got, err)
+	if got, err := runtimeForEffect(WithManager(required, m), false, nil); got != nil || !errors.Is(err, ErrRestricted) {
+		t.Fatalf("pre-install context manager must not authorize: %v %v", got, err)
 	}
 }
 func TestLICA9Phase45CancelledContextCannotRunEffect(t *testing.T) {
@@ -56,11 +56,11 @@ func TestLICA9Phase45ValidExplicitManagerEffectAllowed(t *testing.T) {
 	}
 	ctx := WithManager(context.Background(), m)
 	ran := 0
-	if err := RuntimeEffect(ctx, func() error { ran++; return nil }); err != nil || ran != 1 {
-		t.Fatalf("explicit valid context unexpected: %v %d", err, ran)
+	if err := RuntimeEffect(ctx, func() error { ran++; return nil }); !errors.Is(err, ErrRestricted) || ran != 0 {
+		t.Fatalf("pre-install signed context escaped: %v %d", err, ran)
 	}
-	if err := CheckRuntime(ctx); err != nil {
-		t.Fatal(err)
+	if err := CheckRuntime(ctx); !errors.Is(err, ErrRestricted) {
+		t.Fatalf("pre-install check escaped: %v", err)
 	}
 }
 func TestLICA9Phase45ChildProcessInitialState(t *testing.T) {
