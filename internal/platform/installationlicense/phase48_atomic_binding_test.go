@@ -42,12 +42,9 @@ func TestLICA9Phase48ChildBinding(t *testing.T) {
 	switch scenario {
 	case "fresh":
 		denied(ctx)
-		// Explicit context-bound owner is permitted before installation and
-		// still must pass its own signed verification in the real Product.
+		// Even a valid signed Context Manager must not authorize pre-install.
 		m := phase48SignedManager(t)
-		if err := RuntimeEffect(WithManager(ctx, m), func() error { return nil }); err != nil {
-			t.Fatal(err)
-		}
+		denied(WithManager(ctx, m))
 	case "nil-installed":
 		foreign := phase48SignedManager(t)
 		InstallRuntime(nil)
@@ -80,9 +77,7 @@ func TestLICA9Phase48ChildBinding(t *testing.T) {
 		}
 		denied(WithManager(ctx, m))
 		InstallRuntime(m)
-		if err := RuntimeEffect(ctx, func() error { return nil }); err != nil {
-			t.Fatal(err)
-		}
+		denied(ctx) // a restricted process cannot be re-enabled
 	case "concurrent-snapshots":
 		a, b := phase48SignedManager(t), phase48SignedManager(t)
 		InstallRuntime(nil)

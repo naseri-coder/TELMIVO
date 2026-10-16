@@ -82,15 +82,11 @@ func TestLICA9Phase47ChildCase(t *testing.T) {
 	case "pre-install-explicit":
 		manager := phase47SignedManager(t)
 		ctx = WithManager(ctx, manager)
-		count := 0
-		if err := RuntimeEffect(ctx, func() error { count++; return nil }); err != nil || count != 1 {
-			t.Fatalf("legitimate isolated worker denied: %v %d", err, count)
-		}
-		if err := CheckRuntime(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := RuntimeEffect(RequireContext(ctx), func() error { count++; return nil }); err != nil || count != 2 {
-			t.Fatalf("required explicit valid manager denied: %v %d", err, count)
+		phase47Denied(t, ctx)
+		phase47Denied(t, RequireContext(ctx))
+		InstallRuntime(manager)
+		if err := RuntimeEffect(RequireContext(ctx), func() error { return nil }); err != nil {
+			t.Fatalf("after approved install, signed Manager denied: %v", err)
 		}
 	case "cancellation":
 		manager := phase47SignedManager(t)

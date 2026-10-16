@@ -87,13 +87,12 @@ func TestLICA9Phase46ChildBootstrapCases(t *testing.T) {
 		InstallRuntime(nil)
 		phase46AssertUnavailable(t)
 		InstallRuntime(phase46TestSignedManager(t))
-		if err := CheckRuntime(context.Background()); err != nil {
-			t.Fatalf("late valid install blocked: %v", err)
+		if err := CheckRuntime(context.Background()); !errors.Is(err, ErrRestricted) {
+			t.Fatalf("nil-to-valid reinstallation must remain restricted: %v", err)
 		}
 		InstallRuntime(nil)
 		phase46AssertUnavailable(t)
 	case "concurrent-install":
-		InstallRuntime(nil)
 		m := phase46TestSignedManager(t)
 		var authorized atomic.Int64
 		var bad atomic.Int64
