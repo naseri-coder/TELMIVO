@@ -6,7 +6,7 @@ import stat
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-from phase51k_fixture_gate import reject_test_fixture_configuration
+from phase51k_fixture_gate import TestFixtureInProduction, reject_test_fixture_configuration
 
 IMAGE = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
@@ -130,6 +130,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except PreflightError as exc:
+    except (PreflightError, TestFixtureInProduction) as exc:
         print(f"TELMIVO production configuration preflight FAIL: {exc}", file=sys.stderr)
         sys.exit(1)
