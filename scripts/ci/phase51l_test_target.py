@@ -27,8 +27,10 @@ def _nats(raw):
         _fail("test JetStream target must be exact loopback NATS URL")
 
 def check(env):
-    if env.get("TELMIVO_ENV", "").lower() == "production" or env.get("TELMIVO_LICENSE_ENVIRONMENT", "").lower() == "production":
-        _fail("production environment forbidden for native tests")
+    if (env.get("TELMIVO_ENV") != "test"
+            or env.get("TELMIVO_LICENSE_ENVIRONMENT") != "TEST"
+            or env.get("SYNTHETIC_MODE") != "true"):
+        _fail("explicit TEST, TEST-license and synthetic mode are mandatory")
     _database(env.get("TEST_DATABASE_URL", ""), "telmivo_runtime", 5432)
     _database(env.get("TEST_MIGRATION_DATABASE_URL", ""), "telmivo_migration", 5432)
     for name, role in (("TEST_RESTORE_DATABASE_URL", "telmivo_runtime"),
