@@ -109,7 +109,7 @@ func setup(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := Open(socketDir, witnessDir, "testInstallationA", ownerUID, ownerUID, pub)
+	server, err := OpenSecured(socketDir, witnessDir, "testInstallationA", ownerUID, ownerUID, pub, mockEffect{allow: true}, mockPolicy{allow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +124,9 @@ func grant(f *fixture, action string, epoch uint64, id string) Wire {
 func wireClaim(private ed25519.PrivateKey, action string, epoch uint64, id string) Wire {
 	now := time.Now().Unix()
 	c := Claim{Protocol: Protocol, Action: action, Installation: "testInstallationA", Owner: "ownerA", Session: fmt.Sprintf("session%d", epoch), Epoch: epoch, PreviousEpoch: epoch - 1, RequestID: id, NotBefore: now - 1, ExpiresAt: now + 100}
+	if action == ActionApply {
+		c.WorkspaceID, c.ActorID, c.ResourceID = "tenantA", "actorA", "recordA"
+	}
 	return SignedTestWire(c, private)
 }
 func startHelper(t *testing.T, mode, addr, witnessRoot, socketDir string, w Wire, uid uint32) *exec.Cmd {
@@ -235,15 +238,15 @@ func TestP32NoApplyBeforeFreshGrantAfterRestart(t *testing.T) {
 	expectReply(t, f, grant(f, ActionFence, 1, ""), "FENCED_TEST_ONLY")
 	old := grant(f, ActionApply, 1, "oldCrash")
 	f.srv.Close()
-	reopened, err := Open(f.socketDir, f.witnessDir, "testInstallationA", ownerUID, ownerUID, f.issuer)
+	reopened, err := OpenSecured(f.socketDir, f.witnessDir, "testInstallationA", ownerUID, ownerUID, f.issuer, mockEffect{allow: true}, mockPolicy{allow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.srv = reopened
 	go reopened.Serve()
-	expectReply(t, f, old, "DENIED_NOT_READY_OR_STALE")
+	expectReply(t, f, old, "DENIED_NOT_READY_OR_STALE_SESSION")
 	expectReply(t, f, grant(f, ActionFence, 2, ""), "FENCED_TEST_ONLY")
-	expectReply(t, f, old, "DENIED_NOT_READY_OR_STALE")
+	expectReply(t, f, old, "DENIED_NOT_READY_OR_STALE_SESSION")
 	expectReply(t, f, grant(f, ActionApply, 2, "newCrash"), "APPLIED_SYNTHETIC_TEST_ONLY")
 }
 func TestP32InvalidSignatureFailsClosed(t *testing.T) {
@@ -263,14 +266,14 @@ func TestP32OldEpochDeniedAfterNewFence(t *testing.T) {
 	f := setup(t)
 	expectReply(t, f, grant(f, ActionFence, 1, ""), "FENCED_TEST_ONLY")
 	expectReply(t, f, grant(f, ActionFence, 2, ""), "FENCED_TEST_ONLY")
-	expectReply(t, f, grant(f, ActionApply, 1, "old"), "DENIED_NOT_READY_OR_STALE")
+	expectReply(t, f, grant(f, ActionApply, 1, "old"), "DENIED_NOT_READY_OR_STALE_SESSION")
 }
 func TestP32ReplayAfterCrashNotReexecuted(t *testing.T) {
 	f := setup(t)
 	expectReply(t, f, grant(f, ActionFence, 1, ""), "FENCED_TEST_ONLY")
 	wire := grant(f, ActionApply, 1, "identical")
 	expectReply(t, f, wire, "APPLIED_SYNTHETIC_TEST_ONLY")
-	expectReply(t, f, wire, "DENIED_STALE_REPLAY_OR_IO")
+	expectReply(t, f, wire, "DENIED_FINAL_GATE_POLICY_OR_REPLAY")
 }
 func TestP32ParallelOwnerUIDProcessesOneSyntheticEffect(t *testing.T) {
 	f := setup(t)
