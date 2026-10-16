@@ -1,6 +1,6 @@
 # LIC-A9 Phase43 — global unresolved-outcome safety gate
 
-**Date:** 2026-10-16. **Status:** local Linux Go1.23 STUB `-race` PASS; genuine Product Go1.27 Android NOT_RUN; Linux root Go1.27 and Production NO-GO.
+**Date:** 2026-10-16. **Current status:** all source uploaded and exact hash verified by GitHub connector; isolated Linux Go1.23 STUB `-race` PASS; genuine Product Go1.27 Android **NOT_RUN**; Linux root Go1.27 and **PRODUCTION NO-GO**.
 
 **Parent:** Product Phase42 Draft PR #96, immutable HEAD `f0da21a1cb2a3d5c6381473dbbfd05c5e1eb49b4`. The only proposed code changes are three `*_test.go` files in the real installationlicense package, with NO production/runtime modifications.
 
@@ -12,7 +12,7 @@ Phase42's test-only journal blocks reuse of one RequestID, but not a new and dif
 - Only an authentic **synthetic** provider confirmation may allow the next distinct ID; the old ID can never be replayed.
 - Honor genuine Product V2 Manager revocation and existing Ed25519 signed scoped requests; stricter behavior is opt-in to avoid altering Phase42's eight existing tests.
 
-## Source integrity / pending GitHub source transfer
+## Source integrity / transfer independently verified in GitHub
 
 | File | Git blob SHA | SHA256 |
 |---|---|---|
@@ -20,13 +20,15 @@ Phase42's test-only journal blocks reuse of one RequestID, but not a new and dif
 | new `internal/platform/installationlicense/phase43_unresolved_global_journal_test.go` | `ac1a9df34e8fb3600805054dded81d186bb8e58e` | `fc5ed52d79548608182d306b7ce36b6892447f6eee67d6fd763726576ec95850` |
 | new `internal/platform/installationlicense/phase43_real_manager_global_fence_test.go` | `aed0defee2491e390b1a7c2b612591c8316ffeb0` | `96af11d36ce8028a3c06a6178d2af89502ad4b675d66758e3dfcc1632dbecdc2` |
 
-**These three sources have not yet been uploaded to GitHub.** The user will run a guarded, hash-verified Termux transfer script which **first** runs 16 real Product Go1.27 Android tests and `go vet`; commits and pushes only after PASS.
+**All three sources were uploaded directly via the authorized GitHub connector** to the dedicated development branch after isolated Linux stub verification. Each new or modified file was independently re-fetched from GitHub: all **three blob SHAs match exactly** the known byte-tested sources listed above. This replaces the previously planned Termux ZIP upload; no phone action or ZIP transfer is required. However, **the separate genuine Product Go1.27 Android functional test remains NOT_RUN for this Phase43 source**. Since no Go1.27 toolchain is available in the isolated model workspace, source-transfer completion MUST NOT be counted as genuine Product test acceptance.
 
 ## ACTUALLY executed independent isolated Linux Go1.23.2 STUB checks
 In the local scratch module with exactly the three source files and a **compatible fake Manager/journal implementation (not genuine Product)**:
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -race -count=30 -timeout=180s -run '^TestLICA9Phase4[23]' ./...` **30/30 complete repeated suites PASS**, each suite including eight Phase42 and eight new Phase43 named tests.
 - Eight Phase43 `-v` individual cases **8/8 PASS**, log SHA256 `445b6d070825536d1ac45b5076d3c6be2a0b66af4a0c005f8109ad7d55107430`.
 - `go vet ./...` PASS and `gofmt` clean.
+- Independent post-GitHub-transfer repeat: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOWORK=off go test -race -count=30 -timeout=180s -run '^TestLICA9Phase4[23]' ./...` **PASS, exit status 0**; `go vet ./...` PASS, `gofmt -l` empty; Git blobs from local exact-tested bytes match all three GitHub file blobs.
+- **30 repeats are 30 standalone STUB suites, NOT 30 genuine Product/Authority E2E runs.**
 
 These results establish **local test contract and race stability against a STUB**, not actual cryptographically validated TELMIVO Product Manager on Linux.
 
