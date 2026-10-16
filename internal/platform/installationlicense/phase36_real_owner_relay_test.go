@@ -57,6 +57,7 @@ type phase36Relay struct {
 	session     string
 	mu          sync.Mutex
 	reserved    map[string]bool
+	journal     *phase37Journal // Optional test-only durable fail-closed reservation
 	effectCount atomic.Int64
 	failNext    bool
 	workers     sync.WaitGroup
@@ -138,13 +139,21 @@ func (r *phase36Relay) process(conn *net.UnixConn) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.reserved[c.RequestID] {
-		answer("DENIED_DUPLICATE")
-		return
+	if r.journal != nil {
+		// Durable reservation PRECEDES actual Manager.Effect, including on
+		// an uncertain result. No retry or journal clear is permitted here.
+		if e := r.journal.reserve(c); e != nil {
+			answer("DENIED_DUPLICATE_OR_RECONCILE_REQUIRED")
+			return
+		}
+	} else {
+		// Phase36 compatibility: old in-memory reservation remains TEST ONLY.
+		if r.reserved[c.RequestID] {
+			answer("DENIED_DUPLICATE")
+			return
+		}
+		r.reserved[c.RequestID] = true
 	}
-	// At-most-once within this *process only*. Keep pending even on failures,
-	// so unknown callback outcome is never blindly retried in the same relay.
-	r.reserved[c.RequestID] = true
 	err = r.manager.Effect(context.Background(), func() error {
 		if c.WorkspaceID != "tenantA" || c.ActorID != "actorA" || c.ResourceID != "resourceA" {
 			return phase36PolicyDenied
