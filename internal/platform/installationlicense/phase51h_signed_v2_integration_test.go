@@ -43,6 +43,8 @@ func TestLICA9Phase51HFixtureFailsClosed(t *testing.T) {
 		{"production_runtime_dsn", "TEST_DATABASE_URL", "postgres://runtime:synthetic@127.0.0.1:5432/telmivo_prod"},
 		{"remote_migration_dsn", "TEST_MIGRATION_DATABASE_URL", "postgres://migration:synthetic@license.example:5432/telmivo_test"},
 		{"nonpostgres_dsn", "TEST_DATABASE_URL", "file:///telmivo_test"},
+		{"host_override_query", "TEST_DATABASE_URL", "postgres://runtime:synthetic@127.0.0.1:5432/telmivo_test?sslmode=disable&host=/var/run/postgresql"},
+		{"wrong_port", "TEST_DATABASE_URL", "postgres://runtime:synthetic@127.0.0.1:443/telmivo_test?sslmode=disable"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			phase51HSetValidTestGate(t)
