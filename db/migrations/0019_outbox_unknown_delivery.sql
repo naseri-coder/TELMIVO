@@ -31,7 +31,9 @@ ALTER TABLE outbox_events
  ADD CONSTRAINT outbox_delivery_published_consistency
  CHECK ((delivery_state='PUBLISHED')=(published_at IS NOT NULL)),
  ADD CONSTRAINT outbox_delivery_attempt_consistency
- CHECK (delivery_state='READY' OR delivery_attempted_at IS NOT NULL);
+ CHECK (delivery_state='READY' OR delivery_attempted_at IS NOT NULL),
+ ADD CONSTRAINT outbox_delivery_ready_pristine
+ CHECK (delivery_state<>'READY' OR attempts=0);
 
 -- A partially acknowledged request is quarantined before transport. Explicit
 -- proof of delivery/absence is required for any external reconciliation.
@@ -47,6 +49,12 @@ BEGIN
    RAISE EXCEPTION 'unknown outbox attempt is durable and requires reconciliation';
   END IF;
   RETURN OLD;
+ END IF;
+ -- An old Relay binary ignores delivery_state and attempts to increment
+ -- attempts on READY/UNKNOWN. Reject that update *before* it can publish.
+ IF OLD.delivery_state IN ('READY','UNKNOWN')
+    AND NEW.delivery_state=OLD.delivery_state AND NEW.attempts<>OLD.attempts THEN
+  RAISE EXCEPTION 'outbox attempt increment requires READY to UNKNOWN fence';
  END IF;
  IF OLD.delivery_state='PUBLISHED' AND NEW.delivery_state<>'PUBLISHED' THEN
   RAISE EXCEPTION 'published outbox event cannot be reopened';
