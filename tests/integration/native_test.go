@@ -47,12 +47,13 @@ var sequence atomic.Int64
 var authSequence atomic.Int64
 
 func TestMain(m *testing.M) {
-	for _, key := range []string{"TEST_DATABASE_URL", "TEST_MIGRATION_DATABASE_URL"} {
-		u, e := url.Parse(os.Getenv(key))
-		if e != nil || u.Path != "/telmivo_test" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost" && u.Hostname() != "postgres") {
-			fmt.Fprintln(os.Stderr, "isolated telmivo_test URLs required")
-			os.Exit(1)
-		}
+	// Direct go test must be just as safe as scripts/ci/check-test-target.sh.
+	// Reject any driver-level host/service override, remote NATS, wrong role,
+	// inherited Production targets or restore mismatch BEFORE making keys,
+	// opening PostgreSQL/JetStream, or executing a schema migration.
+	if admissionErr := installationlicense.NativeIntegrationTargetAdmission(os.LookupEnv); admissionErr != nil {
+		fmt.Fprintln(os.Stderr, "native TEST target admission rejected:", admissionErr)
+		os.Exit(1)
 	}
 	// TestMain intentionally executes only with localhost/postgres telmivo_test
 	// URLs validated above. A real TEST-only Ed25519 V2 lease, not a runtime
