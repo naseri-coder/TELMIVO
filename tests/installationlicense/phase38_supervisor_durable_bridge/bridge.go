@@ -212,6 +212,7 @@ func Open(socketDir, journalDir, installation string, workerUID uint32, issuer, 
 	b.socketName = name
 	return b, nil
 }
+
 // SetIntegrationTestEffectGate optionally connects the root-owned durable
 // reservation to the genuine Product Manager.Effect via a caller-supplied
 // closure. This bridge is a standalone TEST module, not deployed Product code.
