@@ -61,6 +61,29 @@ def secure_db(raw, name):
     if sslmode not in {"require", "verify-ca", "verify-full"}:
         raise PreflightError(f"{name} must require TLS")
 
+def reject_test_fixture_configuration(env):
+    # Deny test-only signed-V2 bootstrap and runner settings in any release
+    # environment file. These variables belong solely to disposable tests.
+    # Presence (even an empty value) indicates a wrong deployment artifact.
+    forbidden = {
+        "TELMIVO_LIC_A9_BROWSER_TEST",
+        "TELMIVO_LIC_A9_NATIVE_FIXTURE",
+        "TEST_DATABASE_URL",
+        "TEST_MIGRATION_DATABASE_URL",
+        "TEST_RESTORE_DATABASE_URL",
+        "TEST_RESTORE_MIGRATION_DATABASE_URL",
+        "TEST_NATS_URL",
+        "TEST_REDIS_URL",
+        "GOFLAGS",
+        "GOWORK",
+    }
+    selected = sorted(forbidden.intersection(env))
+    if selected:
+        raise PreflightError("test-only/Go build controls in production environment: " + ", ".join(selected))
+    if env.get("TELMIVO_LICENSE_ENVIRONMENT") == "TEST":
+        raise PreflightError("TEST-only V2 license environment forbidden in production")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--env-file", required=True)
@@ -69,6 +92,7 @@ def main():
     args = p.parse_args()
 
     env = load_env(Path(args.env_file))
+    reject_test_fixture_configuration(env)
     if required(env, "TELMIVO_ENV") != "production" or env.get("SYNTHETIC_MODE") != "false":
         raise PreflightError("production environment mode is not fail-closed")
 
