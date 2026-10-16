@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,7 +20,8 @@ import (
 // compiled into ordinary Product builds (requires -tags=integration).
 // Never call this in an actual installation or with nonisolated database URLs.
 func NewTestOnlySignedV2RuntimeForNativeIntegration(stateDirectory string) (*Manager, error) {
-	if stateDirectory == "" || os.Getenv("TELMIVO_LIC_A9_NATIVE_FIXTURE") != "YES" ||
+	if stateDirectory == "" || !strings.HasSuffix(filepath.Base(os.Args[0]), ".test") ||
+		os.Getenv("TELMIVO_LIC_A9_NATIVE_FIXTURE") != "YES" ||
 		strings.EqualFold(os.Getenv("TELMIVO_ENV"), "production") ||
 		strings.EqualFold(os.Getenv("TELMIVO_LICENSE_ENVIRONMENT"), "production") ||
 		!isolatedNativeIntegrationDB(os.Getenv("TEST_DATABASE_URL")) ||
