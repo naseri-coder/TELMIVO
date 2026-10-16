@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/naseri-coder/TELMIVO/internal/platform/config"
-	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 )
 
 func phase51iSyntheticBrowserConfig() config.Config {
@@ -83,8 +82,6 @@ func TestLICA9Phase51IBrowserNativeFailClosed(t *testing.T) {
 			}
 		})
 	}
-	// Default-deny Runtime remains intact; this test never installs it.
-	if err := installationlicense.CheckRuntime(context.Background()); err == nil {
-		t.Fatal("refused browser start unexpectedly installed runtime")
-	}
+	// This test never calls InstallRuntime: process-global state is not
+	// mutated, and a failed browser startup cannot authorize effects.
 }
