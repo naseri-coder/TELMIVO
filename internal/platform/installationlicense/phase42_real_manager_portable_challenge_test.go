@@ -70,14 +70,15 @@ func phase42BootNonce(t *testing.T) string {
 // This is NOT a deployable bridge: the journal and signer are ephemeral TEST
 // fixtures. No transport or worker OS identity is verified in this test.
 type phase42PortableGate struct {
-	mu      sync.Mutex
-	manager *Manager
-	public  ed25519.PublicKey
-	journal *phase37Journal
-	nonce   string
-	epoch   uint64
-	enabled bool
-	effects atomic.Int64
+	mu                  sync.Mutex
+	manager             *Manager
+	public              ed25519.PublicKey
+	journal             *phase37Journal
+	nonce               string
+	epoch               uint64
+	enabled             bool
+	strictGlobalPending bool // Phase43 TEST-ONLY opt-in; not deployed or default
+	effects             atomic.Int64
 }
 
 func phase42NewGate(t *testing.T, m *Manager, pub ed25519.PublicKey, j *phase37Journal) *phase42PortableGate {
@@ -94,6 +95,15 @@ func (g *phase42PortableGate) grant(s phase42SignedGrant) error {
 		x.ExpiresUnix > time.Now().Add(3*time.Minute).Unix() ||
 		g.manager.Decision().State != "VALID_ONLINE" {
 		return phase42Denied
+	}
+	if g.strictGlobalPending {
+		pending, err := g.journal.phase43Pending()
+		if err != nil {
+			return err
+		}
+		if pending {
+			return phase43Unresolved
+		}
 	}
 	g.epoch = x.Epoch
 	g.enabled = true
@@ -114,8 +124,14 @@ func (g *phase42PortableGate) effect(s phase42SignedRequest) error {
 	}
 	// The EXACT signed claim is durably fsynced before the real Manager.Effect
 	// can call the synthetic callback. Unknown outcomes are NEVER retried.
-	if err := g.journal.reserve(c); err != nil {
-		return err
+	var reserveErr error
+	if g.strictGlobalPending {
+		reserveErr = g.journal.phase43ReserveWhenSettled(c)
+	} else {
+		reserveErr = g.journal.reserve(c)
+	}
+	if reserveErr != nil {
+		return reserveErr
 	}
 	return g.manager.Effect(context.Background(), func() error { g.effects.Add(1); return nil })
 }
