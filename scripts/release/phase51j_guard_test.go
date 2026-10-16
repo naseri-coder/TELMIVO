@@ -53,8 +53,8 @@ func TestLICA9Phase51JRejectBinaryBuildTags(t *testing.T) {
 	for _, item := range []struct {
 		name, info, goVersion string
 	}{
-		{"browser_tag", validGoBuildMetadata + "	build	-tags=lic_a9_browser_test\n", "go1.27.2"},
-		{"integration_tag", validGoBuildMetadata + "	build	-tags=integration\n", "go1.27.2"},
+		{"browser_tag", validGoBuildMetadata + "\tbuild\t-tags=lic_a9_browser_test\n", "go1.27.2"},
+		{"integration_tag", validGoBuildMetadata + "\tbuild\t-tags=integration\n", "go1.27.2"},
 		{"wrong_toolchain", validGoBuildMetadata, "go1.27.3"},
 		{"prefix_version_attack", strings.Replace(validGoBuildMetadata, "go1.27.2\n", "go1.27.20\n", 1), "go1.27.2"},
 		{"CGO_enabled", strings.Replace(validGoBuildMetadata, "CGO_ENABLED=0", "CGO_ENABLED=1", 1), "go1.27.2"},
