@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17-bookworm
+        image: postgres:16-bookworm
         env:
           POSTGRES_DB: telmivo_test
           POSTGRES_PASSWORD: dev-admin-only
@@ -18,7 +18,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d telmivo_test"
           --health-interval 2s --health-retries 30
       restore:
-        image: postgres:17-bookworm
+        image: postgres:16-bookworm
         env:
           POSTGRES_DB: telmivo_test
           POSTGRES_PASSWORD: dev-admin-only
@@ -32,6 +32,9 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 2s --health-retries 30
     env:
+      TELMIVO_ENV: test
+      TELMIVO_LICENSE_ENVIRONMENT: TEST
+      SYNTHETIC_MODE: 'true'
       TEST_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5432/telmivo_test?sslmode=disable
       TEST_MIGRATION_DATABASE_URL: postgres://telmivo_migration:dev-migration-only@127.0.0.1:5432/telmivo_test?sslmode=disable
       TEST_RESTORE_DATABASE_URL: postgres://telmivo_runtime:dev-runtime-only@127.0.0.1:5433/telmivo_test?sslmode=disable
