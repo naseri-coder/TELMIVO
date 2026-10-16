@@ -75,8 +75,12 @@ func TestLICA9Phase51RealProductRuntimeChild(t *testing.T) {
 		// new descriptor and may self-deadlock on Linux. The parent will
 		// terminate this subprocess if the lock cannot complete promptly.
 		if err := RuntimeEffect(ctx, func() error {
-			// The Manager holds a genuine exclusive file lock here. A nested
-			// decision must return RESTRICTED immediately rather than block.
+			// Direct public Decision must not wait on the same non-reentrant
+			// Linux flock held by this callback. It must fail closed.
+			if d := m.Decision(); d.State != "RESTRICTED" || d.Reason != "STATE_LOCK_UNAVAILABLE" {
+				t.Fatalf("direct Manager.Decision bypassed nested file lock: %+v", d)
+			}
+			// Global Runtime checks are equally nonblocking and restrictive.
 			if e := CheckRuntime(ctx); !errors.Is(e, ErrRestricted) {
 				t.Fatalf("nested CheckRuntime did not fail closed: %v", e)
 			}
@@ -96,6 +100,9 @@ func TestLICA9Phase51RealProductRuntimeChild(t *testing.T) {
 		}
 		if err := CheckRuntime(ctx); err != nil {
 			t.Fatalf("post-effect signed Manager was spuriously restricted: %v", err)
+		}
+		if d := m.Decision(); d.State != "VALID_ONLINE" {
+			t.Fatalf("direct Manager.Decision did not recover after lock release: %+v", d)
 		}
 	default:
 		t.Fatalf("unknown scenario %q", scenario)
