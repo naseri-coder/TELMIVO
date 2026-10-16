@@ -315,6 +315,13 @@ func (cl *Client) Status(ctx context.Context) error {
 		return nil
 	})
 }
+// shouldRefreshForDecision distinguishes a transient contended lock from a
+// signed lease state. A busy Manager is neither an authority revocation nor
+// evidence that the lease needs network refresh.
+func shouldRefreshForDecision(d Decision) bool {
+	return d.Reason != "STATE_LOCK_UNAVAILABLE" && (d.RefreshDue || d.State == "RESTRICTED")
+}
+
 func (cl *Client) Poll(ctx context.Context) {
 	var leader *os.File
 	for {
@@ -339,7 +346,7 @@ func (cl *Client) Poll(ctx context.Context) {
 	defer t.Stop()
 	for {
 		d := cl.manager.Decision()
-		if d.RefreshDue || d.State == "RESTRICTED" {
+		if shouldRefreshForDecision(d) {
 			_ = cl.Refresh(ctx)
 		}
 		select {
