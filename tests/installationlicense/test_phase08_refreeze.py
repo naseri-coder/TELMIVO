@@ -39,7 +39,7 @@ class Phase08RefreezeTests(unittest.TestCase):
 
     def test_allowlist_exact_phase19_runtime_security_exception(self):
         values = runner.EXPECTED_PRODUCT_TEST_DELTA
-        self.assertEqual(len(values), 35)
+        self.assertEqual(len(values), 37)
         reviewed_exception = frozenset({
             'internal/platform/installationlicense/state.go',
             'internal/platform/installationlicense/phase19_session_fencing_test.go',
