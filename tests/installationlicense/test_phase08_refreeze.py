@@ -39,7 +39,7 @@ class Phase08RefreezeTests(unittest.TestCase):
 
     def test_allowlist_exact_phase19_runtime_security_exception(self):
         values = runner.EXPECTED_PRODUCT_TEST_DELTA
-        self.assertEqual(len(values), 41)
+        self.assertEqual(len(values), 43)
         reviewed_exception = frozenset({
             'internal/platform/installationlicense/state.go',
             'internal/platform/installationlicense/phase19_session_fencing_test.go',
@@ -51,6 +51,13 @@ class Phase08RefreezeTests(unittest.TestCase):
         self.assertFalse(any(x.startswith(('cmd/', 'deploy/', 'pkg/'))
                              or x in ('go.mod', 'go.sum') for x in values))
         self.assertIn('tests/installationlicense/PHASE19_RUNTIME_SESSION_SECURITY_ACCEPTANCE_20261016.md', values)
+        self.assertIn('tests/installationlicense/phase23_broker_proof/phase24_hardening_test.go', values)
+        self.assertIn('tests/installationlicense/PHASE24_BROKER_OWNER_SHUTDOWN_HARDENING_20261016.md', values)
+
+    def test_missing_phase24_broker_hardening_path_blocks(self):
+        self.make_test_delta('tests/installationlicense/phase23_broker_proof/phase24_hardening_test.go')
+        with self.assertRaises(ValueError):
+            runner.check_product_checkout(self.root, self.base)
 
     def test_missing_phase19_security_fix_path_blocks(self):
         self.make_test_delta('internal/platform/installationlicense/state.go')
