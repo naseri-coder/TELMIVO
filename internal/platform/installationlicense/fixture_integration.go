@@ -22,8 +22,9 @@ import (
 func NewTestOnlySignedV2RuntimeForNativeIntegration(stateDirectory string) (*Manager, error) {
 	if stateDirectory == "" || !strings.HasSuffix(filepath.Base(os.Args[0]), ".test") ||
 		os.Getenv("TELMIVO_LIC_A9_NATIVE_FIXTURE") != "YES" ||
-		strings.EqualFold(os.Getenv("TELMIVO_ENV"), "production") ||
-		strings.EqualFold(os.Getenv("TELMIVO_LICENSE_ENVIRONMENT"), "production") ||
+		os.Getenv("TELMIVO_ENV") != "test" ||
+		os.Getenv("TELMIVO_LICENSE_ENVIRONMENT") != "TEST" ||
+		os.Getenv("SYNTHETIC_MODE") != "true" ||
 		!isolatedNativeIntegrationDB(os.Getenv("TEST_DATABASE_URL")) ||
 		!isolatedNativeIntegrationDB(os.Getenv("TEST_MIGRATION_DATABASE_URL")) {
 		return nil, ErrState

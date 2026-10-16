@@ -15,6 +15,7 @@ func phase51HSetValidTestGate(t *testing.T) {
 	t.Helper()
 	t.Setenv("TELMIVO_ENV", "test")
 	t.Setenv("TELMIVO_LICENSE_ENVIRONMENT", "TEST")
+	t.Setenv("SYNTHETIC_MODE", "true")
 	t.Setenv("TELMIVO_LIC_A9_NATIVE_FIXTURE", "YES")
 	t.Setenv("TEST_DATABASE_URL", phase51HNativeURL)
 	t.Setenv("TEST_MIGRATION_DATABASE_URL", phase51HMigrationURL)
@@ -38,6 +39,10 @@ func TestLICA9Phase51HRealSignedV2FixtureAdmittedOnlyForNativeTest(t *testing.T)
 func TestLICA9Phase51HFixtureFailsClosed(t *testing.T) {
 	for _, scenario := range []struct{ name, change, value string }{
 		{"explicit_opt_in_missing", "TELMIVO_LIC_A9_NATIVE_FIXTURE", ""},
+		{"native_test_env_missing", "TELMIVO_ENV", ""},
+		{"native_test_license_env_missing", "TELMIVO_LICENSE_ENVIRONMENT", ""},
+		{"native_synthetic_mode_missing", "SYNTHETIC_MODE", ""},
+		{"native_synthetic_mode_wrong", "SYNTHETIC_MODE", "false"},
 		{"production_env", "TELMIVO_ENV", "production"},
 		{"production_license_env", "TELMIVO_LICENSE_ENVIRONMENT", "PRODUCTION"},
 		{"production_runtime_dsn", "TEST_DATABASE_URL", "postgres://runtime:synthetic@127.0.0.1:5432/telmivo_prod"},

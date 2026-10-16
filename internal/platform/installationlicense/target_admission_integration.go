@@ -16,6 +16,15 @@ func NativeIntegrationTargetAdmission(lookup func(string) (string, bool)) error 
 		return errors.New("NATIVE_TEST_TARGET_LOOKUP_MISSING")
 	}
 	get := func(k string) string { v, _ := lookup(k); return v }
+	for _, expected := range [][2]string{
+		{"TELMIVO_ENV", "test"},
+		{"TELMIVO_LICENSE_ENVIRONMENT", "TEST"},
+		{"SYNTHETIC_MODE", "true"},
+	} {
+		if got, ok := lookup(expected[0]); !ok || got != expected[1] {
+			return errors.New("NATIVE_TEST_EXPLICIT_TEST_IDENTITY_REQUIRED")
+		}
+	}
 	if err := nativeIntegrationPostgres(get("TEST_DATABASE_URL"), "telmivo_runtime", "5432"); err != nil {
 		return err
 	}

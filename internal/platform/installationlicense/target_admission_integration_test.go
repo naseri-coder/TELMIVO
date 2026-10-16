@@ -9,6 +9,9 @@ func phase51mGoodTargets() map[string]string {
 		"TEST_DATABASE_URL":           "postgres://telmivo_runtime:synthetic@127.0.0.1:5432/telmivo_test?sslmode=disable",
 		"TEST_MIGRATION_DATABASE_URL": "postgres://telmivo_migration:synthetic@127.0.0.1:5432/telmivo_test?sslmode=disable",
 		"TEST_NATS_URL":               "nats://127.0.0.1:4222",
+		"TELMIVO_ENV":                 "test",
+		"TELMIVO_LICENSE_ENVIRONMENT": "TEST",
+		"SYNTHETIC_MODE":              "true",
 	}
 }
 func phase51mCheck(m map[string]string) error {
