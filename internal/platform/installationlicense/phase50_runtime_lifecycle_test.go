@@ -110,7 +110,9 @@ func TestLICA9Phase50ChildLifecycle(t *testing.T) {
 		close(release)
 		select {
 		case err := <-effectDone:
-			if err != nil { t.Fatalf("in-flight effect failed: %v", err) }
+			if err != nil {
+				t.Fatalf("in-flight effect failed: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Fatal("in-flight effect failed to finish")
 		}
@@ -131,14 +133,18 @@ func TestLICA9Phase50ChildLifecycle(t *testing.T) {
 				defer wg.Done()
 				for j := 0; j < 30; j++ {
 					err := RuntimeEffect(ctx, func() error { return nil })
-					if err != nil && !errors.Is(err, ErrRestricted) { unexpected.Add(1) }
+					if err != nil && !errors.Is(err, ErrRestricted) {
+						unexpected.Add(1)
+					}
 				}
 			}()
 		}
 		InstallRuntime(nil)
 		InstallRuntime(official)
 		wg.Wait()
-		if unexpected.Load() != 0 { t.Fatalf("unexpected authorization errors: %d", unexpected.Load()) }
+		if unexpected.Load() != 0 {
+			t.Fatalf("unexpected authorization errors: %d", unexpected.Load())
+		}
 		phase50Denied(t, ctx)
 	case "cancelled-context":
 		official := phase48SignedManager(t)
