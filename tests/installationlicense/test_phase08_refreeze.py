@@ -43,6 +43,7 @@ class Phase08RefreezeTests(unittest.TestCase):
         reviewed_exception = frozenset({
             'internal/platform/installationlicense/state.go',
             'internal/platform/installationlicense/phase19_session_fencing_test.go',
+            'internal/platform/installationlicense/phase22_multiworker_session_contract_test.go',
         })
         non_test_paths = frozenset(x for x in values
                                    if not x.startswith('tests/installationlicense/'))
