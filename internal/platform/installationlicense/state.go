@@ -417,12 +417,11 @@ func WithManager(ctx context.Context, m *Manager) context.Context {
 	return context.WithValue(ctx, contextKey{}, m)
 }
 func FromContext(ctx context.Context) *Manager { m, _ := ctx.Value(contextKey{}).(*Manager); return m }
+// Effect is the context-bound compatibility entrypoint for external effects.
+// Do not bypass the process-wide fail-closed Runtime installation lifecycle by
+// calling a valid Context Manager directly.
 func Effect(ctx context.Context, fn func() error) error {
-	m := FromContext(ctx)
-	if m == nil {
-		return ErrRestricted
-	}
-	return m.Effect(ctx, fn)
+	return RuntimeEffect(ctx, fn)
 }
 
 func (Identity) Format(w fmt.State, _ rune) { io.WriteString(w, "<INSTALLATION_IDENTITY REDACTED>") }
