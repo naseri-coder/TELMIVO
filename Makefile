@@ -45,5 +45,5 @@ security-check:
 # Structural candidate verification only; NOT a signed installer approval.
 # Manifest digest MUST come from an independent release record.
 release-candidate-check:
-	@test -n "$(PACKAGE_PATH)" && test -n "$(MANIFEST_SHA256)" || { echo "Set PACKAGE_PATH and independently pinned MANIFEST_SHA256"; exit 2; }
-	python3 scripts/release/phase51k_package_guard.py --archive "$(PACKAGE_PATH)" --manifest-sha256 "$(MANIFEST_SHA256)"
+	@test -n "${PACKAGE_PATH:-}" && test -n "${MANIFEST_SHA256:-}" || { echo "Set exported PACKAGE_PATH and independently pinned MANIFEST_SHA256"; exit 2; }
+	python3 scripts/release/phase51k_package_guard.py --archive "$PACKAGE_PATH" --manifest-sha256 "$MANIFEST_SHA256"
