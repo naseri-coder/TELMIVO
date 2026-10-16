@@ -13,8 +13,8 @@ import (
 // separately compiled out of ordinary Product binaries.
 type BrowserTestAdmission struct {
 	Executable, Role, Environment, LicenseEnvironment, OptIn string
-	Synthetic, HTTPAddr, DatabaseURL, TestDatabaseURL string
-	TestMigrationURL, RedisURL, NATSURL, MiniAppURL string
+	Synthetic, HTTPAddr, DatabaseURL, TestDatabaseURL        string
+	TestMigrationURL, RedisURL, NATSURL, MiniAppURL          string
 }
 
 func (v BrowserTestAdmission) Allowed() bool {
