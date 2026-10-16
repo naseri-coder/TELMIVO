@@ -32,33 +32,47 @@ func TestLICA9Phase51DUncontendedExclusiveFlock(t *testing.T) {
 func TestLICA9Phase51DNestedExclusiveFlockIsBounded(t *testing.T) {
 	a := phase51dLockFile(t)
 	b, err := os.OpenFile(a.Name(), os.O_RDWR, 0)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer b.Close()
-	if err = syscall.Flock(int(a.Fd()), syscall.LOCK_EX); err != nil { t.Fatal(err) }
+	if err = syscall.Flock(int(a.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
 	start := time.Now()
 	err = acquireExclusiveFlock(context.Background(), int(b.Fd()), 65*time.Millisecond, ErrRestricted)
-	if !errors.Is(err, ErrRestricted) { t.Fatalf("lock admission: %v", err) }
-	if time.Since(start) > 500*time.Millisecond { t.Fatal("nested admission remained blocked") }
+	if !errors.Is(err, ErrRestricted) {
+		t.Fatalf("lock admission: %v", err)
+	}
+	if time.Since(start) > 500*time.Millisecond {
+		t.Fatal("nested admission remained blocked")
+	}
 	_ = syscall.Flock(int(a.Fd()), syscall.LOCK_UN)
 }
 
 func TestLICA9Phase51DExclusiveFlockContextCancellation(t *testing.T) {
 	a := phase51dLockFile(t)
 	b, err := os.OpenFile(a.Name(), os.O_RDWR, 0)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer b.Close()
 	_ = syscall.Flock(int(a.Fd()), syscall.LOCK_EX)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(45*time.Millisecond); cancel() }()
 	err = acquireExclusiveFlock(ctx, int(b.Fd()), time.Second, ErrRestricted)
-	if !errors.Is(err, context.Canceled) { t.Fatalf("lock admission: %v", err) }
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("lock admission: %v", err)
+	}
 	_ = syscall.Flock(int(a.Fd()), syscall.LOCK_UN)
 }
 
 func TestLICA9Phase51DExclusiveFlockWaitsForRelease(t *testing.T) {
 	a := phase51dLockFile(t)
 	b, err := os.OpenFile(a.Name(), os.O_RDWR, 0)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer b.Close()
 	_ = syscall.Flock(int(a.Fd()), syscall.LOCK_EX)
 	var group sync.WaitGroup
@@ -78,7 +92,7 @@ func TestLICA9Phase51DExclusiveFlockWaitsForRelease(t *testing.T) {
 func TestLICA9Phase51DExclusiveFlockRejectsInvalidArguments(t *testing.T) {
 	f := phase51dLockFile(t)
 	for _, candidate := range []struct {
-		ctx context.Context
+		ctx  context.Context
 		wait time.Duration
 		busy error
 	}{
