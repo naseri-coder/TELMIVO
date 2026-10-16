@@ -56,6 +56,9 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     # Phase19: exact, independently reviewed SECURITY EXCEPTION to test-only freeze.
     'internal/platform/installationlicense/state.go',
     'internal/platform/installationlicense/phase19_session_fencing_test.go',
+    # Phase22: signed fixture tests expose the unresolved multiworker liveness contract.
+    'internal/platform/installationlicense/phase22_multiworker_session_contract_test.go',
+    'tests/installationlicense/PHASE22_MULTIWORKER_LIVENESS_ACCEPTANCE_20261016.md',
     'tests/installationlicense/PHASE19_RUNTIME_SESSION_SECURITY_ACCEPTANCE_20261016.md',
     'tests/installationlicense/phase16_real_go_offline_cache_probe.py',
     'tests/installationlicense/phase15_reviewed_module_cache.py',
