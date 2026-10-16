@@ -124,7 +124,9 @@ func NewTestOnlySignedV2RuntimeForNativeIntegration(stateDirectory string) (*Man
 func isolatedNativeIntegrationDB(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "postgres" && u.Scheme != "postgresql" ||
-		u.Path != "/telmivo_test" || u.User == nil || u.Host == "" {
+		u.Path != "/telmivo_test" || u.User == nil || u.Host == "" ||
+		u.RawQuery != "sslmode=disable" || u.Fragment != "" ||
+		(u.Port() != "" && u.Port() != "5432") {
 		return false
 	}
 	switch strings.ToLower(u.Hostname()) {
