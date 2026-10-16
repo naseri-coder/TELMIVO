@@ -44,16 +44,23 @@ func (c *Client) Ensure() error {
 	_, e := c.JS.AddStream(&nats.StreamConfig{Name: "TELMIVO", Subjects: []string{"telmivo.jobs.>", "telmivo.events.>"}, Storage: nats.FileStorage, Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, MaxBytes: 512 << 20, Duplicates: 24 * time.Hour})
 	return e
 }
+// Publish is the final process-wide signed-license fence for NATS effects.
+// Relay preflight is not an authorization lease: revocation can occur after
+// its database transaction and before the transport call. RuntimeEffect
+// rechecks the live signed Manager while holding its guarded effect admission.
+// Nats-Msg-Id and the existing outbox lease/receipt remain the replay fences.
 func (c *Client) Publish(ctx context.Context, subject string, event Envelope) error {
-	b, e := json.Marshal(event)
-	if e != nil {
+	return installationlicense.RuntimeEffect(ctx, func() error {
+		b, e := json.Marshal(event)
+		if e != nil {
+			return e
+		}
+		m := nats.NewMsg(subject)
+		m.Data = b
+		m.Header.Set("Nats-Msg-Id", event.ID)
+		_, e = c.JS.PublishMsg(m, nats.Context(ctx))
 		return e
-	}
-	m := nats.NewMsg(subject)
-	m.Data = b
-	m.Header.Set("Nats-Msg-Id", event.ID)
-	_, e = c.JS.PublishMsg(m, nats.Context(ctx))
-	return e
+	})
 }
 func (c *Client) Relay(ctx context.Context, db *database.Store) error {
 	if e := installationlicense.CheckRuntime(ctx); e != nil {
