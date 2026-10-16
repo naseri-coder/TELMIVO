@@ -159,6 +159,12 @@ func Open(cfg Config) (*Manager, error) {
 	return m, e
 }
 func (m *Manager) lock(fn func() error) error {
+	return m.lockMode(syscall.LOCK_EX, fn)
+}
+
+// lockMode preserves the same ownership/regular-file/hardlink checks for both
+// blocking mutation/effect locks and nonblocking authorization probes.
+func (m *Manager) lockMode(mode int, fn func() error) error {
 	fd, e := syscall.Open(filepath.Join(m.cfg.Directory, "lock"), syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
 	if e != nil {
 		return ErrState
@@ -169,7 +175,7 @@ func (m *Manager) lock(fn func() error) error {
 	if syscall.Fstat(fd, &s) != nil || s.Mode&syscall.S_IFMT != syscall.S_IFREG || s.Nlink != 1 || s.Mode&0077 != 0 || int(s.Uid) != os.Geteuid() {
 		return ErrState
 	}
-	if e = syscall.Flock(fd, syscall.LOCK_EX); e != nil {
+	if e = syscall.Flock(fd, mode); e != nil {
 		return ErrState
 	}
 	defer syscall.Flock(fd, syscall.LOCK_UN)
@@ -331,6 +337,21 @@ func (m *Manager) decisionLocked() (Decision, error) {
 func (m *Manager) Decision() Decision {
 	d := Decision{State: "RESTRICTED", Reason: "STATE_INVALID"}
 	_ = m.lock(func() error { var e error; d, e = m.decisionLocked(); return e })
+	return d
+}
+
+// decisionNonblocking uses the genuine signed-V2 decisionLocked validation,
+// but fails closed if another effect already holds the installation file lock.
+// Never wait on a second independently opened flock from inside that effect.
+func (m *Manager) decisionNonblocking() Decision {
+	d := Decision{State: "RESTRICTED", Reason: "STATE_INVALID"}
+	if e := m.lockMode(syscall.LOCK_EX|syscall.LOCK_NB, func() error {
+		var err error
+		d, err = m.decisionLocked()
+		return err
+	}); e != nil {
+		return Decision{State: "RESTRICTED", Reason: "STATE_LOCK_UNAVAILABLE"}
+	}
 	return d
 }
 
