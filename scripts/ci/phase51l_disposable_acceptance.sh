@@ -7,6 +7,7 @@ set -eu
 [ "${TELMIVO_ENV:-}" = test ] || { echo "TEST environment required" >&2; exit 2; }
 [ "${TELMIVO_LICENSE_ENVIRONMENT:-}" = TEST ] || { echo "TEST-only license required" >&2; exit 2; }
 [ "${SYNTHETIC_MODE:-}" = true ] || { echo "SYNTHETIC_MODE=true required" >&2; exit 2; }
+[ "${TEST_NATS_URL:-}" = nats://127.0.0.1:4222 ] || { echo "Exact loopback TEST_NATS_URL required" >&2; exit 2; }
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$ROOT"
 sh scripts/ci/check-test-target.sh
