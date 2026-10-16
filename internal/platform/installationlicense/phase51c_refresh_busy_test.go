@@ -7,9 +7,9 @@ import "testing"
 // an Authority revocation or a new lease-signing request.
 func TestLICA9Phase51CRefreshDecisionClassification(t *testing.T) {
 	cases := []struct {
-		name string
+		name     string
 		decision Decision
-		want bool
+		want     bool
 	}{
 		{"busy_is_not_a_revocation", Decision{State: "RESTRICTED", Reason: "STATE_LOCK_UNAVAILABLE"}, false},
 		{"busy_does_not_refresh_even_if_due", Decision{State: "RESTRICTED", Reason: "STATE_LOCK_UNAVAILABLE", RefreshDue: true}, false},
