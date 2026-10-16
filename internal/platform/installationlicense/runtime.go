@@ -20,7 +20,10 @@ func InstallRuntime(m *Manager) {
 // runtimeForEffect defaults to denial. A manager explicitly bound to context
 // can authorize an effect through its own durable verification even before an
 // application-wide manager is installed (e.g. a test or an isolated worker).
-// Without either manager, absence of initialization never grants an effect.
+// Once installed, the process-wide Manager is authoritative: a foreign or
+// locally supplied Manager cannot override a restricted global installation.
+// Before installation, a deliberately bound Manager may still be used by
+// isolated workers, subject to that Manager's own verified lease.
 func runtimeForEffect(ctx context.Context, globallyRequired bool, global *Manager) (*Manager, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -29,8 +32,13 @@ func runtimeForEffect(ctx context.Context, globallyRequired bool, global *Manage
 		return nil, ErrRestricted
 	}
 	m := FromContext(ctx)
-	if m == nil && globallyRequired {
-		m = global
+	if globallyRequired {
+		// An installed restricted/nil runtime is process-wide authority.
+		// A foreign context-bound Manager must never override it.
+		if global == nil || (m != nil && m != global) {
+			return nil, ErrRestricted
+		}
+		return global, nil
 	}
 	if m == nil {
 		return nil, ErrRestricted
