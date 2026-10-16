@@ -63,6 +63,9 @@ EXPECTED_PRODUCT_TEST_DELTA = frozenset({
     'tests/installationlicense/phase23_broker_proof/go.mod',
     'tests/installationlicense/phase23_broker_proof/broker.go',
     'tests/installationlicense/phase23_broker_proof/broker_test.go',
+    # Phase24: test-only broker owner/shutdown hardening.
+    'tests/installationlicense/phase23_broker_proof/phase24_hardening_test.go',
+    'tests/installationlicense/PHASE24_BROKER_OWNER_SHUTDOWN_HARDENING_20261016.md',
     'tests/installationlicense/PHASE23_SINGLE_EFFECT_OWNER_ARCHITECTURE_20261016.md',
     'tests/installationlicense/PHASE19_RUNTIME_SESSION_SECURITY_ACCEPTANCE_20261016.md',
     'tests/installationlicense/phase16_real_go_offline_cache_probe.py',

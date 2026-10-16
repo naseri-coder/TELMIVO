@@ -46,15 +46,19 @@ type Response struct {
 type EffectGate func(context.Context, func() error) error
 
 type Broker struct {
-	listener *net.UnixListener
-	journal  string
-	mu       sync.Mutex
-	gate     EffectGate
-	effect   func() error
-	peerUID  func(*net.UnixConn) (uint32, error)
-	cancel   chan struct{}
-	once     sync.Once
-	wg       sync.WaitGroup
+	listener  *net.UnixListener
+	journal   string
+	owner     *os.File // exclusive lifetime flock; socket name is not an ownership proof
+	mu        sync.Mutex
+	acceptMu  sync.Mutex // barrier: never Wait before last handler registration
+	gate      EffectGate
+	effect    func() error
+	peerUID   func(*net.UnixConn) (uint32, error)
+	cancel    chan struct{}
+	once      sync.Once
+	closeDone chan struct{}
+	closeErr  error
+	wg        sync.WaitGroup
 }
 
 func sameUID(conn *net.UnixConn) (uint32, error) {
@@ -83,6 +87,18 @@ func Open(root string, gate EffectGate, effect func() error) (*Broker, error) {
 	if gate == nil || effect == nil || !filepath.IsAbs(root) {
 		return nil, ErrDenied
 	}
+	// Reject a symlink anywhere in the path, not just at the leaf root.
+	// This demonstration intentionally does not implement openat2-based
+	// race-free resolution; it is not safe for an adversarial shared UID.
+	if filepath.Clean(root) != root {
+		return nil, ErrDenied
+	}
+	for dir := root; dir != "/"; dir = filepath.Dir(dir) {
+		info, err := os.Lstat(dir)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			return nil, ErrDenied
+		}
+	}
 	st, err := os.Lstat(root)
 	if err != nil || !st.IsDir() || st.Mode().Perm() != 0700 || st.Mode()&os.ModeSymlink != 0 {
 		return nil, ErrDenied
@@ -91,6 +107,30 @@ func Open(root string, gate EffectGate, effect func() error) (*Broker, error) {
 	if !ok || int(raw.Uid) != os.Geteuid() {
 		return nil, ErrDenied
 	}
+	// Hold one kernel flock for the entire owner lifetime. Removing the
+	// pathname of the live Unix listener must NOT permit a second owner.
+	fd, e := syscall.Open(filepath.Join(root, "broker-owner"),
+		syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
+	if e != nil {
+		return nil, ErrDenied
+	}
+	owner := os.NewFile(uintptr(fd), "broker-owner")
+	var ownerStat syscall.Stat_t
+	if syscall.Fstat(fd, &ownerStat) != nil ||
+		ownerStat.Mode&syscall.S_IFMT != syscall.S_IFREG ||
+		ownerStat.Nlink != 1 || ownerStat.Mode&0077 != 0 ||
+		int(ownerStat.Uid) != os.Geteuid() ||
+		syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		owner.Close()
+		return nil, ErrDenied
+	}
+	// All unsuccessful Open paths release the exclusive lock.
+	accepted := false
+	defer func() {
+		if !accepted {
+			_ = owner.Close()
+		}
+	}()
 	journal := filepath.Join(root, "journal")
 	if err = os.Mkdir(journal, 0700); err != nil && !os.IsExist(err) {
 		return nil, ErrDenied
@@ -116,15 +156,23 @@ func Open(root string, gate EffectGate, effect func() error) (*Broker, error) {
 		listener.Close()
 		return nil, ErrDenied
 	}
-	return &Broker{listener: listener, journal: journal, gate: gate, effect: effect, peerUID: sameUID, cancel: make(chan struct{})}, nil
+	accepted = true
+	return &Broker{listener: listener, journal: journal, owner: owner, gate: gate, effect: effect, peerUID: sameUID, cancel: make(chan struct{}), closeDone: make(chan struct{})}, nil
 }
 
 func (b *Broker) Address() string { return b.listener.Addr().String() }
 func (b *Broker) Close() error {
-	var err error
-	b.once.Do(func() { close(b.cancel); err = b.listener.Close() })
-	b.wg.Wait()
-	return err
+	b.once.Do(func() {
+		close(b.cancel)
+		b.closeErr = b.listener.Close()
+		b.acceptMu.Lock()
+		b.acceptMu.Unlock()
+		b.wg.Wait()
+		_ = b.owner.Close() // release lifetime ownership AFTER all admitted handlers end
+		close(b.closeDone)
+	})
+	<-b.closeDone
+	return b.closeErr
 }
 func (b *Broker) Serve() {
 	for {
@@ -132,7 +180,16 @@ func (b *Broker) Serve() {
 		if err != nil {
 			return
 		}
+		b.acceptMu.Lock()
+		select {
+		case <-b.cancel:
+			b.acceptMu.Unlock()
+			_ = conn.Close()
+			return
+		default:
+		}
 		b.wg.Add(1)
+		b.acceptMu.Unlock()
 		go func() { defer b.wg.Done(); defer conn.Close(); b.handle(conn) }()
 	}
 }
@@ -179,6 +236,15 @@ func (b *Broker) handle(conn *net.UnixConn) {
 	// The journal is not a full crash-safe distributed exactly-once protocol.
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// A queued request must recheck cancellation after acquiring the
+	// serialization lock. Checking only before Lock allowed a pre-shutdown
+	// request to execute AFTER cancellation was already signalled.
+	select {
+	case <-b.cancel:
+		send(conn, "DENIED_CLOSED")
+		return
+	default:
+	}
 	hash := sha256.Sum256([]byte(r.ID))
 	path := filepath.Join(b.journal, hex.EncodeToString(hash[:]))
 	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_EXCL|syscall.O_WRONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
