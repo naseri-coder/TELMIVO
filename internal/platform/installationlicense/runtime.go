@@ -20,8 +20,8 @@ var (
 	// A mutex and active-effect counter avoid RWMutex writer-preference
 	// deadlocks when a protected callback performs a nested CheckRuntime.
 	// Do not call InstallRuntime synchronously inside a protected callback.
-	runtimeGate sync.Mutex
-	runtimeActive int
+	runtimeGate    sync.Mutex
+	runtimeActive  int
 	runtimeDrained = sync.NewCond(&runtimeGate)
 )
 
