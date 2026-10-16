@@ -7,7 +7,7 @@ import (
 
 func TestLICA9Phase51FOutboxSQLContract(t *testing.T) {
 	for _, requirement := range []struct {
-		sql string
+		sql    string
 		pieces []string
 	}{
 		{outboxSelectReadySQL, []string{
@@ -54,7 +54,9 @@ func TestLICA9Phase51FOutboxAmbiguousOutcomeNoBlindReplayModel(t *testing.T) {
 			state := "READY"
 			attempts := 0
 			canClaim := func() bool { return state == "READY" }
-			if !canClaim() { t.Fatal("new outbox event must be READY") }
+			if !canClaim() {
+				t.Fatal("new outbox event must be READY")
+			}
 			state = "UNKNOWN" // committed BEFORE sending to broker
 			attempts++
 			if canClaim() {
@@ -65,7 +67,9 @@ func TestLICA9Phase51FOutboxAmbiguousOutcomeNoBlindReplayModel(t *testing.T) {
 			}
 			// Time-based lease expiration may not change dispatch eligibility.
 			for i := 0; i < 3; i++ {
-				if canClaim() { t.Fatal("expired lease reopened unknown outcome") }
+				if canClaim() {
+					t.Fatal("expired lease reopened unknown outcome")
+				}
 			}
 		})
 	}
