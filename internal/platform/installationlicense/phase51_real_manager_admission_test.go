@@ -74,8 +74,28 @@ func TestLICA9Phase51RealProductRuntimeChild(t *testing.T) {
 		// flock while calling this callback; CheckRuntime -> Decision opens a
 		// new descriptor and may self-deadlock on Linux. The parent will
 		// terminate this subprocess if the lock cannot complete promptly.
-		if err := RuntimeEffect(ctx, func() error { return CheckRuntime(ctx) }); err != nil {
+		if err := RuntimeEffect(ctx, func() error {
+			// The Manager holds a genuine exclusive file lock here. A nested
+			// decision must return RESTRICTED immediately rather than block.
+			if e := CheckRuntime(ctx); !errors.Is(e, ErrRestricted) {
+				t.Fatalf("nested CheckRuntime did not fail closed: %v", e)
+			}
+			var calls int
+			handler := Middleware(m, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/commercial/effective", nil))
+			if w.Code != http.StatusForbidden || calls != 0 {
+				t.Fatalf("nested middleware escaped locked Manager: status=%d calls=%d", w.Code, calls)
+			}
+			return nil
+		}); err != nil {
 			t.Fatal(err)
+		}
+		if err := CheckRuntime(ctx); err != nil {
+			t.Fatalf("post-effect signed Manager was spuriously restricted: %v", err)
 		}
 	default:
 		t.Fatalf("unknown scenario %q", scenario)
