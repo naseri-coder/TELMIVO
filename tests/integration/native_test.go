@@ -24,6 +24,7 @@ import (
 	cred "github.com/naseri-coder/TELMIVO/internal/platform/crypto"
 	"github.com/naseri-coder/TELMIVO/internal/platform/database"
 	"github.com/naseri-coder/TELMIVO/internal/platform/httpapi"
+	"github.com/naseri-coder/TELMIVO/internal/platform/installationlicense"
 	"github.com/naseri-coder/TELMIVO/internal/platform/ledger"
 	"github.com/naseri-coder/TELMIVO/internal/platform/queue"
 	"github.com/nats-io/nats.go"
@@ -53,6 +54,35 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 	}
+	// TestMain intentionally executes only with localhost/postgres telmivo_test
+	// URLs validated above. A real TEST-only Ed25519 V2 lease, not a runtime
+	// bypass, is required before normal Queue/Worker integration effects.
+	licenseDir, licenseErr := os.MkdirTemp("", "telmivo-lic-a9-native-v2-")
+	if licenseErr != nil {
+		fmt.Fprintln(os.Stderr, "test-only license state directory unavailable")
+		os.Exit(1)
+	}
+	if licenseErr = os.Setenv("TELMIVO_LIC_A9_NATIVE_FIXTURE", "YES"); licenseErr != nil {
+		fmt.Fprintln(os.Stderr, "test-only V2 fixture admission unavailable")
+		_ = os.RemoveAll(licenseDir)
+		os.Exit(1)
+	}
+	signedManager, licenseErr := installationlicense.NewTestOnlySignedV2RuntimeForNativeIntegration(licenseDir)
+	_ = os.Unsetenv("TELMIVO_LIC_A9_NATIVE_FIXTURE")
+	if licenseErr != nil {
+		fmt.Fprintln(os.Stderr, "signed TEST-only V2 runtime could not be verified:", licenseErr)
+		_ = os.RemoveAll(licenseDir)
+		os.Exit(1)
+	}
+	installationlicense.InstallRuntime(signedManager)
+	if licenseErr = installationlicense.CheckRuntime(ctx); licenseErr == nil {
+		licenseErr = installationlicense.RuntimeEffect(ctx, func() error { return nil })
+	}
+	if licenseErr != nil {
+		fmt.Fprintln(os.Stderr, "signed TEST-only V2 runtime not authorized:", licenseErr)
+		_ = os.RemoveAll(licenseDir)
+		os.Exit(1)
+	}
 	var e error
 	db, e = database.Open(ctx, os.Getenv("TEST_DATABASE_URL"), true)
 	if e != nil {
@@ -65,6 +95,12 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	db.Pool.Close()
 	owner.Pool.Close()
+	if cleanupErr := os.RemoveAll(licenseDir); cleanupErr != nil {
+		fmt.Fprintln(os.Stderr, "test-only V2 identity cleanup failed")
+		if code == 0 {
+			code = 1
+		}
+	}
 	os.Exit(code)
 }
 func must(t *testing.T, e error) {
