@@ -122,6 +122,45 @@ func TestLICA9Phase50ChildLifecycle(t *testing.T) {
 			t.Fatal("revocation could not finish after effect")
 		}
 		phase50Denied(t, ctx)
+	case "nested-check-during-revoke":
+		official := phase48SignedManager(t)
+		InstallRuntime(official)
+		entered, proceed := make(chan struct{}), make(chan struct{})
+		effectDone := make(chan error, 1)
+		go func() {
+			effectDone <- RuntimeEffect(ctx, func() error {
+				close(entered)
+				<-proceed
+				err := CheckRuntime(ctx)
+				if err != nil && !errors.Is(err, ErrRestricted) {
+					return err
+				}
+				return nil
+			})
+		}()
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("nested-effect admission timed out")
+		}
+		revokeDone := make(chan struct{})
+		go func() { InstallRuntime(nil); close(revokeDone) }()
+		time.Sleep(60 * time.Millisecond)
+		close(proceed)
+		select {
+		case err := <-effectDone:
+			if err != nil {
+				t.Fatalf("nested CheckRuntime failed: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("nested CheckRuntime deadlocked during revocation")
+		}
+		select {
+		case <-revokeDone:
+		case <-time.After(5 * time.Second):
+			t.Fatal("revocation did not drain nested effect")
+		}
+		phase50Denied(t, ctx)
 	case "concurrent-revocation-stable":
 		official := phase48SignedManager(t)
 		InstallRuntime(official)
@@ -164,7 +203,7 @@ func TestLICA9Phase50FreshProcessLifecycleMatrix(t *testing.T) {
 	for _, scenario := range []string{
 		"preinstall-signed-context-denied", "nil-install-terminal", "foreign-rebind-terminal",
 		"same-manager-idempotent", "revoke-waits-for-admitted-effect",
-		"concurrent-revocation-stable", "cancelled-context",
+		"nested-check-during-revoke", "concurrent-revocation-stable", "cancelled-context",
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			cmd := exec.Command(os.Args[0], "-test.run=^TestLICA9Phase50ChildLifecycle$", "-test.v")
