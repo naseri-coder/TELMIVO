@@ -2,7 +2,7 @@
 
 Date: 2026-10-16
 
-**Disposition at GitHub report creation:** `STANDALONE_GO123_STUB_RACE_TESTS_PASS` / `ACTUAL_GO127_PRODUCT_PHASE42_PENDING_USER_TERMUX_RUN` / `LINUX_GO127_ROOT_RACE_NOT_RUN` / **PRODUCTION NO-GO**.
+**Current disposition (updated after user execution):** `REAL_PRODUCT_ANDROID_GO127_PHASE42_8_OF_8_FUNCTIONAL_PASS` / `STANDALONE_GO123_STUB_RACE_TESTS_PASS` / `LINUX_GO127_ROOT_RACE_NOT_RUN` / **PRODUCTION NO-GO**.
 
 ## Phase entry and observed obstacle
 
@@ -44,15 +44,21 @@ The **byte-exact Phase42 Go file** was compiled in a standalone Go1.23.2 Linux/a
 - `go vet ./...` **PASS**, all Go source gofmt-clean.
 - This **STUB** result checks local test contract and syntax only, not full Ed25519 V2 Product cryptographic validation.
 
-## Required real Go1.27.2 Android/Termux acceptance
+## Genuine Go1.27.2 Android/Termux acceptance — EXECUTED AND PASS
 
-The guarded phase42 transfer package can be applied to the user's **disposable** complete Product clone in `~/telmivo-license-audit-src`. The script must:
+The guarded phase42 transfer package **was executed** by the user in the disposable Product clone `~/telmivo-license-audit-src`. The script:
 1. Verify official branch and expected immutable head, clean checkout, Go1.27+ Android/Termux, no Production/Actions, and both Git blob hash/SHA256 for exactly one new Go test file.
 2. Run `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -count=1 -timeout=180s -v -run '^TestLICA9Phase42' ./internal/platform/installationlicense` **against the actual Product Manager implementation**, before committing.
 3. Reject any skipped/failing tests, run `go vet`, and only then commit/push to the Phase42 branch with no merge.
 4. Report the SHA and logs for independent PR evidence review.
 
-**DO NOT CLAIM REAL PRODUCT PHASE42 PASS until the user's Go1.27.2 output has been received and verified.** The Android test is functional only and cannot certify native Linux root `-race` or Product's five Linux hardlink-security cases.
+**Confirmed real Product functional acceptance:** the user supplied the complete Android/Termux execution transcript (2026-10-16) after running `LIC_A9_DISPOSABLE=YES bash TELMIVO_LIC_A9_PHASE42_APPLY_AND_TEST.sh`.
+
+- **All eight named `TestLICA9Phase42*` Go tests returned PASS**, no reported SKIP or FAIL, final `PASS` and `ok github.com/naseri-coder/TELMIVO/internal/platform/installationlicense 0.273s`.
+- `go vet` completed successfully before the script committed and pushed; no reported error.
+- GitHub user commit after test: `4dfdf442c065650dbbf9e246ef70fbdd3531f8e5` on `development/lic-a9-phase42-portable-real-manager-boot-journal-20261016`. The terminal printed `LIC_A9_PHASE42_REAL_MANAGER_ANDROID_8_OF_8_PASS_PUSHED`, with evidence directory `/data/data/com.termux/files/home/telmivo-license-audit/lic-a9-phase42-5xZITe`. This path is on the user's phone; the files inside have not been independently opened.
+- The GitHub **branch HEAD and PR #96 HEAD** were independently fetched and matched the user commit. Exact Product test file Git blob is `6725706247cef9c357b1398e9377b3601e1811aa`, matching the hash of the locally prevalidated source.
+- Scope is authentic Product `Manager.Effect` with synthetically signed fixtures and a disposable journal **on Android Go1.27.2**. This is NOT the native Linux root multi-UID `-race` gate and NOT provider/Authority production certification.
 
 ## Release blockers
 
