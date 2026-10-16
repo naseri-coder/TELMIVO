@@ -6,6 +6,7 @@ import stat
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from phase51k_fixture_gate import TestFixtureInProduction, reject_test_fixture_configuration
 
 IMAGE = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
@@ -69,6 +70,7 @@ def main():
     args = p.parse_args()
 
     env = load_env(Path(args.env_file))
+    reject_test_fixture_configuration(env)
     if required(env, "TELMIVO_ENV") != "production" or env.get("SYNTHETIC_MODE") != "false":
         raise PreflightError("production environment mode is not fail-closed")
 
@@ -128,6 +130,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except PreflightError as exc:
+    except (PreflightError, TestFixtureInProduction) as exc:
         print(f"TELMIVO production configuration preflight FAIL: {exc}", file=sys.stderr)
         sys.exit(1)
