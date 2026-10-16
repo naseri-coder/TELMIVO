@@ -334,10 +334,11 @@ func (m *Manager) decisionLocked() (Decision, error) {
 	}
 	return Decision{ConcurrencyGeneration: x.ConcurrencyGeneration, RecoveryGeneration: x.RecoveryGeneration, RuntimeSessionID: x.RuntimeSessionID, ConcurrencyLeaseID: x.ConcurrencyLeaseID, ConcurrencyExpiresAt: x.ConcurrencyExpiresAt, State: r.State, RefreshDue: now >= x.RefreshAfter, Epoch: x.AuthorityEpoch, Revision: x.LicenseRevision, Generation: x.ActivationGeneration}, nil
 }
+// Decision always performs real signed-state verification when the file lock
+// is available, but fails closed instead of waiting on a lock held by a nested
+// Manager.Effect callback. It never issues an authorization from cached data.
 func (m *Manager) Decision() Decision {
-	d := Decision{State: "RESTRICTED", Reason: "STATE_INVALID"}
-	_ = m.lock(func() error { var e error; d, e = m.decisionLocked(); return e })
-	return d
+	return m.decisionNonblocking()
 }
 
 // decisionNonblocking uses the genuine signed-V2 decisionLocked validation,
