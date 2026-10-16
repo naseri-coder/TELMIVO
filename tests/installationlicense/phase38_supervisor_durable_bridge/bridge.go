@@ -239,6 +239,7 @@ func (b *Bridge) SetIntegrationTestEffectGate(fn func(context.Context, Claim) er
 	b.effectGate = fn
 	return nil
 }
+
 // EnableTestFreshBootFence opts this standalone NONPRODUCTION bridge into a
 // signed fresh-boot challenge requirement. Existing Phase38/39 compatibility
 // tests remain unchanged. A Product release MUST NOT rely on opt-in wiring.
