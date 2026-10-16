@@ -138,6 +138,7 @@ func Open(socketDir, witnessRoot, installation string, allowedUID, allowedGID ui
 	s.readyEpoch.Store(0)
 	return s, nil
 }
+
 // OpenSecured uses the same isolated listener, but requires an explicit final
 // license Effect gate and domain policy before permitting any synthetic Apply.
 func OpenSecured(socketDir, witnessRoot, installation string, allowedUID, allowedGID uint32, issuer ed25519.PublicKey, effect EffectGate, policy DomainPolicy) (*Server, error) {
@@ -151,7 +152,6 @@ func OpenSecured(socketDir, witnessRoot, installation string, allowedUID, allowe
 	s.effect, s.policy = effect, policy
 	return s, nil
 }
-
 func (s *Server) Address() string { return s.socketPath }
 func (s *Server) Close() {
 	s.mu.Lock()
