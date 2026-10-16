@@ -1,5 +1,3 @@
-//go:build ignore
-
 // LIC-A9 Phase51-J: production image release guard, standard library only.
 // Standalone usage:
 //
