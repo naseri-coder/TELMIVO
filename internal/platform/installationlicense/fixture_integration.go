@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration || lic_a9_browser_test
 
 package installationlicense
 
@@ -28,7 +28,30 @@ func NewTestOnlySignedV2RuntimeForNativeIntegration(stateDirectory string) (*Man
 		!isolatedNativeIntegrationDB(os.Getenv("TEST_MIGRATION_DATABASE_URL")) {
 		return nil, ErrState
 	}
+	return newEphemeralSignedV2TestManager(stateDirectory)
+}
 
+// NewTestOnlySignedV2RuntimeForNativeBrowser is compiled ONLY in an explicit
+// browser-test build. It cannot be used in the usual Product binary.
+// Native API startup additionally checks role, strict loopback transports,
+// test-only URLs, fixed test executable, synthetic mode and exact opt-in.
+func NewTestOnlySignedV2RuntimeForNativeBrowser(stateDirectory string) (*Manager, error) {
+	if stateDirectory == "" || filepath.Base(os.Args[0]) != "telmivo-lic-a9-browser-test-api" ||
+		os.Getenv("TELMIVO_LIC_A9_BROWSER_TEST") != "YES" ||
+		os.Getenv("TELMIVO_ENV") != "test" ||
+		os.Getenv("TELMIVO_LICENSE_ENVIRONMENT") != "TEST" ||
+		os.Getenv("SYNTHETIC_MODE") != "true" ||
+		!isolatedNativeIntegrationDB(os.Getenv("TEST_DATABASE_URL")) ||
+		!isolatedNativeIntegrationDB(os.Getenv("TEST_MIGRATION_DATABASE_URL")) {
+		return nil, ErrState
+	}
+	return newEphemeralSignedV2TestManager(stateDirectory)
+}
+
+// The exact genuine V2 Ed25519 signer, certificate and high-water/Runtime
+// session construction are shared by both isolated native tests. Each process
+// gets NEW keys, identity, token ID and session; no cross-process lease copy.
+func newEphemeralSignedV2TestManager(stateDirectory string) (*Manager, error) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	rootPublic, rootPrivate, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
