@@ -6,6 +6,7 @@ import stat
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from phase51k_fixture_gate import reject_test_fixture_configuration
 
 IMAGE = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
@@ -60,33 +61,6 @@ def secure_db(raw, name):
     sslmode = parse_qs(u.query).get("sslmode", [""])[0]
     if sslmode not in {"require", "verify-ca", "verify-full"}:
         raise PreflightError(f"{name} must require TLS")
-
-def reject_test_fixture_configuration(env):
-    # Deny test-only signed-V2 bootstrap and runner settings in any release
-    # environment file. These variables belong solely to disposable tests.
-    # Presence (even an empty value) indicates a wrong deployment artifact.
-    forbidden = {
-        "TELMIVO_LIC_A9_BROWSER_TEST",
-        "TELMIVO_LIC_A9_NATIVE_FIXTURE",
-        "TEST_GROUP_AUTHORITY_FIXTURE",
-        "TEST_DOWNLOADER_FIXTURE",
-        "TEST_BOT_FACTORY_FIXTURE",
-        "TEST_CONTENT_PLUGIN_FIXTURE",
-        "TEST_DATABASE_URL",
-        "TEST_MIGRATION_DATABASE_URL",
-        "TEST_RESTORE_DATABASE_URL",
-        "TEST_RESTORE_MIGRATION_DATABASE_URL",
-        "TEST_NATS_URL",
-        "TEST_REDIS_URL",
-        "GOFLAGS",
-        "GOWORK",
-    }
-    selected = sorted(forbidden.intersection(env))
-    if selected:
-        raise PreflightError("test-only/Go build controls in production environment: " + ", ".join(selected))
-    if env.get("TELMIVO_LICENSE_ENVIRONMENT", "").upper() == "TEST":
-        raise PreflightError("TEST-only V2 license environment forbidden in production")
-
 
 def main():
     p = argparse.ArgumentParser()
