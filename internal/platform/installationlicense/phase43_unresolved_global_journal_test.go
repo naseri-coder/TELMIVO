@@ -5,7 +5,6 @@ package installationlicense
 // durable outbox. The lock+directory scan and writeExclusive share one flock:
 // distinct request IDs cannot cross an unknown result from another worker.
 import (
-	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -37,7 +36,10 @@ func phase43ScanLocked(j *phase37Journal) (bool, error) {
 		return false, phase37Corrupt
 	}
 	f := os.NewFile(uintptr(fd), "phase43-anchored-dir")
-	entries, readErr := f.Readdirnames(-1)
+	// Request at most budget+1 entries. Readdirnames(-1) can allocate an
+	// attacker-controlled number of names before our length check runs.
+	// Returning an error on the (budget+1)th entry is fail-closed.
+	entries, readErr := f.Readdirnames(4097)
 	closeErr := f.Close()
 	if readErr != nil || closeErr != nil || len(entries) > 4096 {
 		return false, phase37Corrupt
@@ -87,8 +89,7 @@ func phase43ScanLocked(j *phase37Journal) (bool, error) {
 		if e != nil || len(sig) != ed25519.SignatureSize || receipt.Version != phase37Version ||
 			receipt.RequestID != r.RequestID || receipt.ClaimDigest != r.ClaimDigest ||
 			receipt.ProviderID == "" || len(receipt.ProviderID) > 96 || receipt.Result != "CONFIRMED" ||
-			!ed25519.Verify(j.provider, append([]byte(phase37ReceiptDomain), body...), sig) ||
-			!bytes.Equal(phase37Encode(receipt), phase37Encode(&receipt)) {
+			!ed25519.Verify(j.provider, append([]byte(phase37ReceiptDomain), body...), sig) {
 			return false, phase37Corrupt
 		}
 	}
