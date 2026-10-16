@@ -38,6 +38,12 @@ func TestLICA9Phase51FPostgresOutboxUnknownQuarantine(t *testing.T) {
 	if state != "UNKNOWN" || attempts != 1 {
 		t.Fatalf("durable claim: %s attempts=%d", state, attempts)
 	}
+	// Legacy Relay workers must not increment attempts while leaving the
+	// durable state UNKNOWN; a trigger rejects the update before any I/O.
+	_, err = db.Pool.Exec(ctx,
+		"UPDATE outbox_events SET attempts=attempts+1 WHERE id=$1 AND delivery_state='UNKNOWN'", eventID)
+	pgCode(t, err, "P0001")
+
 	// Expiring the time-based lease must not restore delivery eligibility.
 	_, err = db.Pool.Exec(ctx,
 		"UPDATE outbox_events SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1", eventID)
@@ -72,5 +78,27 @@ func TestLICA9Phase51FPostgresOutboxUnknownQuarantine(t *testing.T) {
 	pgCode(t, err, "P0001")
 	_, err = db.Pool.Exec(context.Background(),
 		"DELETE FROM outbox_events WHERE id=$1 AND delivery_state='PUBLISHED'", eventID)
+	must(t, err)
+}
+
+// A legacy pre-51F worker increments attempts without changing delivery_state.
+// This migration must deny its update before it can send a broker message.
+func TestLICA9Phase51GRejectLegacyReadyAttemptIncrement(t *testing.T) {
+	must(t, owner.Migrate(ctx))
+	var eventID string
+	must(t, db.Pool.QueryRow(ctx,
+		"INSERT INTO outbox_events(subject,event_type,payload,correlation_id) VALUES('telmivo.events.phase51g','phase51g.legacy.worker','{}'::jsonb,'phase51g-isolated') RETURNING id::text",
+	).Scan(&eventID))
+	_, err := db.Pool.Exec(ctx,
+		"UPDATE outbox_events SET lease_owner='legacy-relay',lease_until=now()+interval '60 seconds',attempts=attempts+1 WHERE id=$1", eventID)
+	pgCode(t, err, "P0001")
+	var state string
+	var attempts int
+	must(t, db.Pool.QueryRow(ctx,
+		"SELECT delivery_state,attempts FROM outbox_events WHERE id=$1", eventID).Scan(&state, &attempts))
+	if state != "READY" || attempts != 0 {
+		t.Fatalf("rejected legacy update mutated event: state=%s attempts=%d", state, attempts)
+	}
+	_, err = db.Pool.Exec(context.Background(), "DELETE FROM outbox_events WHERE id=$1 AND attempts=0", eventID)
 	must(t, err)
 }
