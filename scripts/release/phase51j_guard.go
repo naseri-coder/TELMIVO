@@ -2,8 +2,10 @@
 
 // LIC-A9 Phase51-J: production image release guard, standard library only.
 // Standalone usage:
-//   go list -json -deps ./cmd/... | go run ./scripts/release/phase51j_guard.go selected
-//   go run ./scripts/release/phase51j_guard.go binary /out/api go1.27.2
+//
+//	go list -json -deps ./cmd/... | go run ./scripts/release/phase51j_guard.go selected
+//	go run ./scripts/release/phase51j_guard.go binary /out/api go1.27.2
+//
 // This is a verification tool, not an installation/runtime license bypass.
 package main
 
@@ -89,11 +91,10 @@ func checkBuildInfo(info io.Reader, expectedGo string) error {
 	foundVersion, foundBuildMode, foundCGO := false, false, false
 	for scan.Scan() {
 		line := scan.Text()
-		if strings.Contains(line, "go"+strings.TrimPrefix(expectedGo, "go")) &&
-			(strings.HasPrefix(line, "\t") || strings.Contains(line, ": ")) {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && strings.HasSuffix(fields[0], ":") && fields[1] == expectedGo {
 			foundVersion = true
 		}
-		fields := strings.Fields(line)
 		if len(fields) >= 2 && fields[0] == "build" {
 			attribute := fields[1]
 			if strings.HasPrefix(attribute, "-tags=") {
