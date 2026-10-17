@@ -127,12 +127,17 @@ func (s *Store) Tenant(ctx context.Context, user, workspace string, adminAllowed
 		return e
 	}
 	defer tx.Rollback(ctx)
-	var member bool
-	e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM workspace_members WHERE user_id=$1 AND workspace_id=$2)", user, workspace).Scan(&member)
-	if e != nil {
-		return ErrForbidden
-	}
-	if !member && !(adminAllowed && s.IsAdmin(ctx, user)) {
+	// Authorize against ONE transaction snapshot and ONE connection.
+	// The old admin path called s.IsAdmin(ctx, user) on s.Pool while this
+	// transaction held a pool connection. pool_max_conns=1 deadlocked until
+	// context timeout when adminAllowed was true for a non-member.
+	// Keep platform admin admission explicitly opt-in per call.
+	var authorized bool
+	e = tx.QueryRow(ctx, `SELECT
+		EXISTS(SELECT 1 FROM workspace_members WHERE user_id=$1 AND workspace_id=$2)
+		OR ($3::boolean AND EXISTS(SELECT 1 FROM platform_admins WHERE user_id=$1))`,
+		user, workspace, adminAllowed).Scan(&authorized)
+	if e != nil || !authorized {
 		return ErrForbidden
 	}
 	if e = Scope(ctx, tx, workspace); e != nil {
