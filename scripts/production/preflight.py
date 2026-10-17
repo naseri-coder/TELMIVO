@@ -74,6 +74,20 @@ def main():
     if required(env, "TELMIVO_ENV") != "production" or env.get("SYNTHETIC_MODE") != "false":
         raise PreflightError("production environment mode is not fail-closed")
 
+    # Source-stage A2-03: production Compose now REQUIRES exclusive role
+    # env files. Never approve a legacy shared-credential release by omission.
+    if env.get("TELMIVO_DB_ROLE_SPLIT") != "required":
+        raise PreflightError("separate PostgreSQL API/worker credentials required")
+    from a2_03_role_env_gate import inspect, RoleSeparationError
+    try:
+        inspect(
+            Path(required(env, "TELMIVO_TENANT_ENV_FILE")),
+            Path(required(env, "TELMIVO_WORKER_ENV_FILE")),
+            Path(required(env, "TELMIVO_MIGRATION_ENV_FILE")),
+        )
+    except (RoleSeparationError, OSError) as exc:
+        raise PreflightError("database role environment admission denied") from exc
+
     secure_db(required(env, "DATABASE_URL"), "DATABASE_URL")
     secure_db(required(env, "MIGRATION_DATABASE_URL"), "MIGRATION_DATABASE_URL")
     if urlparse(required(env, "REDIS_URL")).scheme != "rediss":

@@ -22,9 +22,46 @@ var ErrInvalid = errors.New("invalid input")
 type Store struct{ Pool *pgxpool.Pool }
 
 func Open(ctx context.Context, dsn string, requireRestricted bool) (*Store, error) {
+	return open(ctx, dsn, requireRestricted, "")
+}
+
+// OpenForExpectedRole attests PostgreSQL server identity at EACH physical
+// connection creation, including replacements after reconnection. This is
+// only the admission half of A2: actual RLS/GRANT role cutover is pending.
+func OpenForExpectedRole(ctx context.Context, dsn, expected string) (*Store, error) {
+	if expected != "telmivo_api" && expected != "telmivo_worker" {
+		return nil, errors.New("unsupported PostgreSQL service role")
+	}
+	return open(ctx, dsn, true, expected)
+}
+
+func open(ctx context.Context, dsn string, requireRestricted bool, expectedRole string) (*Store, error) {
 	cfg, e := PoolConfig(dsn)
 	if e != nil {
 		return nil, e
+	}
+	if expectedRole != "" {
+		previous := cfg.AfterConnect
+		cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+			if previous != nil {
+				if err := previous(ctx, conn); err != nil {
+					return err
+				}
+			}
+			var actual string
+			var super, bypass, inherited, login, createRole, createDB, replicate, member bool
+			err := conn.QueryRow(ctx, `SELECT r.rolname, r.rolsuper, r.rolbypassrls,
+				r.rolinherit, r.rolcanlogin, r.rolcreaterole, r.rolcreatedb, r.rolreplication,
+				EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
+				FROM pg_roles r WHERE r.rolname=current_user`).Scan(
+				&actual, &super, &bypass, &inherited, &login, &createRole, &createDB, &replicate, &member)
+			if err != nil || actual != expectedRole || super || bypass || inherited ||
+				!login || createRole || createDB || replicate || member {
+				// Do not expose connection strings or credentials on failure.
+				return errors.New("PostgreSQL service login identity denied")
+			}
+			return nil
+		}
 	}
 	p, e := pgxpool.NewWithConfig(ctx, cfg)
 	if e != nil {

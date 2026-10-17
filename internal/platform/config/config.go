@@ -13,6 +13,7 @@ import (
 
 type Config struct {
 	Environment, HTTPAddr, DatabaseURL, RedisURL, NATSURL, MiniAppURL string
+	DatabaseRoleSplitRequired bool
 	BotToken, WebhookSecret, CredentialKey, CredentialKeyID           string
 	WebhookDigestKey, StorageEndpoint, StorageBucket                  string
 	GroupBotToken, DownloaderBotToken                                 string
@@ -146,6 +147,34 @@ func Load(get func(string) string) (Config, error) {
 	}
 	if c.Environment != "development" && c.Environment != "test" && c.Environment != "production" {
 		return c, errors.New("invalid environment")
+	}
+	switch get("TELMIVO_DB_ROLE_SPLIT") {
+	case "", "off":
+		// Legacy mode is available for staged, unmerged review only.
+	case "required":
+		c.DatabaseRoleSplitRequired = true
+		// libpq environment fallbacks and session options are deliberately
+		// forbidden: every container must receive exactly ONE own DSN.
+		for _, key := range []string{"PGHOST", "PGHOSTADDR", "PGUSER", "PGPASSWORD",
+			"PGPORT", "PGDATABASE", "PGSERVICE", "PGSERVICEFILE", "PGOPTIONS", "PGSSLMODE"} {
+			if get(key) != "" {
+				return c, errors.New("inherited PostgreSQL override forbidden in split mode")
+			}
+		}
+	default:
+		return c, errors.New("invalid database role split mode")
+	}
+	if c.DatabaseRoleSplitRequired {
+		if get("TENANT_DATABASE_URL") != "" || get("WORKER_DATABASE_URL") != "" ||
+			get("MIGRATION_DATABASE_URL") != "" {
+			return c, errors.New("database role split forbids other database secrets in an application process")
+		}
+	} else {
+		u, err := url.Parse(c.DatabaseURL)
+		if err == nil && u.User != nil &&
+			(u.User.Username() == "telmivo_api" || u.User.Username() == "telmivo_worker") {
+			return c, errors.New("dedicated database login requires explicit role split admission")
+		}
 	}
 	for _, v := range []struct{ value, scheme string }{{c.DatabaseURL, "postgres"}, {c.RedisURL, "redis"}, {c.NATSURL, "nats"}} {
 		u, e := url.Parse(v.value)

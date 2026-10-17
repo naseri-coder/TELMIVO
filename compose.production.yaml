@@ -2,7 +2,9 @@ name: telmivo
 
 x-app: &app
   image: ${TELMIVO_BACKEND_IMAGE:?immutable backend image required}
-  env_file: ${TELMIVO_ENV_FILE:-.env.production}
+  # A2-03 staged cutover: one application DB credential per process.
+  # TELMIVO_TENANT_ENV_FILE must carry only telmivo_api DATABASE_URL.
+  env_file: ${TELMIVO_TENANT_ENV_FILE:?dedicated tenant env file required}
   restart: unless-stopped
   init: true
   read_only: true
@@ -29,6 +31,7 @@ services:
 
   worker:
     <<: *app
+    env_file: ${TELMIVO_WORKER_ENV_FILE:?dedicated worker env file required}
     command: [/app/worker]
     healthcheck:
       interval: 15s
@@ -56,6 +59,7 @@ services:
 
   media-worker:
     <<: *app
+    env_file: ${TELMIVO_WORKER_ENV_FILE:?dedicated worker env file required}
     command: [/app/media-worker]
     depends_on:
       media-volume-init:
@@ -142,6 +146,7 @@ services:
 
   migrate:
     <<: *app
+    env_file: ${TELMIVO_MIGRATION_ENV_FILE:?dedicated migration env file required}
     profiles: [maintenance]
     restart: "no"
     command: [/app/migrate]
@@ -150,7 +155,7 @@ services:
     image: ${TELMIVO_POSTGRES_IMAGE:?immutable PostgreSQL client image required}
     profiles: [maintenance]
     restart: "no"
-    env_file: ${TELMIVO_ENV_FILE:-.env.production}
+    env_file: ${TELMIVO_MIGRATION_ENV_FILE:?dedicated migration env file required}
     command: ["sh", "-ec", "exec psql \"$$MIGRATION_DATABASE_URL\" -X -v ON_ERROR_STOP=1 -f /grants.sql"]
     volumes:
       - ./infrastructure/postgres/grants.sql:/grants.sql:ro
