@@ -7,6 +7,9 @@
 -- inbox/DLQ events. Legacy rows remain NULL for independent reconciliation.
 -- Malformed external envelopes also have deliberately UNKNOWN provenance.
 --
+-- A syntactically valid envelope is not producer authentication or trusted ownership.
+-- Do not use this claimed workspace as an RLS authorization fact without
+-- independent source binding; the role-split cutover remains mandatory.
 -- This does NOT claim that a tenant RLS boundary is active. It remains NO-GO
 -- until independent API/worker SQL roles and full real PG16 tests are ready.
 ALTER TABLE inbox_events
@@ -16,9 +19,9 @@ ALTER TABLE dead_letter_events
   ADD COLUMN workspace_id uuid REFERENCES workspaces(id);
 
 COMMENT ON COLUMN inbox_events.workspace_id IS
-  'Verified workspace from new admitted event envelopes; NULL legacy rows require manual provenance reconciliation, never guessed backfill.';
+  'Workspace claimed by new syntactically valid event envelope; NOT authenticated producer ownership. NULL legacy rows require independent provenance reconciliation.';
 COMMENT ON COLUMN dead_letter_events.workspace_id IS
-  'Verified workspace only for valid new events; NULL is preserved for malformed/legacy records, never guessed from untrusted payload.';
+  'Workspace claimed by syntactically valid event only; NOT trusted tenant authorization. NULL is preserved for malformed and legacy records, never guessed.';
 
 -- No NOT NULL on historical rows, no irreversible mass backfill, no RLS
 -- activation while global Relay and consumer still use telmivo_runtime.
