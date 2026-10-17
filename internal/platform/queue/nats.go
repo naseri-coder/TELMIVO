@@ -248,7 +248,8 @@ func (c *Client) consume(ctx context.Context, db *database.Store, subject, durab
 				}
 				// A malformed envelope has no trustworthy tenant identity:
 				// leave workspace_id NULL rather than deriving it from
-				// untrusted bytes. Valid events carry verified provenance.
+				// untrusted bytes. Syntactically valid events carry only
+				// their CLAIMED workspace, not producer authentication.
 				var workspace any
 				var workspaceText string
 				if !malformed {
