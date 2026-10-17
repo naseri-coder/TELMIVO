@@ -34,17 +34,36 @@ func Process(ctx context.Context, db *database.Store, durable string, event Enve
 	if e = database.Scope(ctx, tx, event.WorkspaceID); e != nil {
 		return e
 	}
-	tag, e := tx.Exec(ctx, "INSERT INTO inbox_events(consumer,event_id) VALUES($1,$2) ON CONFLICT DO NOTHING", durable, event.ID)
+	tag, e := tx.Exec(ctx, "INSERT INTO inbox_events(consumer,event_id,workspace_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", durable, event.ID, event.WorkspaceID)
 	if e != nil {
 		return e
 	}
 	if tag.RowsAffected() == 0 {
+		// Preserve immutable (consumer,event_id) idempotency. A legacy
+		// NULL provenance must never be guessed/backfilled or replayed.
+		// A VERIFIED conflicting workspace must not silently suppress
+		// events from another workspace.
+		var knownWorkspace string
+		if e = tx.QueryRow(ctx, "SELECT COALESCE(workspace_id::text,'') FROM inbox_events WHERE consumer=$1 AND event_id=$2", durable, event.ID).Scan(&knownWorkspace); e != nil {
+			return e
+		}
+		if knownWorkspace != "" && knownWorkspace != event.WorkspaceID {
+			return database.ErrForbidden
+		}
 		return tx.Commit(ctx)
 	}
 	if external {
 		// Neither the transport payload nor credentials belong in recovery evidence.
-		if _, e = tx.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,'EXTERNAL_OUTCOME_UNCONFIRMED',$3) ON CONFLICT DO NOTHING", durable, event.ID, map[string]any{"workspace_id": event.WorkspaceID}); e != nil {
-			return e
+		// The external uncertainty fence is recorded with independently
+		// validated event provenance before any non-idempotent handler.
+		// Existing conflicting/legacy DLQ state cannot authorize a new
+		// external attempt.
+		fence, fenceErr := tx.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,workspace_id,error_code,payload) VALUES($1,$2,$3,'EXTERNAL_OUTCOME_UNCONFIRMED',$4) ON CONFLICT DO NOTHING", durable, event.ID, event.WorkspaceID, map[string]any{"workspace_id": event.WorkspaceID})
+		if fenceErr != nil {
+			return fenceErr
+		}
+		if fence.RowsAffected() != 1 {
+			return ErrExternalOutcomeUnknown
 		}
 		if e = installationlicense.CheckRuntime(ctx); e != nil {
 			return e
@@ -78,7 +97,7 @@ func Process(ctx context.Context, db *database.Store, durable string, event Enve
 	if external {
 		// Confirmation is atomic with the handler's durable result. If this commit
 		// fails, uncertainty evidence remains while the attempt fence stays sealed.
-		if _, e = tx.Exec(ctx, "DELETE FROM dead_letter_events WHERE consumer=$1 AND event_id=$2 AND error_code='EXTERNAL_OUTCOME_UNCONFIRMED'", durable, event.ID); e != nil {
+		if _, e = tx.Exec(ctx, "DELETE FROM dead_letter_events WHERE consumer=$1 AND event_id=$2 AND workspace_id=$3 AND error_code='EXTERNAL_OUTCOME_UNCONFIRMED'", durable, event.ID, event.WorkspaceID); e != nil {
 			return e
 		}
 	}
