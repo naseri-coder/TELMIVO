@@ -99,9 +99,16 @@ func TestA203OptInFailClosedConfig(t *testing.T) {
 		{"PGPASSWORD": "inherited-secret"},
 		{"TENANT_DATABASE_URL": roleTestDSN("telmivo_api", "disable")},
 		{"WORKER_DATABASE_URL": roleTestDSN("telmivo_worker", "disable")},
+		{"MIGRATION_DATABASE_URL": roleTestDSN("telmivo_migration", "disable")},
 	} {
 		if err := load(changes); err == nil {
 			t.Fatalf("unsafe config admitted: keys=%v", changes)
 		}
+	}
+	if err := load(map[string]string{
+		"TELMIVO_DB_ROLE_SPLIT": "",
+		"DATABASE_URL":          roleTestDSN("telmivo_api", "disable"),
+	}); err == nil {
+		t.Fatal("partial dedicated role rollout without admission flag accepted")
 	}
 }
