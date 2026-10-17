@@ -34,8 +34,8 @@ class JournalAudit(unittest.TestCase):
         report = mod.inspect(root)
         self.assertEqual(report["status"], "NO_GO_DB_ISOLATION_GAPS")
         self.assertEqual(set(report["risk"]["journal_without_rls"]), set(mod.JOURNALS))
-        self.assertEqual(set(report["risk"]["journal_without_workspace_column"]),
-                         {"inbox_events", "dead_letter_events"})
+        # 0020 adds only nullable provenance; RLS/role cutover remains NO-GO.
+        self.assertEqual(report["risk"]["journal_without_workspace_column"], [])
         self.assertTrue(report["risk"]["blanket_runtime_table_write"])
 
     def test_synthetic_structural_preconditions_only(self):

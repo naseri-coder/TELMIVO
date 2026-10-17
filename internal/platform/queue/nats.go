@@ -246,10 +246,33 @@ func (c *Client) consume(ctx context.Context, db *database.Store, subject, durab
 					h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", meta.Stream, meta.Sequence.Stream)))
 					id = fmt.Sprintf("%x-%x-%x-%x-%x", h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
 				}
+				// A malformed envelope has no trustworthy tenant identity:
+				// leave workspace_id NULL rather than deriving it from
+				// untrusted bytes. Syntactically valid events carry only
+				// their CLAIMED workspace, not producer authentication.
+				var workspace any
+				var workspaceText string
+				if !malformed {
+					workspace = event.WorkspaceID
+					workspaceText = event.WorkspaceID
+				}
 				e = installationlicense.RuntimeEffect(ctx, func() error {
-					_, writeErr := db.Pool.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,error_code,payload) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING", durable, id, code, map[string]any{"stream_sequence": meta.Sequence.Stream})
+					tag, writeErr := db.Pool.Exec(ctx, "INSERT INTO dead_letter_events(consumer,event_id,workspace_id,error_code,payload) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING", durable, id, workspace, code, map[string]any{"stream_sequence": meta.Sequence.Stream})
 					if writeErr != nil {
 						return writeErr
+					}
+					if tag.RowsAffected() == 0 {
+						// Duplicate records may represent a prior failed
+						// Term. Only replay the broker disposition if the
+						// existing durable journal has the SAME provenance;
+						// never reassign unknown/other tenant history.
+						var recorded string
+						if qErr := db.Pool.QueryRow(ctx, "SELECT COALESCE(workspace_id::text,'') FROM dead_letter_events WHERE consumer=$1 AND event_id=$2", durable, id).Scan(&recorded); qErr != nil {
+							return qErr
+						}
+						if recorded != workspaceText {
+							return database.ErrForbidden
+						}
 					}
 					return m.Term()
 				})
