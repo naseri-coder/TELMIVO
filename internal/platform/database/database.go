@@ -49,11 +49,14 @@ func open(ctx context.Context, dsn string, requireRestricted bool, expectedRole 
 				}
 			}
 			var actual string
-			var super, bypass, inherited, login bool
-			err := conn.QueryRow(ctx, `SELECT current_user, rolsuper, rolbypassrls, rolinherit, rolcanlogin
-				FROM pg_roles WHERE rolname=current_user`).Scan(
-				&actual, &super, &bypass, &inherited, &login)
-			if err != nil || actual != expectedRole || super || bypass || inherited || !login {
+			var super, bypass, inherited, login, createRole, createDB, replicate, member bool
+			err := conn.QueryRow(ctx, `SELECT r.rolname, r.rolsuper, r.rolbypassrls,
+				r.rolinherit, r.rolcanlogin, r.rolcreaterole, r.rolcreatedb, r.rolreplication,
+				EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
+				FROM pg_roles r WHERE r.rolname=current_user`).Scan(
+				&actual, &super, &bypass, &inherited, &login, &createRole, &createDB, &replicate, &member)
+			if err != nil || actual != expectedRole || super || bypass || inherited ||
+				!login || createRole || createDB || replicate || member {
 				// Do not expose connection strings or credentials on failure.
 				return errors.New("PostgreSQL service login identity denied")
 			}
