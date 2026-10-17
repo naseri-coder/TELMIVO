@@ -25,12 +25,21 @@ def inspect(root: Path):
     for table in JOURNALS:
         name = re.escape(table)
         create = re.search(r"\bCREATE\s+TABLE\s+" + name + r"\s*\((.*?)\);", sql, re.I | re.S)
+        # Migration 0020 adds nullable provenance without rewriting original
+        # CREATE TABLE statements. Count the forward-only ADD COLUMN too.
+        added_workspace = re.search(
+            r"\bALTER\s+TABLE\s+" + name +
+            r"\s+ADD\s+COLUMN\s+workspace_id\s+uuid\b", sql, re.I
+        )
         enabled = re.search(r"\bALTER\s+TABLE\s+" + name + r"\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY\b", sql, re.I)
         forced = re.search(r"\bALTER\s+TABLE\s+" + name + r"\s+FORCE\s+ROW\s+LEVEL\s+SECURITY\b", sql, re.I)
         policy = re.search(r"\bCREATE\s+POLICY\s+\w+\s+ON\s+" + name + r"\b", sql, re.I)
         observations[table] = {
             "present": create is not None,
-            "workspace_column": bool(create and re.search(r"\bworkspace_id\s+uuid\b", create.group(1), re.I)),
+            "workspace_column": bool(
+                (create and re.search(r"\bworkspace_id\s+uuid\b", create.group(1), re.I))
+                or added_workspace
+            ),
             "rls_enabled": enabled is not None,
             "rls_forced": forced is not None,
             "explicit_policy": policy is not None,
