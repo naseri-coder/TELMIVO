@@ -44,6 +44,18 @@ func Run(role string) error {
 	if e != nil {
 		return e
 	}
+	// Fail before signing, contacting Authority or opening network sockets:
+	// each process sees only its own DATABASE_URL, not both credentials.
+	var expectedDatabaseRole string
+	if c.DatabaseRoleSplitRequired {
+		if e = config.ValidateDatabaseRoleDSN(role, c.DatabaseURL, c.Environment); e != nil {
+			return e
+		}
+		expectedDatabaseRole, e = config.ExpectedDatabaseRole(role)
+		if e != nil {
+			return e
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	license, licenseClient, cleanupLicense, strictTestStartup, licenseErr := openStartupLicense(role, c)
@@ -71,7 +83,15 @@ func Run(role string) error {
 		defer func() { stop(); <-licenseDone }()
 	}
 
-	db, e := database.Open(ctx, c.DatabaseURL, true)
+	// In explicitly required split mode the pool authenticates current_user
+	// and non-elevated role flags on every new physical PostgreSQL connection.
+	// No shared telmivo_runtime credential can silently serve both API/Worker.
+	var db *database.Store
+	if expectedDatabaseRole != "" {
+		db, e = database.OpenForExpectedRole(ctx, c.DatabaseURL, expectedDatabaseRole)
+	} else {
+		db, e = database.Open(ctx, c.DatabaseURL, true)
+	}
 	if e != nil {
 		return e
 	}
