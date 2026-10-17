@@ -24,6 +24,19 @@ func TestLICA9A202JournalProvenanceMigrationSource(t *testing.T) {
 			t.Errorf("missing journal provenance invariant: %s", fragment)
 		}
 	}
+	// Every table MUST receive its OWN verified-provenance column; a single
+	// ADD COLUMN anywhere in the migration is not sufficient.
+	for _, table := range []string{"INBOX_EVENTS", "DEAD_LETTER_EVENTS"} {
+		start := strings.Index(sql, "ALTER TABLE "+table)
+		if start < 0 {
+			t.Fatalf("missing journal table alteration: %s", table)
+		}
+		end := strings.Index(sql[start:], ";")
+		if end < 0 || !strings.Contains(sql[start:start+end],
+			"ADD COLUMN WORKSPACE_ID UUID REFERENCES WORKSPACES(ID)") {
+			t.Errorf("journal lacks own workspace provenance column: %s", table)
+		}
+	}
 	// Check executable SQL statements rather than rejecting explanatory
 	// documentation comments that discuss the unsafe operations.
 	for _, line := range strings.Split(sql, "\n") {
