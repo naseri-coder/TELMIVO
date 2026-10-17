@@ -11,9 +11,12 @@ Dead Letter writes. This is not a claim of a completed API/Worker role split.
   REFERENCES workspaces(id)` to `inbox_events` and `dead_letter_events`.
 - Existing `(consumer,event_id)` unique/primary keys remain intact. The broker,
   domain idempotency and historical outbox `UNKNOWN` rows must not be replayed.
-- New valid events record the envelope's validated workspace; new malformed
+- New syntactically valid events record their CLAIMED workspace; producer
+  authentication is not established by a UUID format check. New malformed
   DLQ envelopes record **NULL**. Verified cross-workspace collisions are
   **rejected**, not interpreted as harmless duplicates.
+- Do not use the claimed workspace field for RLS until producer-to-workspace
+  binding is independently authenticated and proven under PG16.
 - Old inbox/DLQ rows retain **NULL**, even when untrusted JSON includes a
   `workspace_id` property. No bulk backfill is allowed without independent
   provenance from a separately authenticated source.
