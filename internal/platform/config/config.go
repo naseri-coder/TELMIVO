@@ -164,8 +164,17 @@ func Load(get func(string) string) (Config, error) {
 	default:
 		return c, errors.New("invalid database role split mode")
 	}
-	if c.DatabaseRoleSplitRequired && (get("TENANT_DATABASE_URL") != "" || get("WORKER_DATABASE_URL") != "") {
-		return c, errors.New("database role split requires per-process DATABASE_URL only")
+	if c.DatabaseRoleSplitRequired {
+		if get("TENANT_DATABASE_URL") != "" || get("WORKER_DATABASE_URL") != "" ||
+			get("MIGRATION_DATABASE_URL") != "" {
+			return c, errors.New("database role split forbids other database secrets in an application process")
+		}
+	} else {
+		u, err := url.Parse(c.DatabaseURL)
+		if err == nil && u.User != nil &&
+			(u.User.Username() == "telmivo_api" || u.User.Username() == "telmivo_worker") {
+			return c, errors.New("dedicated database login requires explicit role split admission")
+		}
 	}
 	for _, v := range []struct{ value, scheme string }{{c.DatabaseURL, "postgres"}, {c.RedisURL, "redis"}, {c.NATSURL, "nats"}} {
 		u, e := url.Parse(v.value)
