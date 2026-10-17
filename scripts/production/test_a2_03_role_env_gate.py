@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from a2_03_role_env_gate import inspect, RoleSeparationError
+from preflight import PreflightError
 
 def url(login, secret):
     return "postgresql://" + login + ":" + secret + "@127.0.0.1:5432/telmivo?sslmode=verify-full"
@@ -78,7 +79,7 @@ class RoleEnvironmentGate(unittest.TestCase):
 
     def test_file_permission_denied(self):
         self.paths[0].chmod(0o644)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PreflightError):
             self.check()
 
     def test_identical_secrets_denied(self):
