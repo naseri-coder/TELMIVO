@@ -20,6 +20,8 @@ import (
 // timed out even though the user was a valid platform admin.
 // This test runs only after TestMain validates disposable test DB destinations.
 func TestLICA9A2TenantAuthorizationUsesSingleConnection(t *testing.T) {
+	// Test discovery order across files is not a migration contract.
+	must(t, owner.Migrate(ctx))
 	admin := fixture(t, true)
 	tenantOwner := fixture(t, false)
 	stranger := fixture(t, false)
@@ -43,7 +45,13 @@ func TestLICA9A2TenantAuthorizationUsesSingleConnection(t *testing.T) {
 		err := store.Tenant(callCtx, actor, workspace, allowAdmin, func(tx pgx.Tx) error {
 			callback++
 			var scope string
-			return tx.QueryRow(callCtx, "SELECT current_setting('app.workspace_id',true)").Scan(&scope)
+			if e := tx.QueryRow(callCtx, "SELECT current_setting('app.workspace_id',true)").Scan(&scope); e != nil {
+				return e
+			}
+			if scope != workspace {
+				return errors.New("tenant scope differs from authorized workspace")
+			}
+			return nil
 		})
 		if expectGranted {
 			if err != nil || callback != 1 {
