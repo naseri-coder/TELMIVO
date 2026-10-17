@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"os"
 	"testing"
 	"time"
@@ -31,9 +30,9 @@ func TestLICA9A203LegacyRuntimeCannotImpersonateSplitService(t *testing.T) {
 		})
 	}
 	if store, err := database.OpenForExpectedRole(context.Background(), os.Getenv("TEST_DATABASE_URL"), "postgres"); err == nil {
-		store.Pool.Close()
+		if store != nil {
+			store.Pool.Close()
+		}
 		t.Fatal("administrative database role was accepted as a service role")
-	} else if !errors.Is(err, context.Canceled) && err == nil {
-		t.Fatal("unsupported role not rejected")
 	}
 }
